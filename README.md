@@ -9,4 +9,5 @@
 * [Left 4 DHooks Direct](https://forums.alliedmods.net/showthread.php?p=2684862)
 
 # Plugins
-* **KillRegain：** When killing a certain number of special infected or common infected, this plugin will restore certain number of bullets or HP, the bullets can be restored to the front clip or the backup clip（当击杀一定数量的特殊感染者或丧尸时，这个插件将会回复一定数量的子弹或血量，子弹可选择回复至前置弹夹或后备弹夹）
+* **KillRegain：** When killing a certain number of special infected or common infected, this plugin will restore certain number of bullets or HP, the bullets can be restored to the front clip or the backup clip
+<br>（当击杀一定数量的特殊感染者或丧尸时，这个插件将会回复一定数量的子弹或血量，子弹可选择回复至前置弹夹或后备弹夹）
