@@ -66,7 +66,7 @@ public Action evt_Infected_Death(Event event, const char[] name, bool dontBroadc
 	bool headshot = GetEventBool(event, "headshot");
 	// 判断
 	// PrintToChatAll("[Debug] damage type: %d", damagetype);
-	if (!IsFakeClient(killer) && IsClientInGame(killer) && GetClientTeam(killer) == Team_Survivor)
+	if (0 < killer <= MaxClients && !IsFakeClient(killer) && IsClientInGame(killer) && GetClientTeam(killer) == Team_Survivor)
 	{
 		if (g_iEnable == 1)
 		{
@@ -97,7 +97,7 @@ public Action evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast
 	event.GetString("weapon", weapon, sizeof(weapon));
 	bool headshot = GetEventBool(event, "headshot");
 	// PrintToChatAll("[Debug] damage type: %s", weapon);
-	if (!IsFakeClient(killer) && IsClientInGame(killer) && GetClientTeam(killer) == Team_Survivor)
+	if (0 < killer <= MaxClients && victim !=0 && !IsFakeClient(killer) && IsClientInGame(killer) && GetClientTeam(killer) == Team_Survivor)
 	{
 		int ZombieClass = GetEntProp(victim, Prop_Send, "m_zombieClass");
 		if (ZombieClass != 7 && ZombieClass != 8)
