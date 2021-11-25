@@ -13,3 +13,5 @@
 <br>（当击杀一定数量的特殊感染者或丧尸时，这个插件将会回复一定数量的子弹或血量，子弹可选择回复至前置弹夹或后备弹夹）
 * **KillSound：** When killing a common infected or special infected, this plugin will display a sound, when performing a headshot, it will dispaly a special sound
 <br>（当击杀丧尸或特殊感染者时，这个插件将会播放一个提示音，当爆头击杀时，将会播放一个特殊提示音）
+* **Headshot！：** When only a headshot kills a common infected to make it die, the same goes for melee weapons
+<br>（当只有爆头丧尸才会使其死亡，近战武器也相同）
