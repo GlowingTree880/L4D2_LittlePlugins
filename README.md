@@ -15,3 +15,5 @@
 <br>（当击杀丧尸或特殊感染者时，这个插件将会播放一个提示音，当爆头击杀时，将会播放一个特殊提示音）
 * **Headshot！：** When only a headshot kills a common infected to make it die, the same goes for melee weapons
 <br>（当只有爆头丧尸才会使其死亡，近战武器也相同）
+* **DefibrillatorHealingField：** In the case of holding the defibrillator, you can aim at one survivor who is not full of blood, then press the E (USE) key. A treatment field (range) will be triggered to treat the target (not dead/incapped) Multiple survivors within the range (recovery of permanent health + temporary health) can be restored.
+<br>（手持电击器的情况下，可以将目标对准未满血的生还者按住E（USE）键，将会触发一个治疗场（范围），对需要治疗的对象（未死亡/未倒地）进行治疗（回复实血+虚血）范围内的多个对象皆可受到治疗）
