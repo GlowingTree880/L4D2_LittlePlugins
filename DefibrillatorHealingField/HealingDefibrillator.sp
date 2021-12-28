@@ -32,7 +32,7 @@ public Plugin myinfo =
 	name 			= "Defibrillator Healing Field (电击器治疗场)",
 	author 			= "夜羽真白",
 	description 	= "电击器治疗场，对需要治疗的对象（未死亡）按住鼠标左键，会触发治疗范围，范围内的多个对象皆可受到治疗",
-	version 		= "1.0.1.0",
+	version 		= "1.0.1.1",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -200,6 +200,19 @@ public void GetMedic(int m_client)
 					SetEntityHealth(client, iPostHealth);
 					SetTempHealth(client, fTempHealth);
 				}
+				// 治疗场触发提示，发送给范围内的所有对象
+				switch (iMessageType)
+				{
+					case 1:
+					{
+						CPrintToChat(client, "{LG}<DefibHealing>：治疗场已触发！");
+					}
+					case 2:
+					{
+						PrintHintText(client, "治疗场已触发！");
+					}
+				}
+				EmitSoundToClient(client, SOUNDEFFECT);
 			}
 		}
 	}
@@ -343,35 +356,25 @@ public Action Timer_Message(Handle timer, int client)
 			case 1:
 			{
 				CPrintToChat(client, "{LG}<DefibHealing>：即将在：{O}%d秒 {LG}后触发治疗场，请等待", iCountDown);
-				EmitSoundToAll(SOUNDCOUNTDOWN, client, SNDCHAN_AUTO, SNDLEVEL_CONVO, _, SNDVOL_NORMAL, _, _, _, _, _, _ );
+				EmitSoundToClient(client, SOUNDCOUNTDOWN);
 			}
 			case 2:
 			{
 				PrintHintText(client, "即将在：%d 秒后触发治疗场，请等待", iCountDown);
-				EmitSoundToAll(SOUNDCOUNTDOWN, client, SNDCHAN_AUTO, SNDLEVEL_CONVO, _, SNDVOL_NORMAL, _, _, _, _, _, _ );
+				EmitSoundToClient(client, SOUNDCOUNTDOWN);
 			}
 		}
 		iCountDown -= 1;
 	}
 	else
 	{
-		EmitSoundToAll(SOUNDEFFECT, client, SNDCHAN_AUTO, SNDLEVEL_CONVO, _, SNDVOL_NORMAL, _, _, _, _, _, _ );
 		GetMedic(client);
+		// 由于执行到这里，时钟必然存在，所以不需要判断
 		g_bTimer = false;
-		RemovePlayerItem(client, GetPlayerWeaponSlot(client, 3));
 		KillTimer(Timer_Check);
 		Timer_Check = INVALID_HANDLE;
-		switch (iMessageType)
-		{
-			case 1:
-			{
-				CPrintToChat(client, "{LG}<DefibHealing>：治疗场已触发！");
-			}
-			case 2:
-			{
-				PrintHintText(client, "治疗场已触发！");
-			}
-		}
+		// 清除玩家所持电击器
+		RemovePlayerItem(client, GetPlayerWeaponSlot(client, 3));
 	}
 	return Plugin_Continue;
 }
@@ -436,8 +439,9 @@ void CreateElectric(int healer, int receiver, float startpos[3], float endpos[3]
 	AcceptEntityInput(particle, "start");
 	CreateTimer(1.0, DeleteParticles, particle);
 	CreateTimer(0.5, DeleteParticletargets, ent);
-	EmitSoundToAll(SOUNDHIT, 0, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, -1, endpos, NULL_VECTOR, true, 0.0);
-	EmitSoundToAll(SOUNDHIT, 0, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, -1, startpos, NULL_VECTOR, true, 0.0);
+	// 为范围内对象播放电击音效
+	EmitSoundToClient(healer, SOUNDHIT, 0, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, -1, endpos, NULL_VECTOR, true, 0.0);
+	EmitSoundToClient(receiver, SOUNDHIT, 0, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 1.0, SNDPITCH_NORMAL, -1, startpos, NULL_VECTOR, true, 0.0);
 }
 
 void SetVector(float target[3], float x, float y, float z)
