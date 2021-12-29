@@ -1,0 +1,7 @@
+这是一个：任意模式下，Tank刷新将会进行提示的插件，提示类型：聊天框/中央文本框提示/中央文字提示，相比ZoneMod中的TankAnnounce删除了对 l4d_tank_control_eq 插件的调用
+
+Cvars：
+l4d2_tankannounce_playsound：是否在Tank生成时播放声音
+l4d2_tankannounce_messagetype：Tank生成提示的类型：0=不提示，1=聊天框提示，2=中央提示框提示，3=中央文字提示
+
+注：此音效需在服务器中才可正常播放，本地无效
