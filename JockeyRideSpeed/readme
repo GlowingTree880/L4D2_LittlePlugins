@@ -1,0 +1,5 @@
+这是一个：可以自定义 Jockey 骑到生还者之后带动生还者的移动速度（Jockey死亡或被救下后被骑乘的生还者速度恢复正常）的插件
+
+Cvars：
+RideSpeedMutiplier：1.50 Jockey骑人时相对于被骑的生还原本速度倍数（1.0）的加速倍数
+RideEndSpeedMutiplier：1.0 Jockey骑乘完毕后将被骑的生还恢复的速度倍数
