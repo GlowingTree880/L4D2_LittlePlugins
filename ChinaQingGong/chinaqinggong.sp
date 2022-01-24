@@ -15,11 +15,11 @@ public Plugin myinfo =
 }
 
 // ConVar
-ConVar g_hEnable, g_hDuckTime, g_hCoolDownTime, g_hUpDistance, g_hDirectionDistance;
+ConVar g_hEnable, g_hDuckTime, g_hCoolDownTime, g_hUpDistance, g_hDirectionDistance, g_hDuckUpSpeed;
 // Bools
 bool g_bEnable, g_bInCoolDown[MAXPLAYERS + 1] = false;
 // Floats
-float g_fDuckTime, g_fCoolDownTime, g_fUpDistance, g_fDirectionDistance, g_fKeyPressedTime[MAXPLAYERS + 1], g_fLastTime[MAXPLAYERS + 1], g_fPressedTime[MAXPLAYERS + 1];
+float g_fDuckTime, g_fCoolDownTime, g_fUpDistance, g_fDirectionDistance, g_fDuckUpSpeed, g_fKeyPressedTime[MAXPLAYERS + 1], g_fLastTime[MAXPLAYERS + 1], g_fPressedTime[MAXPLAYERS + 1];
 
 #define TEAM_SURVIVOR 2
 #define PLAYER_HEIGHT 72.0
@@ -40,6 +40,7 @@ public void OnPluginStart()
 	g_hDuckTime = CreateConVar("QG_DuckTime", "0.5", "需要按住蹲下键多少秒后按空格或方向键才能施法", FCVAR_NOTIFY, true, 0.0);
 	g_hCoolDownTime = CreateConVar("QG_CoolDownTime", "5.0", "施一次法之后的CD时间", FCVAR_NOTIFY, true, 0.0);
 	g_hUpDistance = CreateConVar("QG_UpSpeed", "150.0", "按住蹲下+空格将会向上飞多高（距离）", FCVAR_NOTIFY, true, 0.0);
+	g_hDuckUpSpeed = CreateConVar("QG_DuckUpSpeed", "20.0", "按住蹲下键后如果生还者的行走速度小于这个值再按空格，则视为垂直跳跃", FCVAR_NOTIFY, true, 0.0);
 	g_hDirectionDistance = CreateConVar("QG_DirectionSpeed", "10.0", "按住蹲下+方向键会将玩家加速的倍数（倍数）", FCVAR_NOTIFY, true, 0.0);
 	// HookEvent
 	HookEvent("round_start", evt_RoundStart);
@@ -49,6 +50,7 @@ public void OnPluginStart()
 	g_hDuckTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCoolDownTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hUpDistance.AddChangeHook(ConVarChanged_Cvars);
+	g_hDuckUpSpeed.AddChangeHook(ConVarChanged_Cvars);
 	g_hDirectionDistance.AddChangeHook(ConVarChanged_Cvars);
 	// GetCvars
 	GetCvars();
@@ -65,6 +67,7 @@ void GetCvars()
 	g_fDuckTime = g_hDuckTime.FloatValue;
 	g_fCoolDownTime = g_hCoolDownTime.FloatValue;
 	g_fUpDistance = g_hUpDistance.FloatValue;
+	g_fDuckUpSpeed = g_hDuckUpSpeed.FloatValue;
 	g_fDirectionDistance = g_hDirectionDistance.FloatValue;
 }
 
@@ -152,8 +155,8 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 						GetEntPropVector(client, Prop_Data, "m_vecVelocity", fVelocity);
 						fCurrentSpeed = SquareRoot(Pow(fVelocity[0], 2.0) + Pow(fVelocity[1], 2.0));
 						PrintHintText(client, "中国轻功已蓄力完成，请按空格或方向键+空格键开始施法");
-						// 检测按键
-						if ((buttons & IN_DUCK) && (buttons & IN_JUMP) && fCurrentSpeed < 20.0)
+						// 检测按键，蹲下时生还者速度小于g_fDuckUpSpeed，则视为垂直跳跃
+						if ((buttons & IN_DUCK) && (buttons & IN_JUMP) && fCurrentSpeed < g_fDuckUpSpeed)
 						{
 							CustomMove(MoveUp, client);
 							g_bInCoolDown[client] = true;
@@ -168,7 +171,6 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 								CreateTimer(g_fCoolDownTime, Timer_CoolDown, client, TIMER_FLAG_NO_MAPCHANGE);
 							}
 						}
-						return Plugin_Changed;
 					}
 					// 正在冷却
 					else
