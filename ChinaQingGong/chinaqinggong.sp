@@ -4,7 +4,6 @@
 // 头文件
 #include <sourcemod>
 #include <sdktools>
-#include <left4dhooks>
 
 public Plugin myinfo = 
 {
