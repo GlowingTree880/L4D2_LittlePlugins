@@ -96,6 +96,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	// 是有效玩家
 	if (IsValidPlayer(client))
 	{
+		// PrintToChatAll("状态：%b", g_bInCoolDown[client]);
 		float fTime = GetEngineTime();
 		float fInterval = fTime - g_fLastTime[client];
 		g_fLastTime[client] = fTime;
@@ -147,20 +148,26 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 					// 技能非冷却状态才可使用
 					if (!g_bInCoolDown[client])
 					{
-						PrintHintText(client, "中国轻功已蓄力完成，请按空格或方向键开始施法");
+						float fVelocity[3], fCurrentSpeed;
+						GetEntPropVector(client, Prop_Data, "m_vecVelocity", fVelocity);
+						fCurrentSpeed = SquareRoot(Pow(fVelocity[0], 2.0) + Pow(fVelocity[1], 2.0));
+						PrintHintText(client, "中国轻功已蓄力完成，请按空格或方向键+空格键开始施法");
 						// 检测按键
-						if ((buttons & IN_DUCK) && (buttons & IN_JUMP))
+						if ((buttons & IN_DUCK) && (buttons & IN_JUMP) && fCurrentSpeed < 20.0)
 						{
 							CustomMove(MoveUp, client);
 							g_bInCoolDown[client] = true;
+							CreateTimer(g_fCoolDownTime, Timer_CoolDown, client, TIMER_FLAG_NO_MAPCHANGE);
 						}
 						else if (((buttons & IN_DUCK) && (buttons & IN_FORWARD)) || ((buttons & IN_DUCK) && (buttons & IN_BACK)) || ((buttons & IN_DUCK) && (buttons & IN_MOVELEFT)) || ((buttons & IN_DUCK) && (buttons & IN_MOVERIGHT)))
 						{
-							buttons |= IN_JUMP;
-							CustomMove(MoveForward, client);
-							g_bInCoolDown[client] = true;
+							if (buttons & IN_JUMP)
+							{
+								CustomMove(MoveForward, client);
+								g_bInCoolDown[client] = true;
+								CreateTimer(g_fCoolDownTime, Timer_CoolDown, client, TIMER_FLAG_NO_MAPCHANGE);
+							}
 						}
-						CreateTimer(g_fCoolDownTime, Timer_CoolDown, client, TIMER_FLAG_NO_MAPCHANGE);
 						return Plugin_Changed;
 					}
 					// 正在冷却
