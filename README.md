@@ -16,9 +16,11 @@
 <br>（当击杀丧尸或特殊感染者时，这个插件将会播放一个提示音，当爆头击杀时，将会播放一个特殊提示音）
 * **Headshot！：** When only a headshot kills a common infected to make it die, the same goes for melee weapons
 <br>（当只有爆头丧尸才会使其死亡，近战武器也相同）
-* **DefibrillatorHealingField：** In the case of holding the defibrillator, you can aim at one survivor who is not full of blood, then press the E (USE) key. A treatment field (range) will be triggered to treat the target (not dead/incapped) Multiple survivors within the range (recovery of permanent health + temporary health) can be restored.
+* **DefibrillatorHealingField：** In the case of holding the defibrillator, you can aim at one survivor who is not full of blood, then press the E (USE) key. A treatment field (range) will be triggered to treat the target (not dead/incapacitated) Multiple survivors within the range (recovery of permanent health + temporary health) can be restored.
 <br>（手持电击器的情况下，可以将目标对准未满血的生还者按住E（USE）键，将会触发一个治疗场（范围），对需要治疗的对象（未死亡/未倒地）进行治疗（回复实血+虚血）范围内的多个对象皆可受到治疗）
 * **TankAnnounce：** In any gamemode, The plugin will announce a message when Tank spawn. The message type can be selected (chat/hint text/central text. Compared with l4d_tank_announce in ZoneMod, the depend to the l4d_tank_control_eq plug-in is deleted.
 <br>（任意模式下，Tank刷新将会进行提示的插件，提示类型：聊天框/中央文本框提示/中央文字提示，相比ZoneMod中的TankAnnounce删除了对 l4d_tank_control_eq 插件的调用）
 * **JockeyRideSpeed：** A plugin that can customize the movement speed of the survivors after jockeys ride on them (also can customize the movement speed of the survivors after jockeys ride end)
 <br>（任意模式下，允许自定义 Jockey 骑乘到生还者之后携带生还者的移动速度，同时允许自定义Jockey死亡或被救下后被骑乘的生还者速度的插件）
+* **ChinaQingGong：** If a player not dead or incapacitated, it is allowed to hold down the crouch button for a certain period of time and combine the space bar or move keys to obtain the effect of jumping up or sprinting in the corresponding direction at a longer distance (China Qinggong)
+<br>（生还者（未死亡/未倒地）状态下，允许按住蹲下键一定时长配合空格键或方向键获得更远距离的向上跳跃或向对应方向冲刺的效果（中国轻功））
