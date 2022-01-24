@@ -27,10 +27,7 @@ float g_fDuckTime, g_fCoolDownTime, g_fUpDistance, g_fDirectionDistance, g_fDuck
 enum CustomMoveType
 {
 	MoveUp,
-	MoveForward,
-	MoveBack,
-	MoveLeft,
-	MoveRight
+	MoveDirection
 };
 
 public void OnPluginStart()
@@ -166,7 +163,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 						{
 							if (buttons & IN_JUMP)
 							{
-								CustomMove(MoveForward, client);
+								CustomMove(MoveDirection, client);
 								g_bInCoolDown[client] = true;
 								CreateTimer(g_fCoolDownTime, Timer_CoolDown, client, TIMER_FLAG_NO_MAPCHANGE);
 							}
@@ -231,7 +228,7 @@ void CustomMove(CustomMoveType type, int client)
 			}
 			delete hTrace;
 		}
-		case MoveForward, MoveBack, MoveLeft, MoveRight:
+		case MoveDirection:
 		{
 			float fVelocity[3];
 			GetEntPropVector(client, Prop_Data, "m_vecVelocity", fVelocity);
