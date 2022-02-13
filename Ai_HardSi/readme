@@ -1,0 +1,76 @@
+这是一个：特感增强的插件，整合了其他大佬写的一些比较骚的功能同时加上了一些自己写的功能让特感变得更加智能
+
+Cvars：
+Ai_Tank：
+  ai_Tank_Bhop：1 是否开启坦克连跳功能
+  ai_Tank_BhopSpeed：80.0 坦克连跳的速度
+  ai_Tank_Throw：1 是否允许坦克投掷石块（好像没什么用，禁用了有时候还是会投掷石块）
+  ai_Tank_ThrowDistance：300 当ai_Tank_Throw开启时，在距离目标生还者多近的距离才允许投掷石块
+  ai_Tank_Target：1 坦克目标选择：1=最近，2=血量最少，3=血量最多（可以用 TargetOverride 插件代替此功能）
+  ai_Tank_TreeDetect：1 生还与坦克进行秦王绕柱走位时坦克的操作：0=无操作，2=切换目标，3=传送至绕柱生还附近
+  ai_TankAirAngles：60.0 坦克连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
+  ai_TankConsume：1 是否开启坦克消耗功能
+  ai_Tank_ConsumeFindPositionCount：10 坦克进行消耗时找位的次数
+  ai_Tank_ConsumeHeight：250 坦克进行消耗时将会优先选择高于这个高度的位置，如无则随机选位
+  ai_Tank_ConsumeLimit：2 特感方除坦克外少于多少个特感时，坦克会进行消耗
+  ai_Tank_ConsumeChooseNewPositionDistance：150 当坦克进入消耗位置时，生还者距离坦克多近，坦克将会找新的消耗位
+  ai_Tank_ConsumeRaidus：50.0 坦克消耗的范围，从消耗位坐标中心以这个值为半径画圆
+  ai_Tank_AttackVomitedNum：1 如果有这个数量的生还者被 Boomer 喷到，正在消耗的坦克会停止消耗转为攻击
+  ai_Tank_VomitCanInstantAttack：1 是否开启生还者被 Boomer 喷压制功能
+  ai_Tank_VomitAttackInterval：20.0 从生还者开始被 Boomer 喷到起，这个时间内正在消耗的坦克允许攻击，超过这个时间且坦克允许消耗（在场特感小于 ai_Tank_ConsumeLimit 值时，坦克会继续消耗）
+  ai_Tank_TeleportForwardPercent：5 坦克开始消耗时，记录此时生还者在地图上的路程百分比 x，当生还者当前路程百分比超过 x + 这个值时坦克将会传送至生还者处进行压制
+  ai_Tank_ConsumeLimitNum：3 一个坦克最多进行消耗的次数
+  ai_TankConsumeType：3 坦克消耗时将会按照哪种特感类型进行找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank
+  ai_TankBhopHitWallDistance：100.0 坦克进行连跳时，视角前方这一距离内有障碍物则会停止连跳
+  ai_TankRetreatAirAngles：75.0 坦克正在前往消耗位时，如果正在连跳，视角与速度方向超过这一个角度将会停止连跳
+  ai_TankConsumeAction：2 坦克在消耗范围内的操作：1=冰冻，2=允许活动但不允许活动范围超出消耗范围
+  ai_TankConsumeDamagePercent：10 坦克在前往消耗位的过程中只会受到这一个百分比的伤害
+  ai_TankDebugMod：0 是否开启调试输出信息（找位显示等）
+  
+Ai_Boomer：
+  ai_BoomerBhop：1 是否开启胖子连跳
+  ai_BoomerBhopSpeed：80.0 胖子连跳的速度
+  ai_BoomerAirAngles：60.0 胖子连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
+  
+Ai_Hunter：
+  ai_HunterFastPounceDistance：2000 在距离目标多近时，ht会进行快速突袭
+  ai_HunterPounceVerticalAngle：6 ht突袭垂直角度限制
+  ai_HunterPounceAngleMean：10 ht突袭的平均角度（高斯随机数发生器产生）
+  ai_HunterPounceAngleStd：20 ht突袭时，最终角度与平均角度的偏差值（高斯随机数发生器产生）
+  ai_HunterStraightPounceDistance：200.0 ht与目标在距离这一个范围内允许直扑
+  ai_HunterAimOffset：360.0 如果目标的水平视角与ht的位置处在这一个范围内，ht将不会直扑
+  ai_HunterWallDetectDistance：-1 ht在这一个范围内将会优先检测周围的墙体进行弹墙，-1关闭此功能
+  ai_HunterTarget：2 ht目标选择：1=关闭此功能，2=最近生还者，3=手持非霰弹枪的生还者
+  ai_HunterShotGunCheckRange：150.0 当 ai_HunterTarget 为3时，ht在大于这个距离时将会进行目标枪械检测
+  
+Ai_Charger：
+  ai_ChargerBhop：1 是否开启牛连跳功能
+  ai_ChargerBhopSpeed：80.0 牛连跳的速度
+  ai_ChargerTarget：3 牛目标选择：1=关闭此功能，2=优先撞多人处，3=优先撞最近目标
+  ai_ChargerStartChargeDistance：300.0 牛与目标距离小于这个值才允许冲锋
+  ai_ChargerAimOffset：15 如果目标的水平视角与牛的位置处在这一个范围内，牛将不会冲锋
+  ai_ChargerStartChargeHealth：350 牛的生命值高于这个值将不会冲锋
+  ai_ChargerAirAngles：60.0 牛连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
+  
+Ai_Jockey：
+  ai_JockeyBhopSpeed：80.0 猴子连跳的速度
+  ai_JockeyStartHopDistance：800.0 猴子在与目标处在这一个范围内时将会进行连跳
+  ai_JockeyStumbleRadius：50.0 猴子在套中目标时将会对这一个范围内的生还者产生硬直效果
+  ai_JockeyAirAngles：60.0 猴子连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
+  
+Ai_Spitter：
+  ai_SpitterBhop：1 是否开启口水连跳功能
+  ai_SpitterBhopSpeed：60.0 口水连跳的速度
+  ai_SpitterBhopStartBhopDistance：2000.0 口水在与目标处在这一个范围内时将会进行连跳
+  ai_SpitterTarget：3 口水目标选择：1=关闭此功能，2=优先吐多人的地方，3=优先吐被扑，撞，拉的地方（如果找不到被扑，撞，拉的生还则优先吐多人的地方）
+  ai_SpitterInstantKill：0 口水吐完痰之后是否延迟10秒处死
+  ai_SpitterAirAngle：60.0 口水连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
+  
+Ai_Smoker：
+  ai_SmokerBhop：1 是否开启舌头连跳
+  ai_SmokerBhopSpeed：80.0 舌头连跳的速度
+  ai_SmokerTarget：1 舌头目标选择：1=距离最近的生还，2=手持霰弹枪的人（无则选择最近的生还），3=落单者或超前者（无则选择最近的生还），4=正在换弹的生还（无则选择最近的生还）
+  ai_SmokerMeleeAvoid：1 舌头当前的目标如果手持近战是否选择新的目标
+  ai_SmokerVisionInverse：1 舌头拉到人时视角是否会转向背后
+  ai_SmokerLeftBehindDistance：15.0 玩家距离团队多远判定为落单或超前
+  ai_SmokerDistantPercent：0.90 舌头与目标的距离如果处在这个值 * tongue_range 的范围内，则会立即拉人
