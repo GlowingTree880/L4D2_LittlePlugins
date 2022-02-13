@@ -24,3 +24,5 @@
 <br>（任意模式下，允许自定义 Jockey 骑乘到生还者之后携带生还者的移动速度，同时允许自定义Jockey死亡或被救下后被骑乘的生还者速度的插件）
 * **ChinaQingGong：** If a player not dead or incapacitated, it is allowed to hold down the crouch button for a certain period of time and combine the space bar or move keys to obtain the effect of jumping up or sprinting in the corresponding direction at a longer distance (China Qinggong)
 <br>（生还者（未死亡/未倒地）状态下，允许按住蹲下键一定时长配合空格键或方向键获得更远距离的向上跳跃或向对应方向冲刺的效果（中国轻功））
+* **Ai_HardSi：** Improves the AI behaviour of special infected
+<br>（通过改进 Ai 特感的行为来增强游戏性，整合了其他大佬的一些功能，同时添加了一些自己想到的功能）
