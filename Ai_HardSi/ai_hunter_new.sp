@@ -97,22 +97,28 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 		float fHunterPos[3], fTargetAngles[3];
 		GetClientAbsOrigin(hunter, fHunterPos);
 		int iTarget = GetClientAimTarget(hunter, true);
+		bool bHasSight = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_hasVisibleThreats"));
 		if (iTarget > 0)
 		{
-			ComputeAimAngles(hunter, iTarget, fTargetAngles, AimChest);
-			fTargetAngles[2] = 0.0;
-			TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			if (bHasSight)
+			{
+				ComputeAimAngles(hunter, iTarget, fTargetAngles, AimChest);
+				fTargetAngles[2] = 0.0;
+				TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			}
 		}
 		else
 		{
-			int iNewTarget = GetClosestSurvivor(fHunterPos);
-			ComputeAimAngles(hunter, iNewTarget, fTargetAngles, AimChest);
-			fTargetAngles[2] = 0.0;
-			TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			if (bHasSight)
+			{
+				int iNewTarget = GetClosestSurvivor(fHunterPos);
+				ComputeAimAngles(hunter, iNewTarget, fTargetAngles, AimChest);
+				fTargetAngles[2] = 0.0;
+				TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			}
 		}
 		if ((iFlags & FL_DUCKING) && (iFlags & FL_ONGROUND))
 		{
-			bool bHasSight = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_hasVisibleThreats"));
 			if (bHasSight)
 			{
 				if (fDistance < g_fHunterFastPounceDistance)

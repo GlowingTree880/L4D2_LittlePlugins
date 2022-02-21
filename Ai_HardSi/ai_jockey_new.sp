@@ -84,10 +84,13 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 		int iTarget = GetClientAimTarget(jockey, true);
 		if (iTarget > 0)
 		{
-			// 锁定视野
-			ComputeAimAngles(jockey, iTarget, fTargetAngles, AimChest);
-			fTargetAngles[2] = 0.0;
-			TeleportEntity(jockey, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			if (GetEntProp(jockey, Prop_Send, "m_hasVisibleThreats") != 0)
+			{
+				// 锁定视野
+				ComputeAimAngles(jockey, iTarget, fTargetAngles, AimChest);
+				fTargetAngles[2] = 0.0;
+				TeleportEntity(jockey, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+			}
 			// 其他操作
 			float fBuffer[3], fTargetPos[3];
 			GetClientAbsOrigin(iTarget, fTargetPos);
@@ -193,11 +196,6 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 							}
 						}
 					}
-					if (GetEntityMoveType(jockey) & MOVETYPE_LADDER)
-					{
-						buttons &= ~IN_JUMP;
-						buttons &= ~IN_DUCK;
-					}
 				}
 			}
 		}
@@ -207,12 +205,15 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 			int iNewTarget = GetClosestSurvivor(fJockeyPos);
 			if (iNewTarget > 0)
 			{
-				// 锁定视野
-				ComputeAimAngles(jockey, iNewTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(jockey, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				if (GetEntProp(jockey, Prop_Send, "m_hasVisibleThreats") != 0)
+				{
+					// 锁定视野
+					ComputeAimAngles(jockey, iNewTarget, fTargetAngles, AimChest);
+					fTargetAngles[2] = 0.0;
+					TeleportEntity(jockey, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				}
 				// 无目标的情况，do normal jump
-				float fJockeyEyeAngle[3], fForwardVec[3];
+				/*float fJockeyEyeAngle[3], fForwardVec[3];
 				GetClientEyeAngles(jockey, fJockeyEyeAngle);
 				GetAngleVectors(fJockeyEyeAngle, fForwardVec, NULL_VECTOR, NULL_VECTOR);
 				NormalizeVector(fForwardVec, fForwardVec);
@@ -240,49 +241,54 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 							g_bDoNormalJump[jockey] = true;
 						}
 					}
-				}
+				}*/
 			}
-			else if (iFlags == FL_JUMPING)
-			{
-				int NewTarget = NearestSurvivor(jockey);	float fTargetPos[3];
-				if (NewTarget > 0)
-				{
-					GetClientAbsOrigin(NewTarget, fTargetPos);
-					if (GetVectorDistance(fJockeyPos, fTargetPos) < 100.0)
-					{
-						// 防止连跳过头
-						float fAnglesPost[3], fAngles[3];
-						GetVectorDistance(fSpeed, fAngles);
-						fAnglesPost = fAngles;
-						fAngles[0] = fAngles[2] = 0.0;
-						GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
-						NormalizeVector(fAngles, fAngles);
-						// 保存当前位置
-						static float fDirection[2][3];
-						fDirection[0] = fJockeyPos;
-						fDirection[1] = fTargetPos;
-						fJockeyPos[2] = fTargetPos[2] = 0.0;
-						MakeVectorFromPoints(fJockeyPos, fTargetPos, fJockeyPos);
-						NormalizeVector(fJockeyPos, fJockeyPos);
-						// 计算距离
-						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fJockeyPos))) < g_fJockeyAirAngles)
-						{
-							return Plugin_Continue;
-						}
-						// 重新设置速度方向
-						float fNewVelocity[3];
-						MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
-						TeleportEntity(jockey, NULL_VECTOR, fAnglesPost, fNewVelocity);
-					}
-				}
-			}
-			else
-			{
-				buttons &= ~IN_JUMP;
-				buttons &= ~IN_ATTACK;
-			}
-			return Plugin_Changed;
 		}
+		if (GetEntityMoveType(jockey) & MOVETYPE_LADDER)
+		{
+			buttons &= ~IN_JUMP;
+			buttons &= ~IN_DUCK;
+		}
+		if (iFlags == FL_JUMPING)
+		{
+			int NewTarget = NearestSurvivor(jockey);	float fTargetPos[3];
+			if (NewTarget > 0)
+			{
+				GetClientAbsOrigin(NewTarget, fTargetPos);
+				if (GetVectorDistance(fJockeyPos, fTargetPos) < 100.0)
+				{
+					// 防止连跳过头
+					float fAnglesPost[3], fAngles[3];
+					GetVectorDistance(fSpeed, fAngles);
+					fAnglesPost = fAngles;
+					fAngles[0] = fAngles[2] = 0.0;
+					GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
+					NormalizeVector(fAngles, fAngles);
+					// 保存当前位置
+					static float fDirection[2][3];
+					fDirection[0] = fJockeyPos;
+					fDirection[1] = fTargetPos;
+					fJockeyPos[2] = fTargetPos[2] = 0.0;
+					MakeVectorFromPoints(fJockeyPos, fTargetPos, fJockeyPos);
+					NormalizeVector(fJockeyPos, fJockeyPos);
+					// 计算距离
+					if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fJockeyPos))) < g_fJockeyAirAngles)
+					{
+						return Plugin_Continue;
+					}
+					// 重新设置速度方向
+					float fNewVelocity[3];
+					MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+					TeleportEntity(jockey, NULL_VECTOR, fAnglesPost, fNewVelocity);
+				}
+			}
+		}
+		else
+		{
+			buttons &= ~IN_JUMP;
+			buttons &= ~IN_ATTACK;
+		}
+		return Plugin_Changed;
 	}
 	return Plugin_Continue;
 }

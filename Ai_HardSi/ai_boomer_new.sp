@@ -39,7 +39,7 @@ public void OnPluginStart()
 {
 	// CreateConVar
 	g_hBoomerBhop = CreateConVar("ai_BoomerBhop", "1", "是否开启Boomer连跳", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hBoomerBhopSpeed = CreateConVar("ai_BoomerBhopSpeed", "80.0", "Boomer连跳的速度", FCVAR_NOTIFY, true, 0.0);
+	g_hBoomerBhopSpeed = CreateConVar("ai_BoomerBhopSpeed", "200.0", "Boomer连跳的速度", FCVAR_NOTIFY, true, 0.0);
 	g_hBoomerAirAngles = CreateConVar("ai_BoomerAirAngles", "60.0", "Boomer在空中的速度向量与到生还者的方向向量夹角大于这个值停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hVomitRange = FindConVar("z_vomit_range");
 	// HookEvents
@@ -107,10 +107,13 @@ public Action OnPlayerRunCmd(int boomer, int &buttons, int &impulse, float vel[3
 		{
 			if (iTarget > 0)
 			{
-				// 锁定视野
-				ComputeAimAngles(boomer, iTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(boomer, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				if (bHasSight)
+				{
+					// 锁定视野
+					ComputeAimAngles(boomer, iTarget, fTargetAngles, AimChest);
+					fTargetAngles[2] = 0.0;
+					TeleportEntity(boomer, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				}
 				// 连跳操作
 				float fBuffer[3], fTargetPos[3];
 				GetClientAbsOrigin(iTarget, fTargetPos);
