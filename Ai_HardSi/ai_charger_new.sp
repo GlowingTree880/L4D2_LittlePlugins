@@ -118,10 +118,13 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		{
 			if (iTarget > 0)
 			{
-				// 锁定视野
-				ComputeAimAngles(charger, iTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(charger, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				if (bHasSight)
+				{
+					// 锁定视野
+					ComputeAimAngles(charger, iTarget, fTargetAngles, AimChest);
+					fTargetAngles[2] = 0.0;
+					TeleportEntity(charger, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
+				}
 				// 其他操作
 				float fBuffer[3], fTargetPos[3];
 				GetClientAbsOrigin(iTarget, fTargetPos);
@@ -210,6 +213,7 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 				if (!g_bShouldCharge[charger])
 				{
 					BlockCharge(charger);
+					buttons |= IN_FORWARD;
 					buttons |= IN_ATTACK2;
 					return Plugin_Changed;
 				}
@@ -241,31 +245,34 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 			}
 			case 3:
 			{
-				// 所有人都拿着近战，随机选取最近目标
-				if (iTeamMeleeCount == g_iValidSurvivor)
+				if (curTarget > 0)
 				{
-					curTarget = GetClosestSurvivor(fSelfPos);
-					return Plugin_Changed;
-				}
-				else
-				{
-					if (NearestSurvivorDistance(specialInfected) > 0.50 * float(g_iStartChargeDistance))
+					// 所有人都拿着近战，随机选取最近目标
+					if (iTeamMeleeCount == g_iValidSurvivor)
 					{
-						if (ClientMeleeCheck(curTarget))
+						curTarget = GetClosestSurvivor(fSelfPos);
+						return Plugin_Changed;
+					}
+					else
+					{
+						if (NearestSurvivorDistance(specialInfected) > 0.50 * float(g_iStartChargeDistance))
 						{
-							curTarget = GetClosestSurvivor(fSelfPos, curTarget);
-							return Plugin_Changed;
+							if (ClientMeleeCheck(curTarget))
+							{
+								curTarget = GetClosestSurvivor(fSelfPos, curTarget);
+								return Plugin_Changed;
+							}
+							else
+							{
+								curTarget = GetClosestSurvivor(fSelfPos);
+								return Plugin_Changed;
+							}
 						}
 						else
 						{
 							curTarget = GetClosestSurvivor(fSelfPos);
 							return Plugin_Changed;
 						}
-					}
-					else
-					{
-						curTarget = GetClosestSurvivor(fSelfPos);
-						return Plugin_Changed;
 					}
 				}
 			}
@@ -302,7 +309,7 @@ int TeamMeleeCheck()
 	int iTeamMeleeCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && IsPinned(client))
+		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && !IsPinned(client))
 		{
 			g_iValidSurvivor += 1;
 			char sName[64];

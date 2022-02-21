@@ -21,7 +21,7 @@ native bool IsTankInConsumePlace(int index);
 
 public SharedPlugin __pl_tankconsume =
 {
-	name = "Ai_Tank_Enhance",
+	name = "tankconsume",
 	file = "ai_tank_new.smx",
 #if defined REQUIRE_PLUGIN
 	required = 1,

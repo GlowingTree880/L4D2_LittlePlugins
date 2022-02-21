@@ -173,25 +173,27 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 			}
 			case 3:
 			{
-				// 检测是否有生还被撞，扑，拉
-				for (int client = 1; client <= MaxClients; client++)
+				if (HasPinnedClient())
 				{
-					if (IsValidClient(client) && GetClientTeam(client) == TEAM_SURVIVOR)
+					for (int client = 1; client <= MaxClients; client++)
 					{
-						if (GetEntProp(client, Prop_Send, "m_pummelAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0)
+						if (IsValidClient(client) && GetClientTeam(client) == TEAM_SURVIVOR)
 						{
-							curTarget = client;
-							return Plugin_Changed;
-						}
-						else
-						{
-							int iTarget = GetCrowdPlace();
-							if (iTarget > 0)
+							if (IsPinned(client))
 							{
-								curTarget = iTarget;
+								curTarget = client;
 								return Plugin_Changed;
 							}
 						}
+					}
+				}
+				else
+				{
+					int iTarget = GetCrowdPlace();
+					if (iTarget > 0)
+					{
+						curTarget = iTarget;
+						return Plugin_Changed;
 					}
 				}
 			}
@@ -356,4 +358,31 @@ void ClientPush(int client, float fForwardVec[3])
 		fCurVelVec[i] += fForwardVec[i];
 	}
 	TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, fCurVelVec);
+}
+
+bool IsPinned(int client)
+{
+	bool bIsPinned = false;
+	if (IsSurvivor(client))
+	{
+		if(GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0) bIsPinned = true;
+		if(GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0) bIsPinned = true;
+		// if(GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0) bIsPinned = true;
+		if(GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0) bIsPinned = true;
+		if(GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0) bIsPinned = true;
+	}		
+	return bIsPinned;
+}
+
+bool HasPinnedClient()
+{
+	bool bHasPinnedClient = false;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (IsPinned(client))
+		{
+			bHasPinnedClient = true;
+		}
+	}
+	return bHasPinnedClient;
 }
