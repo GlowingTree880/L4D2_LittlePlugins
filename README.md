@@ -26,3 +26,5 @@
 <br>（生还者（未死亡/未倒地）状态下，允许按住蹲下键一定时长配合空格键或方向键获得更远距离的向上跳跃或向对应方向冲刺的效果（中国轻功））
 * **Ai_HardSi：** Improves the AI behaviour of special infected
 <br>（通过改进 Ai 特感的行为来增强游戏性，整合了其他大佬的一些功能，同时添加了一些自己想到的功能）
+* **Ai_HardSi：** A simple infected spawner
+<br>（基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 Infected_Control.smx 编写，添加了一些其他功能的射线找位刷特，传送特感的插件）
