@@ -42,7 +42,7 @@ public void OnPluginStart()
 {
 	g_hSmokerBhop = CreateConVar("ai_SmokerBhop", "1", "是否开启Smoker连跳", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hSmokerBhopSpeed = CreateConVar("ai_SmokerBhopSpeed", "80.0", "Smoker连跳的速度", FCVAR_NOTIFY, true, 0.0);
-	g_hTargetChoose = CreateConVar("ai_SmokerTarget", "1", "Smoker优先选择的目标：1=距离最近，2=手持喷子的人（无则最近），3=落单者（无则最近），4=正在换弹的人（无则最近）", FCVAR_NOTIFY, true, 1.0, true, 4.0);
+	g_hTargetChoose = CreateConVar("ai_SmokerTarget", "1", "Smoker优先选择的目标：1=距离最近，2=手持喷子的人（无则最近），3=落单者或超前者（无则最近），4=正在换弹的人（无则最近）", FCVAR_NOTIFY, true, 1.0, true, 4.0);
 	g_hMeleeAvoid = CreateConVar("ai_SmokerMeleeAvoid", "1", "Smoker的目标如果手持近战则切换目标", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hVisionInverse = CreateConVar("ai_SmokerVisionInverse", "1", "Smoker正在拉人时视角是否转向背后", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hLeftDistance = CreateConVar("ai_SmokerLeftBehindDistance", "15.0", "玩家距离团队多远判定为落后或超前", FCVAR_NOTIFY, true, 0.0);
@@ -176,7 +176,7 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 				DataPack pack = new DataPack();
 				pack.WriteCell(iVictim);
 				pack.WriteCell(smoker);
-				CreateTimer(0.5, Timer_Inverse, pack);
+				VisionInverse(pack);
 			}
 		}
 	}
@@ -247,17 +247,24 @@ bool IsAiSmoker(int client)
 	}
 }
 
-public Action Timer_Inverse(Handle timer, DataPack pack)
+void VisionInverse(DataPack pack)
 {
 	pack.Reset();
 	int victim = pack.ReadCell();
 	int attacker = pack.ReadCell();
 	float fSelfPos[3], fTargetPos[3], fLookAt[3], fNegetiveLookAt[3];
-	GetClientEyePosition(attacker, fSelfPos);	GetClientEyePosition(victim, fTargetPos);
-	MakeVectorFromPoints(fSelfPos, fTargetPos, fLookAt);
-	NegateVector(fLookAt);
-	GetVectorAngles(fLookAt, fNegetiveLookAt);
-	TeleportEntity(attacker, NULL_VECTOR, fNegetiveLookAt, NULL_VECTOR);
+	if (IsAiSmoker(attacker))
+	{
+		GetClientEyePosition(attacker, fSelfPos);
+		if (IsSurvivor(victim))
+		{
+			GetClientEyePosition(victim, fTargetPos);
+			MakeVectorFromPoints(fSelfPos, fTargetPos, fLookAt);
+			NegateVector(fLookAt);
+			GetVectorAngles(fLookAt, fNegetiveLookAt);
+			TeleportEntity(attacker, NULL_VECTOR, fNegetiveLookAt, NULL_VECTOR);
+		}
+	}
 }
 
 bool IsPinned(int client)
