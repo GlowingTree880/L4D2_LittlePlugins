@@ -29,4 +29,4 @@
 * **Infected_Control：** A simple infected spawner
 <br>（基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 infected_control.smx 编写，添加了一些其他功能的射线找位刷特，传送特感的插件，注：请修改游戏模式为 versus，否则只能刷3特，具体原因目前还在研究中）
 * **Text：** Use with Infected_Control.smx, Auto start spawn when the first survivor leave safe area, and indicates the current difficulty
-<br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 text.smx 编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动出门刷特，团灭时更改游戏模式为写实）
+<br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 text.smx 编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
