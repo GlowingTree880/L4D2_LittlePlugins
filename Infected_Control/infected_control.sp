@@ -149,11 +149,13 @@ public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
 		g_hTeleHandle = INVALID_HANDLE;
 	}
 	g_bIsLate = false;
-	for (int hTimerHandle = 0; hTimerHandle < aThreadHandle.Length; hTimerHandle++)
+	g_iSpawnMaxCount = 0;
+	for (int hTimerHandle = aThreadHandle.Length - 1; hTimerHandle >= 0; hTimerHandle--)
 	{
-		KillTimer(aThreadHandle.Get(hTimerHandle), false);
+		KillTimer(aThreadHandle.Get(hTimerHandle));
 		aThreadHandle.Erase(hTimerHandle);
 	}
+	aThreadHandle.Clear();
 	CreateTimer(0.1, MaxSpecialsSet);
 	CreateTimer(3.0, SafeRoomReset, _, TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -166,11 +168,14 @@ public void evt_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 		g_hTeleHandle = INVALID_HANDLE;
 	}
 	g_bIsLate = false;
-	for (int hTimerHandle = 0; hTimerHandle < aThreadHandle.Length; hTimerHandle++)
+	g_iSpawnMaxCount = 0;
+	// 从 ArrayList 末端往前判断删除时钟，如果从前往后，因为 ArrayList 会通过前移后面的索引来填补前面擦除的空位，导致有时钟句柄无法擦除
+	for (int hTimerHandle = aThreadHandle.Length - 1; hTimerHandle >= 0; hTimerHandle--)
 	{
-		KillTimer(aThreadHandle.Get(hTimerHandle), false);
+		KillTimer(aThreadHandle.Get(hTimerHandle));
 		aThreadHandle.Erase(hTimerHandle);
 	}
+	aThreadHandle.Clear();
 }
 
 public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
@@ -216,14 +221,14 @@ public void OnGameFrame()
 	}
 	if (g_bIsLate && g_iSbEscort > 0 && g_iSpawnMaxCount > 0)
 	{
-		if (g_iSiLimit >= HasAnyCountFull())
+		if (g_iSiLimit > HasAnyCountFull())
 		{
 			// 使用一个计数变量，如果可以刷特，且小于 200 帧特感未活全
 			iUnRechedLimitCount++;
 			if (iUnRechedLimitCount > g_iWaveSpawnFrame)
 			{
 				int iInfectedCount = 0;
-				// 检测在场特感数量
+				// 帧操作，获取在场特感数量
 				for (int infected = 1; infected <= MaxClients; infected++)
 				{
 					if (IsInfectedBot(infected) && IsPlayerAlive(infected))
@@ -233,16 +238,17 @@ public void OnGameFrame()
 						{
 							float fPos[3];
 							GetClientAbsOrigin(infected, fPos);
+							// 如果在场特感数量小于设置数量
 							for (int count = iInfectedCount; count <= g_iSiLimit; count++)
 							{
 								int iZombieClass = IsBotTypeNeeded();
 								if (iZombieClass > 0)
 								{
-									int entityindex = L4D2_SpawnSpecial(iZombieClass, fPos, view_as<float>({0.0, 0.0, 0.0}));
-									if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+									// 先判断刷特上限是否大于 0 再刷出特感，否则先刷出特感再减少刷特上限，会多刷一个特感
+									if (g_iSpawnMaxCount > 0)
 									{
-										// 先判断刷特上限是否大于 0 刷出再减少刷特上限，防止其它问题
-										if (g_iSpawnMaxCount > 0)
+										int entityindex = L4D2_SpawnSpecial(iZombieClass, fPos, view_as<float>({0.0, 0.0, 0.0}));
+										if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
 										{
 											g_iSpawnMaxCount -= 1;
 										}
@@ -261,19 +267,19 @@ public void OnGameFrame()
 			{
 				case 50:
 				{
-					g_fSpawnDistanceMax = 550.0;
+					g_fSpawnDistanceMax = 650.0;
 				}
 				case 100:
 				{
-					g_fSpawnDistanceMax = 600.0;
+					g_fSpawnDistanceMax = 800.0;
 				}
 				case 150:
 				{
-					g_fSpawnDistanceMax = 700.0;
+					g_fSpawnDistanceMax = 950.0;
 				}
 				case 200:
 				{
-					g_fSpawnDistanceMax = 1250.0;
+					g_fSpawnDistanceMax = 1100.0;
 				}
 				case 250:
 				{
@@ -321,9 +327,10 @@ public void OnGameFrame()
 				}
 				if (!IsPlayerVisibleTo(fSpawnPos) && IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos))
 				{
+					// 生还数量为 4，循环 4 次，检测此位置到生还的距离是否小于 750 是则刷特，此处可以刷新 1 - g_iSiLimit 只特感，如果此处刷完，则上面的 SpawnSpecial 将不再刷特
 					for (int count = 0; count < g_iSurvivorNum; count++)
 					{
-						int index = g_iSurvivors[count], entityindex = -1;
+						int index = g_iSurvivors[count];
 						GetClientEyePosition(index, fSurvivorPos);
 						fSurvivorPos[2] -= 60.0;
 						if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fSpawnDistanceMax + 250.0, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSurvivorPos, fSpawnPos) > g_fSpawnDistanceMin)
@@ -331,8 +338,8 @@ public void OnGameFrame()
 							int iZombieClass = IsBotTypeNeeded();
 							if (iZombieClass > 0)
 							{
-								entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
-								if (entityindex && IsValidEntity(entityindex) && IsValidEdict(entityindex))
+								int entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+								if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
 								{
 									if (g_iSpawnMaxCount > 0)
 									{
@@ -414,17 +421,15 @@ public Action SpawnNewInfected(Handle timer)
 			aThreadHandle.Push(aSpawnTimer);
 			TriggerTimer(aSpawnTimer, true);
 		}
-		else
+		// 其实这个删除没什么用，因为当 aThreadHandle.Length = g_iSiLimit 时，多出来的句柄将不会存入数组
+		else if (g_iSiLimit < aThreadHandle.Length)
 		{
-			if (g_iSiLimit < aThreadHandle.Length)
+			for (int iTimerIndex = 0; iTimerIndex < aThreadHandle.Length; iTimerIndex++)
 			{
-				for (int iTimerIndex = 0; iTimerIndex < aThreadHandle.Length; iTimerIndex++)
+				if (timer == aThreadHandle.Get(iTimerIndex))
 				{
-					if (timer == aThreadHandle.Get(iTimerIndex))
-					{
-						aThreadHandle.Erase(iTimerIndex);
-						return Plugin_Stop;
-					}
+					aThreadHandle.Erase(iTimerIndex);
+					return Plugin_Stop;
 				}
 			}
 		}
@@ -775,43 +780,49 @@ public void SDK_UpdateThink(int client)
 		if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
 		{
 			float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
-			GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
-			GetClientEyePosition(client, fSelfEyePos);
-			fMins[0] = fSurvivorPos[0] - g_fSpawnDistanceMax;
-			fMaxs[0] = fSurvivorPos[0] + g_fSpawnDistanceMax;
-			fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
-			fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
-			fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
-			fDirection[0] = 90.0;
-			fDirection[1] = fDirection[2] = 0.0;
-			fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
-			fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
-			fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-			while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
+			if (g_iTargetSurvivor > 0)
 			{
+				GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
+				GetClientEyePosition(client, fSelfEyePos);
+				fMins[0] = fSurvivorPos[0] - g_fSpawnDistanceMax;
+				fMaxs[0] = fSurvivorPos[0] + g_fSpawnDistanceMax;
+				fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
+				fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
+				fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
+				fDirection[0] = 90.0;
+				fDirection[1] = fDirection[2] = 0.0;
 				fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
 				fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 				fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-				TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
-				if (TR_DidHit())
+				while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
 				{
-					TR_GetEndPosition(fEndPos);
-					fSpawnPos = fEndPos;
-					fSpawnPos[2] += NAV_MESH_HEIGHT;
-					break;
-				}
-			}
-			if (IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos) && !IsPlayerVisibleTo(fSpawnPos))
-			{
-				for (int count = 0; count < g_iSurvivorNum; count++)
-				{
-					int index = g_iSurvivors[count];
-					GetClientEyePosition(index, fSurvivorPos);
-					fSurvivorPos[2] -= 60.0;
-					if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fTeleportDistance, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fTeleportDistance && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fSpawnDistanceMin)
+					fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
+					fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
+					fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
+					TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
+					if (TR_DidHit())
 					{
-						TeleportEntity(client, fSpawnPos, NULL_VECTOR, NULL_VECTOR);
-						SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
+						TR_GetEndPosition(fEndPos);
+						fSpawnPos = fEndPos;
+						fSpawnPos[2] += NAV_MESH_HEIGHT;
+						break;
+					}
+				}
+				if (IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos) && !IsPlayerVisibleTo(fSpawnPos))
+				{
+					for (int count = 0; count < g_iSurvivorNum; count++)
+					{
+						int index = g_iSurvivors[count];
+						if (IsClientInGame(index))
+						{
+							GetClientEyePosition(index, fSurvivorPos);
+							fSurvivorPos[2] -= 60.0;
+							if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fTeleportDistance, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fTeleportDistance && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fSpawnDistanceMin)
+							{
+								TeleportEntity(client, fSpawnPos, NULL_VECTOR, NULL_VECTOR);
+								SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
+							}
+						}
 					}
 				}
 			}
