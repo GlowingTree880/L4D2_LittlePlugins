@@ -59,8 +59,8 @@ public void OnPluginStart()
 	AddAmbientSoundHook(OnAmbientSound);
 	// CreateConVar
 	g_hMotdTitle = CreateConVar("sm_cfgmotd_title", "坐牢开心！", "显示在 motd 上面的服务器标题", FCVAR_NOTIFY);
-	g_hMotdUrl = CreateConVar("sm_cfgmotd_url", "http://47.115.132.92/aliyun/rank.php", "显示给 motd 的 URL", FCVAR_NOTIFY);
-	g_hIpUrl = CreateConVar("sm_cfgip_url", "http://47.115.132.92/aliyun/serverip.php", "显示 IP 的 URL", FCVAR_NOTIFY);
+	g_hMotdUrl = CreateConVar("sm_cfgmotd_url", "http://106.52.55.117/motd.html", "显示给 motd 的 URL", FCVAR_NOTIFY);
+	g_hIpUrl = CreateConVar("sm_cfgip_url", "http://106.52.55.117/ips.html", "显示 IP 的 URL", FCVAR_NOTIFY);
 	g_hWitchKillReturn = CreateConVar("sm_witchkill_health", "15", "生还者秒妹恢复多少实血", FCVAR_CHEAT, true, 0.0);
 	g_hMaxSurvivors = FindConVar("survivor_limit");
 	// AddChangeHook
@@ -156,7 +156,11 @@ public Action Cmd_JoinSurvivor(int client, int args)
 			// 想换人物了
 			if (GetClientTeam(client) == TEAM_SURVIVOR)
 			{
-				DrawSwitchCharacterMenu(client);
+				// 未开局才允许换人物
+				if (!g_bGameStart)
+				{
+					DrawSwitchCharacterMenu(client);
+				}
 			}
 			else
 			{
@@ -624,7 +628,7 @@ public void DrawSwitchCharacterMenu(int client)
 
 public int SwitchCharacterMenuHandler(Menu menu, MenuAction action, int param1, int param2)
 {
-	if (!g_bGameStart && action == MenuAction_Select)
+	if (action == MenuAction_Select)
 	{
 		char botname[32];
 		GetMenuItem(menu, param2, botname, sizeof(botname), _, botname, sizeof(botname));
