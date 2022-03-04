@@ -269,8 +269,8 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				// 有目标时，锁定视野
 				if (bHasSight)
 				{
-					float TargetAngles[3];
-					ComputeAimAngles(tank, iTarget, TargetAngles, AimEye);
+					float TargetAngles[3] = 0.0;
+					ComputeAimAngles(tank, iTarget, TargetAngles, AimChest);
 					TargetAngles[2] = 0.0;
 					TeleportEntity(tank, NULL_VECTOR, TargetAngles, NULL_VECTOR);
 				}
@@ -280,10 +280,6 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				fBuffer = UpdatePosition(tank, iTarget, g_fTankBhopSpeed);
 				if (g_fTankAttackRange < iSurvivorDistance < 2000 && fCurrentSpeed > 190.0)
 				{
-					if (!g_bTankThrow)
-					{
-						buttons &= ~IN_ATTACK2;
-					}
 					if (iFlags & FL_ONGROUND)
 					{
 						if (!BhopWillHitWall(tank, g_fTankBhopHitWallDistance))
@@ -299,34 +295,37 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 					}
 					else if (iFlags == FL_JUMPING)
 					{
-						if (iSurvivorDistance > g_fTankAttackRange)
+						if (!g_bCanTankConsume[tank])
 						{
-							float fAnglesPost[3];
-							GetVectorAngles(fSpeed, fAngles);
-							fAnglesPost = fAngles;
-							fAngles[0] = fAngles[2] = 0.0;
-							GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
-							NormalizeVector(fAngles, fAngles);
-							// 保存当前位置
-							static float fDirection[2][3];
-							fDirection[0] = fTankPos;
-							fDirection[1] = fTargetPos;
-							fTankPos[2] = fTargetPos[2] = 0.0;
-							MakeVectorFromPoints(fTankPos, fTargetPos, fTankPos);
-							NormalizeVector(fTankPos, fTankPos);
-							// 计算距离
-							if (g_bDebugMod)
+							if (iSurvivorDistance > g_fTankAttackRange)
 							{
-								PrintToChatAll("\x05【提示】：有目标时速度与视角的角度：\x04%.2f", RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fTankPos))));
+								float fAnglesPost[3];
+								GetVectorAngles(fSpeed, fAngles);
+								fAnglesPost = fAngles;
+								fAngles[0] = fAngles[2] = 0.0;
+								GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
+								NormalizeVector(fAngles, fAngles);
+								// 保存当前位置
+								static float fDirection[2][3];
+								fDirection[0] = fTankPos;
+								fDirection[1] = fTargetPos;
+								fTankPos[2] = fTargetPos[2] = 0.0;
+								MakeVectorFromPoints(fTankPos, fTargetPos, fTankPos);
+								NormalizeVector(fTankPos, fTankPos);
+								// 计算距离
+								if (g_bDebugMod)
+								{
+									PrintToChatAll("\x05【提示】：有目标时速度与视角的角度：\x04%.2f", RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fTankPos))));
+								}
+								if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fTankPos))) < g_fTankAirAngles)
+								{
+									return Plugin_Continue;
+								}
+								// 重新设置速度方向
+								float fNewVelocity[3];
+								MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+								TeleportEntity(tank, NULL_VECTOR, fAnglesPost, fNewVelocity);
 							}
-							if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fTankPos))) < g_fTankAirAngles)
-							{
-								return Plugin_Continue;
-							}
-							// 重新设置速度方向
-							float fNewVelocity[3];
-							MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
-							TeleportEntity(tank, NULL_VECTOR, fAnglesPost, fNewVelocity);
 						}
 					}
 				}
@@ -366,8 +365,9 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 						fAngles[0] = fAngles[2] = 0.0;
 						GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
 						NormalizeVector(fAngles, fAngles);
-						float fEyeAngles[3];
+						static float fEyeAngles[3];
 						GetClientEyeAngles(tank, fEyeAngles);
+						fEyeAngles[0] = fEyeAngles[2] = 0.0;
 						GetAngleVectors(fEyeAngles, fEyeAngles, NULL_VECTOR, NULL_VECTOR);
 						NormalizeVector(fEyeAngles, fEyeAngles);
 						if (g_bDebugMod)
@@ -383,11 +383,11 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				}
 			}
 			// 不允许消耗时或允许消耗且在消耗位置时，锁定视野，不影响逃跑时的路线
-			if (!g_bCanTankConsume[tank] || (g_bCanTankConsume[tank] && g_bInConsumePlace[tank]))
+			if (g_bCanTankConsume[tank] && g_bInConsumePlace[tank])
 			{
 				if (iNearestTarget > 0)
 				{
-					float fNewTargetAngles[3];
+					float fNewTargetAngles[3] = 0.0;
 					ComputeAimAngles(tank, iNearestTarget, fNewTargetAngles, AimEye);
 					fNewTargetAngles[2] = 0.0;
 					TeleportEntity(tank, NULL_VECTOR, fNewTargetAngles, NULL_VECTOR);
