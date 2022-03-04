@@ -138,25 +138,21 @@ public Action L4D_OnCThrowActivate(int ability)
 
 void NextFrame_JumpRock(int tankclient)
 {
-	float selfpos[3] = 0.0, direction[3] = 0.0;
-	GetClientAbsOrigin(tankclient, selfpos);
-	direction[0] = -90.0;
-	Handle hTrace = TR_TraceRayFilterEx(selfpos, direction, MASK_SOLID, RayType_Infinite, TraceFilter, tankclient);
-	if (TR_DidHit(hTrace))
+	int target = GetNearestSurvivor(tankclient);
+	if (target > 0)
 	{
-		float endpos[3];
-		TR_GetEndPosition(endpos, hTrace);
-		if (endpos[2] - selfpos[2] - 50.0 > 72.0)
+		int flags = GetEntityFlags(tankclient);
+		if (flags & FL_ONGROUND)
 		{
-			selfpos[0] += 50.0;
-			selfpos[2] += 50.0;
-			if (!IsPlayerStuck(selfpos))
-			{
-				TeleportEntity(tankclient, selfpos, NULL_VECTOR, NULL_VECTOR);
-			}
+			float eyeangles[3] = 0.0, lookat[3] = 0.0;
+			GetClientEyeAngles(tankclient, eyeangles);
+			GetAngleVectors(eyeangles, lookat, NULL_VECTOR, NULL_VECTOR);
+			NormalizeVector(lookat, lookat);
+			ScaleVector(lookat, 300.0);
+			lookat[2] = 300.0;
+			TeleportEntity(tankclient, NULL_VECTOR, NULL_VECTOR, lookat);
 		}
 	}
-	delete hTrace;
 }
 
 public void L4D_TankClaw_DoSwing_Pre(int tank, int claw)
@@ -725,21 +721,6 @@ int GetNearestSurvivor(int client)
 		}
 	}
 	return target;
-}
-
-bool IsPlayerStuck(float fSpawnPos[3])
-{
-	bool IsStuck = true;
-	float fMins[3] = {0.0}, fMaxs[3] = {0.0}, fNewPos[3] = {0.0};
-	fNewPos = fSpawnPos;
-	fNewPos[2] += 35.0;
-	fMins[0] = fMins[1] = -16.0;
-	fMins[2] = 0.0;
-	fMaxs[0] = fMaxs[1] = 16.0;
-	fMaxs[2] = 35.0;
-	TR_TraceHullFilter(fSpawnPos, fNewPos, fMins, fMaxs, MASK_NPCSOLID_BRUSHONLY, TraceFilter, _);
-	IsStuck = TR_DidHit();
-	return IsStuck;
 }
 
 bool IsPinned(int client)
