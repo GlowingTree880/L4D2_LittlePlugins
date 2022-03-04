@@ -32,3 +32,5 @@
 <br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 text.smx 编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
 * **ServerFunction：** A simple plugin which provides base server functions
 <br>（基于国内主流药役服务器 AnneServer （2月15日版本）中核心插件 server.smx 插件编写，主要提供 !jg !away !ip !restart !restartmap 指令的功能以及玩家加入退出显示，出门物资发放，秒妹回血，motd页面标题，链接控制等功能，增加安全屋内无限子弹&无敌，生还者团队未满情况下可通过 !jg 指令选择喜欢的人物功能）
+* **AsiAi：** Advanced Special Infected Ai
+<br>（基于国内主流药役服务器 AnneServer （2月15日版本）中 l4d2_tank_throw.smx 编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
