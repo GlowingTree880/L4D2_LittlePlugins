@@ -231,7 +231,7 @@ public void OnGameFrame()
 				// 帧操作，获取在场特感数量
 				for (int infected = 1; infected <= MaxClients; infected++)
 				{
-					if (IsInfectedBot(infected) && IsPlayerAlive(infected))
+					if (IsInfectedBot(infected) && IsPlayerAlive(infected) && GetEntProp(infected, Prop_Send, "m_zombieClass") != ZC_TANK)
 					{
 						iInfectedCount++;
 						if (iInfectedCount > 0)
@@ -390,9 +390,18 @@ public Action SpawnFirstInfected(Handle timer)
 	if (!g_bIsLate)
 	{
 		g_bIsLate = true;
-		Handle aSpawnTimer = CreateTimer(g_fSiInterval, SpawnNewInfected, _, TIMER_REPEAT);
-		aThreadHandle.Push(aSpawnTimer);
-		TriggerTimer(aSpawnTimer, true);
+		if (g_hSiInterval.FloatValue > 9.0)
+		{
+			Handle aSpawnTimer = CreateTimer(g_fSiInterval + 8.0, SpawnNewInfected, _, TIMER_REPEAT);
+			aThreadHandle.Push(aSpawnTimer);
+			TriggerTimer(aSpawnTimer, true);
+		}
+		else
+		{
+			Handle aSpawnTimer = CreateTimer(g_fSiInterval + 4.0, SpawnNewInfected, _, TIMER_REPEAT);
+			aThreadHandle.Push(aSpawnTimer);
+			TriggerTimer(aSpawnTimer, true);
+		}
 		if (g_bTeleportSi)
 		{
 			g_hTeleHandle = CreateTimer(1.0, Timer_PositionSi, _, TIMER_REPEAT);
@@ -417,9 +426,18 @@ public Action SpawnNewInfected(Handle timer)
 	{
 		if (g_iSiLimit > aThreadHandle.Length)
 		{
-			Handle aSpawnTimer = CreateTimer(g_fSiInterval, SpawnNewInfected, _, TIMER_REPEAT);
-			aThreadHandle.Push(aSpawnTimer);
-			TriggerTimer(aSpawnTimer, true);
+			if (g_hSiInterval.FloatValue > 9.0)
+			{
+				Handle aSpawnTimer = CreateTimer(g_fSiInterval + 8.0, SpawnNewInfected, _, TIMER_REPEAT);
+				aThreadHandle.Push(aSpawnTimer);
+				TriggerTimer(aSpawnTimer, true);
+			}
+			else
+			{
+				Handle aSpawnTimer = CreateTimer(g_fSiInterval + 4.0, SpawnNewInfected, _, TIMER_REPEAT);
+				aThreadHandle.Push(aSpawnTimer);
+				TriggerTimer(aSpawnTimer, true);
+			}
 		}
 		// 其实这个删除没什么用，因为当 aThreadHandle.Length = g_iSiLimit 时，多出来的句柄将不会存入数组
 		else if (g_iSiLimit < aThreadHandle.Length)
