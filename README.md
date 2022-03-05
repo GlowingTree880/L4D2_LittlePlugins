@@ -34,3 +34,5 @@
 <br>（基于国内主流药役服务器 AnneServer （2月15日版本）中核心插件 server.smx 插件编写，主要提供 !jg !away !ip !restart !restartmap 指令的功能以及玩家加入退出显示，出门物资发放，秒妹回血，motd页面标题，链接控制等功能，增加安全屋内无限子弹&无敌，生还者团队未满情况下可通过 !jg 指令选择喜欢的人物功能）
 * **AsiAi：** Advanced Special Infected Ai
 <br>（基于国内主流药役服务器 AnneServer （2月15日版本）中 l4d2_tank_throw.smx 编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
+* **ZhenduiMode：** Target mode, the admin can type !zhendui in chat to turn it on and off. After turning on and selecting a player as the target, the special infected on spot  and subsequent resurrection will preferentially target this player until the player is pinned or the mode is turned off
+<br>（针对模式，管理员输入 !zhendui 可开启关闭，开启并选择某位玩家作为针对目标后，在场及后续复活的特感将优先以这位玩家为目标，直到这位玩家被控或关闭针对模式）
