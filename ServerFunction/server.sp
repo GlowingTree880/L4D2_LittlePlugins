@@ -25,7 +25,7 @@ bool g_bGameStart = false;
 public Plugin myinfo = 
 {
 	name 			= "Server",
-	author 			= "夜羽真白",
+	author 			= "Anne, Caibiii, 夜羽真白",
 	description 	= "服务器管理功能",
 	version 		= "2022.2.26",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
@@ -68,6 +68,12 @@ public void OnPluginStart()
 	g_hWitchKillReturn.AddChangeHook(ConVarChanged_Cvars);
 	// MaxSurvivors
 	GetCvars();
+}
+
+public void OnPluginEnd()
+{
+	g_bGameStart = false;
+	SetGodMode(false);
 }
 
 // *********************
@@ -362,6 +368,7 @@ public void OnClientPutInServer(int client)
 
 public void evt_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 {
+	// 不显示玩家退出信息
 	SetEventBroadcast(event, true);
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (client && client <= MaxClients)
@@ -379,7 +386,25 @@ public void evt_PlayerDisconnect(Event event, const char[] name, bool dontBroadc
 				CPrintToChatAll("{G}[(；へ：)]：牢友 {O}%N {G}[{O}%s{G}] 的设备出了点故障...\n这究竟是为什么呢：{O}crashed", client, steamid, sReason);
 			}
 		}
+		// 是否需要重启服务器
+		if (!CheckHasAnyPlayer(client))
+		{
+			LogMessage("服务器中最后一位玩家：%N 已离开服务器，正在重启服务器...", client);
+			RestartServer();
+		}
 	}
+}
+
+bool CheckHasAnyPlayer(int client)
+{
+	for (int player = 1; player <= MaxClients; player++)
+	{
+		if (IsClientConnected(player) && !IsFakeClient(player) && player != client)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 // *********************
