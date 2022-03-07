@@ -27,7 +27,7 @@ public Plugin myinfo =
 	name 			= "Server",
 	author 			= "Anne, Caibiii, 夜羽真白",
 	description 	= "服务器管理功能",
-	version 		= "2022.2.26",
+	version 		= "2022.3.7",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
