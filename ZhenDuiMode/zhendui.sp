@@ -4,6 +4,7 @@
 // 头文件
 #include <sourcemod>
 #include <sdktools>
+#include <sdkhooks>
 
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_ATTACK	"CommandABot({cmd = 0, bot = GetPlayerFromUserID(%i), target = GetPlayerFromUserID(%i)})"
@@ -24,7 +25,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	RegAdminCmd("sm_zhendui", Cmd_Zhendui, ADMFLAG_ROOT);
-	HookEvent("player_spawn", evt_PlayerSpawn, EventHookMode_Post);
+	HookEvent("player_spawn", evt_PlayerSpawn);
+	HookEvent("player_death", evt_PlayerDeath);
 }
 
 public Action Cmd_Zhendui(int client, int args)
@@ -33,6 +35,7 @@ public Action Cmd_Zhendui(int client, int args)
 	{
 		DrawZhenduiMenu(client);
 	}
+	return Plugin_Continue;
 }
 
 public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -46,10 +49,27 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 			{
 				if (IsValidPlayer(g_iZhenduiClient))
 				{
-					Logic_RunScript(COMMANDABOT_ATTACK, GetClientUserId(client), GetClientUserId(g_iZhenduiClient));
+					SDKHook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
 				}
 			}
 		}
+	}
+}
+
+public void SDK_UpdateThink(int client)
+{
+	if (IsInfectedBot(client) && IsPlayerAlive(client))
+	{
+		Logic_RunScript(COMMANDABOT_ATTACK, GetClientUserId(client), GetClientUserId(g_iZhenduiClient));
+	}
+}
+
+public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (IsInfectedBot(client))
+	{
+		SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
 	}
 }
 
@@ -86,6 +106,7 @@ public int StartZhenduiHandler(Menu menu, MenuAction action, int param1, int par
 			PrintToChat(param1, "\x04【提示】：\x03针对模式 \x05已关闭");
 		}
 	}
+	return 1;
 }
 
 public void ShowZhenduiMenu(int client)
@@ -137,6 +158,7 @@ public int ZhenduiMenuHandler(Menu menu, MenuAction action, int param1, int para
 	{
 		DrawZhenduiMenu(param1);
 	}
+	return 1;
 }
 
 bool IsValidPlayer(int client)
