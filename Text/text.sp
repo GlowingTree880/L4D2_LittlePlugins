@@ -1,3 +1,11 @@
+/*
+ * @Author:             夜羽真白
+ * @Last Modified by:   夜羽真白
+ * @Create Date:        2022-02-25
+ * @Last Modified time: 2022-02-25
+ * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
+ */
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -7,22 +15,24 @@
 #include <left4dhooks>
 #include <colors>
 
-#define PLUGIN_DATE "2022-2-25"
+#define PLUGIN_DATE "2022-3-3"
 
 // ConVars
 ConVar g_hInfectedTime, g_hInfectedLimit, g_hTankBhop, g_hWeapon, g_hCvarCoop;
 // Ints
-int g_iInfectedTime, g_iInfectedLimit, g_iMaxPlayers;
+int g_iInfectedTime, g_iInfectedLimit, g_iMaxPlayers, g_iRoundCount = 1;
 // Bools
 bool g_bTankBhop, g_bWeapon, g_bCvarCoop;
+// Chars
+char currentmap[8], previousmap[8];
 
 public Plugin myinfo = 
 {
-	name 			= "Function Text",
+	name 			= "Text",
 	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "更改游戏模式，显示游戏基本数据",
-	version 		= "2022-02-25",
-	url 			= "https://steamcommunity.com/id/saku_ra/"
+	description 	= "Text",
+	version 		= "2022.02.25",
+	url 			= "https://github.com/Caibiii/AnneServer"
 }
 
 public void OnPluginStart()
@@ -36,8 +46,9 @@ public void OnPluginStart()
 	// HookEvents
 	HookEvent("player_incapacitated_start", evt_IncapEvent, EventHookMode_Post);
 	HookEvent("player_incapacitated", evt_IncapEvent, EventHookMode_Post);
-	HookEvent("round_start", evt_RoundStart, EventHookMode_Post);
 	HookEvent("player_death", evt_PlayerDeath, EventHookMode_Post);
+	HookEvent("mission_lost", evt_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("map_transition", evt_RoundEnd, EventHookMode_PostNoCopy);
 	// RegConsoleCmd
 	RegConsoleCmd("sm_xx", Cmd_InfectedStatus);
 	RegConsoleCmd("sm_zs", Cmd_Suicide);
@@ -72,6 +83,21 @@ void GetCvars()
 // *********************
 //		    事件
 // *********************
+public void OnMapStart()
+{
+	GetCurrentMap(currentmap, sizeof(currentmap));
+	if (strcmp(currentmap, previousmap) != 0)
+	{
+		g_iRoundCount = 1;
+	}
+}
+
+public Action evt_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	GetCurrentMap(previousmap, sizeof(previousmap));
+	g_iRoundCount++;
+}
+
 public Action evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	if (IsTeamImmobilised())
@@ -94,15 +120,10 @@ public void evt_IncapEvent(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
-{
-	PrintStatus();
-}
-
 public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 {
-	ReloadPlugins();
 	PrintStatus();
+	ReloadPlugins();
 	return Plugin_Continue;
 }
 
@@ -147,22 +168,22 @@ void PrintStatus()
 	{
 		if (g_bWeapon)
 		{
-			CPrintToChatAll("{LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件版本{G}[{O}%s{G}]", g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+			CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 		}
 		else
 		{
-			CPrintToChatAll("{LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件版本{G}[{O}%s{G}]", g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+			CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 		}
 	}
 	else
 	{
 		if (g_bWeapon)
 		{
-			CPrintToChatAll("{LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件版本{G}[{O}%s{G}]", g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+			CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 		}
 		else
 		{
-			CPrintToChatAll("{LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件版本{G}[{O}%s{G}]", g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+			CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 		}
 	}
 }
