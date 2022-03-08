@@ -1,3 +1,11 @@
+/*
+ * @Author:             夜羽真白
+ * @Last Modified by:   夜羽真白
+ * @Create Date:        2022-03-07
+ * @Last Modified time: 2022-03-07
+ * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
+ */
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -26,9 +34,9 @@ public Plugin myinfo =
 {
 	name 			= "Server",
 	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "服务器管理功能",
+	description 	= "Server",
 	version 		= "2022.3.7",
-	url 			= "https://steamcommunity.com/id/saku_ra/"
+	url 			= "https://github.com/Caibiii/AnneServer"
 }
 
 public void OnPluginStart()
