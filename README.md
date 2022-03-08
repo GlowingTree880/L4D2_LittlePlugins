@@ -36,3 +36,6 @@
 <br>（基于国内主流药役服务器 AnneServer （2月15日版本）中 l4d2_tank_throw.smx 编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
 * **ZhenduiMode：** Target mode, the admin can type !zhendui in chat to turn it on and off. After turning on and selecting a player as the target, the special infected on spot  and subsequent resurrection will preferentially target this player until the player is pinned or the mode is turned off
 <br>（针对模式，管理员输入 !zhendui 可开启关闭，开启并选择某位玩家作为针对目标后，在场及后续复活的特感将优先以这位玩家为目标，直到这位玩家被控或关闭针对模式）
+
+  * 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件并修复反编译后的文件内容得到<br>（The above plugins which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
+  * 关于反编译行为的合理性与 Sourcemod GPL version 3 许可证及编写的插件/拓展与许可证间的关系可查阅：[SourceModLicense](https://www.sourcemod.net/license.php)<br>[Quoted from Azelphur](https://forums.alliedmods.net/showpost.php?p=1648709&postcount=80)<br>[Quoted from Silvers](https://forums.alliedmods.net/showpost.php?p=2709004&postcount=394)<br>[Quoted from Sazpaimon](https://forums.alliedmods.net/showpost.php?p=1587691&postcount=10)
