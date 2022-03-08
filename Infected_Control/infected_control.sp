@@ -1,3 +1,11 @@
+/*
+ * @Author:             夜羽真白
+ * @Last Modified by:   夜羽真白
+ * @Create Date:        2022-02-25
+ * @Last Modified time: 2022-03-07
+ * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
+ */
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -20,11 +28,11 @@
 // 插件基本信息，请勿修改！
 public Plugin myinfo = 
 {
-	name 			= "Anne & Tree Server Infected Spawning Control",
+	name 			= "AnneServer InfectedSpawn",
 	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "控制特感刷新数量，时间，移动落后特感",
-	version 		= "2022.2.25",
-	url 			= "https://steamcommunity.com/id/saku_ra/"
+	description 	= "AnneServer InfectedSpawn",
+	version 		= "2022.3.7",
+	url 			= "https://github.com/Caibiii/AnneServer"
 }
 
 // Cvars
