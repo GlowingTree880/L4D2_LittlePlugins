@@ -1,3 +1,11 @@
+/*
+ * @Author:             夜羽真白
+ * @Last Modified by:   夜羽真白
+ * @Create Date:        2022-02-27
+ * @Last Modified time: 2022-02-27
+ * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
+ */
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -10,9 +18,9 @@ public Plugin myinfo =
 {
 	name 			= "Replace",
 	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "将地图刷出的急救包替换为止痛药",
+	description 	= "Replace",
 	version 		= "2022.2.27",
-	url 			= "https://steamcommunity.com/id/saku_ra/"
+	url 			= "https://github.com/Caibiii/AnneServer"
 }
 
 public void OnPluginStart()
