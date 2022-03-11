@@ -798,7 +798,7 @@ public void SDK_UpdateThink(int client)
 		if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
 		{
 			float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
-			if (IsValidEntity(g_iTargetSurvivor))
+			if (IsValidSurvivor(g_iTargetSurvivor))
 			{
 				GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
 				GetClientEyePosition(client, fSelfEyePos);
