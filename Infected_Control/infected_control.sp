@@ -288,7 +288,7 @@ public void OnGameFrame()
 			}
 			float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
 			// float fVisiblePos[3] = {0.0};
-			if (g_iTargetSurvivor > 0)
+			if (IsValidSurvivor(g_iTargetSurvivor))
 			{
 				// 根据指定生还者坐标，拓展刷新范围
 				GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
@@ -490,7 +490,7 @@ public Action SafeRoomReset(Handle timer)
 // *********************
 bool IsInfectedBot(int client)
 {
-	if (client && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
 	{
 		return true;
 	}
@@ -502,7 +502,7 @@ bool IsInfectedBot(int client)
 
 bool IsValidSurvivor(int client)
 {
-	if (client && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR)
 	{
 		return true;
 	}
@@ -798,7 +798,7 @@ public void SDK_UpdateThink(int client)
 		if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
 		{
 			float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
-			if (g_iTargetSurvivor > 0)
+			if (IsValidEntity(g_iTargetSurvivor))
 			{
 				GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
 				GetClientEyePosition(client, fSelfEyePos);
