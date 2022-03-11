@@ -1,11 +1,3 @@
-/*
- * @Author:             夜羽真白
- * @Last Modified by:   夜羽真白
- * @Create Date:        2022-02-27
- * @Last Modified time: 2022-02-27
- * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
- */
-
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -16,11 +8,11 @@
 
 public Plugin myinfo = 
 {
-	name 			= "Remove",
-	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "Remove",
-	version 		= "2022.2.27",
-	url 			= "https://github.com/Caibiii/AnneServer"
+	name 			= "Remove Kits",
+	author 			= "Caibiii, 夜羽真白",
+	description 	= "开局删除已经缓存在地图上的急救包",
+	version 		= "2022.02.25",
+	url 			= "https://github.com/GlowingTree880/L4D2_LittlePlugins"
 }
 
 public void OnPluginStart()
