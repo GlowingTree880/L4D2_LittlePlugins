@@ -1,11 +1,3 @@
-/*
- * @Author:             夜羽真白
- * @Last Modified by:   夜羽真白
- * @Create Date:        2022-02-25
- * @Last Modified time: 2022-02-25
- * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
- */
-
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -28,11 +20,11 @@ char currentmap[8], previousmap[8];
 
 public Plugin myinfo = 
 {
-	name 			= "Text",
-	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "Text",
+	name 			= "Mode Text Dispay",
+	author 			= "Caibiii, 夜羽真白",
+	description 	= "游戏模式，难度显示",
 	version 		= "2022.02.25",
-	url 			= "https://github.com/Caibiii/AnneServer"
+	url 			= "https://github.com/GlowingTree880/L4D2_LittlePlugins"
 }
 
 public void OnPluginStart()
