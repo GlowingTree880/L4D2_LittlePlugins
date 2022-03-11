@@ -27,13 +27,13 @@
 * **Ai_HardSi：** Improves the AI behaviour of special infected
 <br>（通过改进 Ai 特感的行为来增强游戏性，整合了其他大佬的一些功能，同时添加了一些自己想到的功能）
 * **Infected_Control：** A simple infected spawner
-<br>（基于国内主流药役插件 AnneServer （7-7与2月15日版本）中核心插件 infected_control.smx 编写，添加了一些其他功能的射线找位刷特，传送特感的插件，注：请修改游戏模式为 versus，否则只能刷3特，具体原因目前还在研究中）
+<br>（参考国内主流药役插件 AnneServer （7-7与2月15日版本）中核心插件 infected_control.smx 反编译修复编写，添加了一些其他功能的射线找位刷特，传送特感的插件，注：请修改游戏模式为 versus，否则只能刷3特，具体原因目前还在研究中）
 * **Text：** Use with Infected_Control.smx, Auto start spawn when the first survivor leave safe area, and indicates the current difficulty
-<br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！基于国内主流药役插件 AnneServer （2月15日版本）中核心插件 text.smx 编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
+<br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！参考国内主流药役插件 AnneServer （2月15日版本）中核心插件 text.smx 反编译并修复编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
 * **ServerFunction：** A simple plugin which provides base server functions
-<br>（基于国内主流药役服务器 AnneServer （2月15日版本）中核心插件 server.smx 插件编写，主要提供 !jg !away !ip !restart !restartmap 指令的功能以及玩家加入退出显示，出门物资发放，秒妹回血，motd页面标题，链接控制等功能，增加安全屋内无限子弹&无敌，生还者团队未满情况下可通过 !jg 指令选择喜欢的人物功能）
+<br>（参考国内主流药役服务器 AnneServer （2月15日版本）中核心插件 server.smx 反编译修复编写，主要提供 !jg !away !ip !restart !restartmap 指令的功能以及玩家加入退出显示，出门物资发放，秒妹回血，motd页面标题，链接控制等功能，增加安全屋内无限子弹&无敌，生还者团队未满情况下可通过 !jg 指令选择喜欢的人物功能）
 * **AsiAi：** Advanced Special Infected Ai
-<br>（基于国内主流药役服务器 AnneServer （2月15日版本）中 l4d2_tank_throw.smx 编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
+<br>（参考国内主流药役服务器 AnneServer （2月15日版本）中 l4d2_tank_throw.smx 反编译修复编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
 * **ZhenduiMode：** Target mode, the admin can type !zhendui in chat to turn it on and off. After turning on and selecting a player as the target, the special infected on spot  and subsequent resurrection will preferentially target this player until the player is pinned or the mode is turned off
 <br>（针对模式，管理员输入 !zhendui 可开启关闭，开启并选择某位玩家作为针对目标后，在场及后续复活的特感将优先以这位玩家为目标，直到这位玩家被控或关闭针对模式）
 
