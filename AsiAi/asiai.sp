@@ -1,11 +1,3 @@
-/*
- * @Author:             夜羽真白
- * @Last Modified by:   夜羽真白
- * @Create Date:        2022-03-03
- * @Last Modified time: 2022-03-03
- * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
- */
-
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -74,10 +66,10 @@ bool g_bAiEnable[MAXPLAYERS + 1];
 public Plugin myinfo = 
 {
 	name 			= "Advance Special Infected AI",
-	author 			= "def075, Anne, Caibiii, 夜羽真白",
+	author 			= "def075, Caibiii, 夜羽真白",
 	description 	= "Advanced Special Infected AI",
-	version 		= "2022.3.3",
-	url 			= "https://github.com/Caibiii/AnneServer"
+	version 		= "2022.03.03",
+	url 			= "https://github.com/GlowingTree880/L4D2_LittlePlugins"
 }
 
 public void OnPluginStart()
