@@ -236,10 +236,10 @@ public Action Timer_RefreshPanel(Handle timer)
 		{
 			if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 2 && !hiddenpanel[client])
 			{
-				SendPanelToClient(menupanel, client, PanelHandler, 3);
+				menupanel.Send(client, PanelHandler, 3);
 				if (client == tankclient && !IsFakeClient(tankclient))
 				{
-					SendPanelToClient(menupanel, tankclient, PanelHandler, 3);
+					menupanel.Send(tankclient, PanelHandler, 3);
 				}
 			}
 		}
