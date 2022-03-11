@@ -1,11 +1,3 @@
-/*
- * @Author:             夜羽真白
- * @Last Modified by:   夜羽真白
- * @Create Date:        2022-02-25
- * @Last Modified time: 2022-03-07
- * @Github:            https://github.com/GlowingTree880/L4D2_LittlePlugins
- */
-
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -25,14 +17,14 @@
 #define PLAYER_HEIGHT 72.0
 #define PLAYER_CHEST 45.0
 
-// 插件基本信息，请勿修改！
+// 插件基本信息，根据 GPL 许可证条款，需要修改插件请勿修改此信息！
 public Plugin myinfo = 
 {
-	name 			= "AnneServer InfectedSpawn",
-	author 			= "Anne, Caibiii, 夜羽真白",
-	description 	= "AnneServer InfectedSpawn",
-	version 		= "2022.3.7",
-	url 			= "https://github.com/Caibiii/AnneServer"
+	name 			= "Direct InfectedSpawn",
+	author 			= "Caibiii, 夜羽真白",
+	description 	= "特感刷新控制，传送落后特感",
+	version 		= "2022.03.07",
+	url 			= "https://github.com/GlowingTree880/L4D2_LittlePlugins"
 }
 
 // Cvars
