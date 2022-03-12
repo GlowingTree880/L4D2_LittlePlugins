@@ -234,7 +234,7 @@ void GetCvars()
 
 // **************
 //		主要
-// *************
+// **************
 public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
 	if (IsAiTank(tank))
@@ -575,34 +575,37 @@ void CheckCanTankConsume(int tank)
 // 进行消耗
 void DoConsume(int client)
 {
-	float fTankPos[3];
-	GetClientAbsOrigin(client, fTankPos);
-	int iNearestTarget = GetClosestSurvivor(fTankPos);
-	// 记录当前生还路程
-	int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
-	g_iTankConsumeSurvivorProgress[client] = iNowSurvivorPercent;
-	// 设置状态
-	g_bCanTankConsume[client] = true;
-	g_bCanTankAttack[client] = false;
-	// 找位
-	bool bHasFind;
-	for (int i = 0; i < g_iTankConsumeFindPositionCount; i++)
+	if (IsAiTank(client))
 	{
-		bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, g_iTankConsumeType, 50, g_fConsumePosition[client]);
-		// 如果找到的位置大于给定高度，跳出，否则随机找位
-		if (bHasFind)
+		float fTankPos[3];
+		GetClientAbsOrigin(client, fTankPos);
+		int iNearestTarget = GetClosestSurvivor(fTankPos);
+		// 记录当前生还路程
+		int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
+		g_iTankConsumeSurvivorProgress[client] = iNowSurvivorPercent;
+		// 设置状态
+		g_bCanTankConsume[client] = true;
+		g_bCanTankAttack[client] = false;
+		// 找位
+		bool bHasFind;
+		for (int i = 0; i < g_iTankConsumeFindPositionCount; i++)
 		{
-			if (g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
+			bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, g_iTankConsumeType, 50, g_fConsumePosition[client]);
+			// 如果找到的位置大于给定高度，跳出，否则随机找位
+			if (bHasFind)
 			{
-				break;
+				if (g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
+				{
+					break;
+				}
 			}
 		}
+		if (g_bDebugMod)
+		{
+			PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
+		}
+		Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
 	}
-	if (g_bDebugMod)
-	{
-		PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
-	}
-	Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
 }
 
 public Action Timer_VomitAttackAgain(Handle timer)
@@ -615,17 +618,26 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 {
 	if (IsAiTank(specialInfected))
 	{
+		int newtarget = -1;
 		int iButtons = GetClientButtons(specialInfected);
 		// 有目标的情况
-		if (curTarget > 0)
+		if (IsSurvivor(curTarget))
 		{
 			float fTankPos[3];
 			GetClientAbsOrigin(specialInfected, fTankPos);
 			// 如果目标正在被控或倒地，则选择新目标
 			if (IsPinned(curTarget) || IsIncapped(curTarget))
 			{
-				curTarget = TargetChoose(g_iTankTarget, specialInfected, curTarget);
-				return Plugin_Changed;
+				newtarget = TargetChoose(g_iTankTarget, specialInfected, curTarget);
+				if (IsSurvivor(newtarget))
+				{
+					curTarget = newtarget;
+					return Plugin_Changed;
+				}
+				else
+				{
+					return Plugin_Continue;
+				}
 			}
 			if (GetSurvivorDistance(fTankPos, curTarget) < 170)
 			{
@@ -639,9 +651,17 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 							g_iTreePlayer[specialInfected] = curTarget;
 							// 开始记录绕树生还原始位置并选择新目标
 							GetClientAbsOrigin(curTarget, g_fTreePlayerOriginPos);
-							curTarget = TargetChoose(g_iTankTarget, specialInfected, g_iTreePlayer[specialInfected]);
+							newtarget = TargetChoose(g_iTankTarget, specialInfected, g_iTreePlayer[specialInfected]);
 						}
-						return Plugin_Changed;
+						if (IsSurvivor(newtarget))
+						{
+							curTarget = newtarget;
+							return Plugin_Changed;
+						}
+						else
+						{
+							return Plugin_Continue;
+						}
 					}
 					// 搞传送
 					case 2:
@@ -650,7 +670,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 						GetClientAbsOrigin(curTarget, fNewTargetPos);	GetClientEyeAngles(curTarget, fNewTargetAngles);
 						TeleportEntity(specialInfected, fNewTargetPos, fNewTargetAngles, NULL_VECTOR);
 						CPrintToChat(curTarget, "{R}<Tank>：{G}喜欢绕树是吧？");
-						return Plugin_Changed;
+						return Plugin_Continue;
 					}
 				}
 			}
@@ -665,8 +685,16 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 					if (!bHasLeftRoundPoint(g_fTreePlayerOriginPos, fTreePlayerNewPos, 225))
 					{
 						// 还在绕树啊？
-						curTarget = TargetChoose(g_iTankTarget, specialInfected, g_iTreePlayer[specialInfected]);
-						return Plugin_Changed;
+						newtarget = TargetChoose(g_iTankTarget, specialInfected, g_iTreePlayer[specialInfected]);
+						if (IsSurvivor(newtarget))
+						{
+							curTarget = newtarget;
+							return Plugin_Changed;
+						}
+						else
+						{
+							return Plugin_Continue;
+						}
 					}
 					else
 					{
@@ -681,8 +709,16 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 							{
 								g_fTreePlayerOriginPos[i] = 0.0;
 							}
-							curTarget = TargetChoose(g_iTankTarget, specialInfected);
-							return Plugin_Changed;
+							newtarget = TargetChoose(g_iTankTarget, specialInfected);
+							if (IsSurvivor(newtarget))
+							{
+								curTarget = newtarget;
+								return Plugin_Changed;
+							}
+							else
+							{
+								return Plugin_Continue;
+							}
 						}
 					}
 				}
@@ -886,7 +922,7 @@ void TankInitialization(int client)
 // *************
 bool IsAiTank(int client)
 {
-	if (client && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED && GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_TANK && GetEntProp(client, Prop_Send, "m_isGhost") != 1)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED && GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_TANK && GetEntProp(client, Prop_Send, "m_isGhost") != 1)
 	{
 		return true;
 	}
