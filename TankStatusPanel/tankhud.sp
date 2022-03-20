@@ -108,7 +108,7 @@ public Action Timer_DisableBlind(Handle timer, int client)
 
 public void OnClientDisconnect(int client)
 {
-	if (client > 0 && client <= MaxClients && GetClientTeam(client) == 2 && !IsFakeClient(client))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2 && !IsFakeClient(client))
 	{
 		hiddenpanel[client] = false;
 	}
@@ -143,16 +143,16 @@ public Action Timer_RefreshPanel(Handle timer)
 			delete menupanel;
 		}
 		menupanel = new Panel();
-		DrawPanelText(menupanel, "Tank HUD：");
+		DrawPanelText(menupanel, "树树子 Server Tank HUD");
 		DrawPanelText(menupanel, " \n");
 		if (!IsFakeClient(tankclient))
 		{
 			GetClientFixedName(tankclient, name, sizeof(name));
-			FormatEx(info, sizeof(info), "◆ 控制：%s", name, info);
+			FormatEx(info, sizeof(info), "▶ 控制：%s", name, info);
 		}
 		else
 		{
-			info = "◆ 控制：AI";
+			info = "▶ 控制：AI";
 		}
 		DrawPanelText(menupanel, info);
 		// 生命显示
@@ -160,11 +160,11 @@ public Action Timer_RefreshPanel(Handle timer)
 		int tankmaxhealth = GetEntProp(tankclient, Prop_Send, "m_iMaxHealth");
 		if (health > 0 && !IsIncapped(tankclient))
 		{
-			FormatEx(info, sizeof(info), "◆ 当前生命值：%d / %.1f%%", health, 100.0 * health / tankmaxhealth);
+			FormatEx(info, sizeof(info), "▶ 当前生命值：%d / %.1f%%", health, 100.0 * health / tankmaxhealth);
 		}
 		else
 		{
-			FormatEx(info, sizeof(info), "◆ 当前：已死亡");
+			FormatEx(info, sizeof(info), "▶ 当前：已死亡");
 		}
 		DrawPanelText(menupanel, info);
 		// 控制权显示
@@ -192,43 +192,43 @@ public Action Timer_RefreshPanel(Handle timer)
 				FormatEx(info, sizeof(info), "%dth", passcount);
 			}
 		}
-		FormatEx(rage, sizeof(rage), "◆ 控制权：%d%%（%s）", GetTankFrustration(tankclient), info);
+		FormatEx(rage, sizeof(rage), "▶ 控制权：%d%%（%s）", GetTankFrustration(tankclient), info);
 		DrawPanelText(menupanel, rage);
 		// 是否着火
 		if (GetEntityFlags(tankclient) & FL_ONFIRE)
 		{
 			if (!IsIncapped(tankclient))
 			{
-				FormatEx(info, sizeof(info), "◆ 着火状态：%.1f 秒后死亡", health / float(GetConVarInt(tankburnduration)));
+				FormatEx(info, sizeof(info), "▶ 着火状态：%.1f 秒后死亡", health / float(GetConVarInt(tankburnduration)));
 			}
 			else
 			{
-				FormatEx(info, sizeof(info), "◆ 着火状态：无（已死亡）", health / float(GetConVarInt(tankburnduration)));
+				FormatEx(info, sizeof(info), "▶ 着火状态：无（已死亡）", health / float(GetConVarInt(tankburnduration)));
 			}
 		}
 		else
 		{
-			FormatEx(info, sizeof(info), "◆ 着火状态：未着火", health / float(GetConVarInt(tankburnduration)));
+			FormatEx(info, sizeof(info), "▶ 着火状态：未被燃烧", health / float(GetConVarInt(tankburnduration)));
 		}
 		DrawPanelText(menupanel, info);
 		// 是否被胆汁
 		if (invomit[tankclient])
 		{
-			FormatEx(info, sizeof(info), "◆ 胆汁状态：正在胆汁效果中");
+			FormatEx(info, sizeof(info), "▶ 胆汁状态：正在胆汁效果中");
 		}
 		else
 		{
-			FormatEx(info, sizeof(info), "◆ 胆汁状态：无");
+			FormatEx(info, sizeof(info), "▶ 胆汁状态：无");
 		}
 		DrawPanelText(menupanel, info);
 		// 网络状态
 		if (!IsFakeClient(tankclient))
 		{
-			FormatEx(info, sizeof(info), "◆ 网络：%dms", RoundToNearest(GetClientAvgLatency(tankclient, NetFlow_Both) * 100.0));
+			FormatEx(info, sizeof(info), "▶ 网络：%dms", RoundToNearest(GetClientAvgLatency(tankclient, NetFlow_Both) * 100.0));
 		}
 		else
 		{
-			FormatEx(info, sizeof(info), "◆ 网络：AI");
+			FormatEx(info, sizeof(info), "▶ 网络：AI");
 		}
 		DrawPanelText(menupanel, info);
 		// 将面板发送至旁观者与感染者团队
