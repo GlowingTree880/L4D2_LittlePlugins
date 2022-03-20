@@ -474,7 +474,7 @@ void RestoreHealth()
 		if (IsValidSurvivor(client))
 		{
 			BypassAndExecuteCommand(client, "give", "health");
-			SetEntPropFloat(client, Prop_Data, "m_healthBuffer", 0.0);
+			SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
 			SetEntProp(client, Prop_Send, "m_currentReviveCount", 0);
 			SetEntProp(client, Prop_Send, "m_bIsOnThirdStrike", 0);
 		}
