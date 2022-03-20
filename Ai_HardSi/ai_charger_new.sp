@@ -96,13 +96,14 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		}
 		int iTarget = GetClientAimTarget(charger, true);
 		float fDistance = NearestSurvivorDistance(charger);
-		// 距离小于100且右键攻击到人，如果可以冲锋，则直接冲锋
-		if ((buttons & IN_ATTACK2) && fDistance < 100.0 && ChargerCanCharge(charger))
+		// 距离小于 150 且右键攻击到人，如果可以冲锋，则直接冲锋
+		if ((buttons & IN_ATTACK2) && g_bShouldCharge[charger] && fDistance < 150.0 && ChargerCanCharge(charger))
 		{
 			vel[0] = vel[1] = 0.0;
 			if (IsSurvivor(iTarget) && IsVisible(charger, iTarget) && !IsIncapped(iTarget) && !IsPinned(iTarget))
 			{
 				buttons |= IN_ATTACK;
+				buttons |= IN_ATTACK2;
 				return Plugin_Changed;
 			}
 		}
@@ -213,7 +214,6 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 				if (!g_bShouldCharge[charger])
 				{
 					BlockCharge(charger);
-					buttons |= IN_FORWARD;
 					buttons |= IN_ATTACK2;
 					return Plugin_Changed;
 				}
