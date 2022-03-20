@@ -953,53 +953,117 @@ public void SDK_UpdateThink(int client)
 	if (IsInfectedBot(client) && IsPlayerAlive(client))
 	{
 		g_iTeleCount[client] = 0;
-		static float fEyePos[3] = {0.0}, fSelfEyePos[3] = {0.0};
-		GetClientEyePosition(client, fEyePos);
-		if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
+		switch (g_iSpawnMode)
 		{
-			float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
-			if (IsValidSurvivor(g_iTargetSurvivor))
+			case 1:
 			{
-				GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
-				GetClientEyePosition(client, fSelfEyePos);
-				fMins[0] = fSurvivorPos[0] - g_fSpawnDistanceMax;
-				fMaxs[0] = fSurvivorPos[0] + g_fSpawnDistanceMax;
-				fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
-				fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
-				fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
-				fDirection[0] = 90.0;
-				fDirection[1] = fDirection[2] = 0.0;
+				EasyTeleMode(client);
+			}
+			case 2:
+			{
+				HardTeleMode(client);
+			}
+			case 3:
+			{
+				int anne = GetRandomInt(1, 2);
+				switch (anne)
+				{
+					case 1:
+					{
+						EasyTeleMode(client);
+					}
+					case 2:
+					{
+						HardTeleMode(client);
+					}
+				}
+			}
+		}
+	}
+}
+
+void EasyTeleMode(int client)
+{
+	float SpawnPos[3] = {0.0}, Distance = 0.0, TargetPos[3] = {0.0}, SelfPos[3] = {0.0};
+	GetClientAbsOrigin(client, SelfPos);
+	if (IsValidSurvivor(g_iTargetSurvivor))
+	{
+		int ZombieClass = GetEntProp(client, Prop_Send, "m_zombieClass");
+		L4D_GetRandomPZSpawnPosition(g_iTargetSurvivor, ZombieClass, 1, SpawnPos);
+		if (!IsPlayerVisibleTo(SelfPos))
+		{
+			if (!IsPlayerVisibleTo(SpawnPos) && !IsPinningSomeone(client))
+			{
+				GetClientAbsOrigin(g_iTargetSurvivor, TargetPos);
+				if (!IsOnValidMesh(TargetPos))
+				{
+					if (200 < GetSurvivorDistance(SpawnPos) < RoundToNearest(g_fSpawnDistanceMax))
+					{
+						TeleportEntity(client, SpawnPos, NULL_VECTOR, NULL_VECTOR);
+						g_iTeleCount[client] = 0;
+						SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
+					}
+				}
+				Distance = L4D2_NavAreaTravelDistance(SpawnPos, TargetPos, false);
+				if (Distance < RoundToNearest(g_fSpawnDistanceMax) + 500)
+				{
+					TeleportEntity(client, SpawnPos, NULL_VECTOR, NULL_VECTOR);
+					g_iTeleCount[client] = 0;
+					SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
+				}
+			}
+		}
+	}
+}
+
+void HardTeleMode(int client)
+{
+	static float fEyePos[3] = {0.0}, fSelfEyePos[3] = {0.0};
+	GetClientEyePosition(client, fEyePos);
+	if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
+	{
+		float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
+		if (IsValidSurvivor(g_iTargetSurvivor))
+		{
+			GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
+			GetClientEyePosition(client, fSelfEyePos);
+			fMins[0] = fSurvivorPos[0] - g_fSpawnDistanceMax;
+			fMaxs[0] = fSurvivorPos[0] + g_fSpawnDistanceMax;
+			fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
+			fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
+			fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
+			fDirection[0] = 90.0;
+			fDirection[1] = fDirection[2] = 0.0;
+			fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
+			fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
+			fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
+			while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
+			{
 				fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
 				fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 				fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-				while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
+				TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
+				if (TR_DidHit())
 				{
-					fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
-					fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
-					fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-					TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
-					if (TR_DidHit())
-					{
-						TR_GetEndPosition(fEndPos);
-						fSpawnPos = fEndPos;
-						fSpawnPos[2] += NAV_MESH_HEIGHT;
-						break;
-					}
+					TR_GetEndPosition(fEndPos);
+					fSpawnPos = fEndPos;
+					fSpawnPos[2] += NAV_MESH_HEIGHT;
+					break;
 				}
-				if (IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos) && !IsPlayerVisibleTo(fSpawnPos))
+			}
+			if (IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos) && !IsPlayerVisibleTo(fSpawnPos))
+			{
+				for (int count = 0; count < g_iSurvivorNum; count++)
 				{
-					for (int count = 0; count < g_iSurvivorNum; count++)
+					int index = g_iSurvivors[count];
+					if (IsClientInGame(index))
 					{
-						int index = g_iSurvivors[count];
-						if (IsClientInGame(index))
+						GetClientEyePosition(index, fSurvivorPos);
+						fSurvivorPos[2] -= 60.0;
+						if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fTeleportDistance, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fTeleportDistance && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fSpawnDistanceMin)
 						{
-							GetClientEyePosition(index, fSurvivorPos);
-							fSurvivorPos[2] -= 60.0;
-							if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fTeleportDistance, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fTeleportDistance && GetVectorDistance(fSelfEyePos, fSpawnPos) > g_fSpawnDistanceMin)
-							{
-								TeleportEntity(client, fSpawnPos, NULL_VECTOR, NULL_VECTOR);
-								SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
-							}
+							TeleportEntity(client, fSpawnPos, NULL_VECTOR, NULL_VECTOR);
+							SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
 						}
 					}
 				}
