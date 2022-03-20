@@ -23,12 +23,12 @@ public Plugin myinfo =
 	name 			= "Direct InfectedSpawn",
 	author 			= "Caibiii, 夜羽真白",
 	description 	= "特感刷新控制，传送落后特感",
-	version 		= "2022.03.07",
+	version 		= "2022.03.20",
 	url 			= "https://github.com/GlowingTree880/L4D2_LittlePlugins"
 }
 
 // Cvars
-ConVar g_hSpawnDistanceMin, g_hSpawnDistanceMax, g_hTeleportSi, g_hTeleportDistance, g_hSiLimit, g_hSiInterval, g_hMaxPlayerZombies, g_hSbEscort, g_hSpawnMax, g_hWaveSpawnFrame, g_hSpawnMode;
+ConVar g_hSpawnDistanceMin, g_hSpawnDistanceMax, g_hTeleportSi, g_hTeleportDistance, g_hSiLimit, g_hSiInterval, g_hMaxPlayerZombies, g_hSbEscort, g_hSpawnMax, g_hEnableWaveSpawn, g_hWaveSpawnFrame, g_hSpawnMode;
 // Ints
 int g_iSiLimit, g_iSbEscort, iUnRechedLimitCount = 0, g_iWaveSpawnFrame, g_iSpawnMode,
 g_iTeleCount[MAXPLAYERS + 1] = {0}, g_iTargetSurvivor = -1, g_iSpawnMaxCount = 0, g_iSurvivorNum = 0, g_iSurvivors[MAXPLAYERS + 1] = {0};
@@ -36,7 +36,7 @@ g_iTeleCount[MAXPLAYERS + 1] = {0}, g_iTargetSurvivor = -1, g_iSpawnMaxCount = 0
 // Floats
 float g_fSpawnDistanceMin, g_fSpawnDistanceMax, g_fTeleportDistance, g_fSiInterval;
 // Bools
-bool g_bTeleportSi
+bool g_bTeleportSi, g_bEnableWaveSpawn
 , g_bIsLate = false;
 // Handle
 Handle g_hTeleHandle = INVALID_HANDLE;
@@ -60,9 +60,10 @@ public void OnPluginStart()
 	g_hSpawnDistanceMin = CreateConVar("inf_SpawnDistanceMin", "0.0", "特感复活离生还者最近的距离限制", CVAR_FLAG, true, 0.0);
 	g_hSpawnDistanceMax = CreateConVar("inf_SpawnDistanceMax", "500.0", "特感复活离生还者最远的距离限制", CVAR_FLAG, true, g_hSpawnDistanceMin.FloatValue);
 	g_hTeleportSi = CreateConVar("inf_TeleportSi", "1", "是否开启特感距离生还者一定距离将其传送至生还者周围", CVAR_FLAG, true, 0.0, true, 1.0);
-	g_hTeleportDistance = CreateConVar("inf_TeleportDistance", "500.0", "特感落后于最近的生还者超过这个距离则将它们传送", CVAR_FLAG, true, 0.0);
+	g_hTeleportDistance = CreateConVar("inf_TeleportDistance", "800.0", "特感落后于最近的生还者超过这个距离则将它们传送", CVAR_FLAG, true, 0.0);
 	g_hSiLimit = CreateConVar("l4d_infected_limit", "6", "一次刷出多少特感", CVAR_FLAG, true, 0.0);
 	g_hSiInterval = CreateConVar("versus_special_respawn_interval", "16.0", "对抗模式下刷特时间控制", CVAR_FLAG, true, 0.0);
+	g_hEnableWaveSpawn = CreateConVar("inf_EnableWaveSpawn", "0", "是否开启限制特感刷新必须在 x 帧内完成", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hWaveSpawnFrame = CreateConVar("inf_WaveSpawnFrame", "20", "一波的刷特必须要在这么多帧内完成找位与刷新", CVAR_FLAG, true, 0.0);
 	g_hSpawnMode = CreateConVar("inf_SpawnMode", "1", "刷特方式选择：1=阳间，2=阴间，3=随机阳间阴间", CVAR_FLAG, true, 1.0, true, 3.0);
 	g_hSbEscort = CreateConVar("sb_escort", "1", "保持 Aibot 紧跟在生还者身边", ~ CVAR_FLAG, true, 0.0, true, 1.0);
@@ -82,6 +83,7 @@ public void OnPluginStart()
 	g_hTeleportDistance.AddChangeHook(ConVarChanged_Cvars);
 	g_hSiInterval.AddChangeHook(ConVarChanged_Cvars);
 	g_hSbEscort.AddChangeHook(ConVarChanged_Cvars);
+	g_hEnableWaveSpawn.AddChangeHook(ConVarChanged_Cvars);
 	g_hWaveSpawnFrame.AddChangeHook(ConVarChanged_Cvars);
 	g_hSpawnMode.AddChangeHook(ConVarChanged_Cvars);
 	g_hSiLimit.AddChangeHook(MaxPlayerZombiesChanged_Cvars);
@@ -130,6 +132,7 @@ void GetCvars()
 	g_fSiInterval = g_hSiInterval.FloatValue;
 	g_iSiLimit = g_hSiLimit.IntValue;
 	g_iSbEscort = g_hSbEscort.IntValue;
+	g_bEnableWaveSpawn = g_hEnableWaveSpawn.BoolValue;
 	g_iWaveSpawnFrame = g_hWaveSpawnFrame.IntValue;
 	g_iSpawnMode = g_hSpawnMode.IntValue;
 }
@@ -227,43 +230,46 @@ public void OnGameFrame()
 	{
 		if (g_iSiLimit > HasAnyCountFull())
 		{
-			// 使用一个计数变量，如果可以刷特，且小于 200 帧特感未活全
-			iUnRechedLimitCount++;
-			if (iUnRechedLimitCount > g_iWaveSpawnFrame)
+			if (g_bEnableWaveSpawn)
 			{
-				int iInfectedCount = 0;
-				// 帧操作，获取在场特感数量
-				for (int infected = 1; infected <= MaxClients; infected++)
+				// 使用一个计数变量，如果可以刷特，且小于 200 帧特感未活全
+				iUnRechedLimitCount++;
+				if (iUnRechedLimitCount > g_iWaveSpawnFrame)
 				{
-					if (IsInfectedBot(infected) && IsPlayerAlive(infected) && GetEntProp(infected, Prop_Send, "m_zombieClass") != ZC_TANK)
+					int iInfectedCount = 0;
+					// 帧操作，获取在场特感数量
+					for (int infected = 1; infected <= MaxClients; infected++)
 					{
-						iInfectedCount++;
-						if (iInfectedCount > 0)
+						if (IsInfectedBot(infected) && IsPlayerAlive(infected) && GetEntProp(infected, Prop_Send, "m_zombieClass") != ZC_TANK)
 						{
-							float fPos[3];
-							GetClientAbsOrigin(infected, fPos);
-							// 如果在场特感数量小于设置数量
-							for (int count = iInfectedCount; count <= g_iSiLimit; count++)
+							iInfectedCount++;
+							if (iInfectedCount > 0)
 							{
-								int iZombieClass = IsBotTypeNeeded();
-								if (iZombieClass > 0)
+								float fPos[3];
+								GetClientAbsOrigin(infected, fPos);
+								// 如果在场特感数量小于设置数量
+								for (int count = iInfectedCount; count <= g_iSiLimit; count++)
 								{
-									// 先判断刷特上限是否大于 0 再刷出特感，否则先刷出特感再减少刷特上限，会多刷一个特感
-									if (g_iSpawnMaxCount > 0)
+									int iZombieClass = IsBotTypeNeeded();
+									if (iZombieClass > 0)
 									{
-										int entityindex = L4D2_SpawnSpecial(iZombieClass, fPos, view_as<float>({0.0, 0.0, 0.0}));
-										if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+										// 先判断刷特上限是否大于 0 再刷出特感，否则先刷出特感再减少刷特上限，会多刷一个特感
+										if (g_iSpawnMaxCount > 0)
 										{
-											g_iSpawnMaxCount -= 1;
+											int entityindex = L4D2_SpawnSpecial(iZombieClass, fPos, view_as<float>({0.0, 0.0, 0.0}));
+											if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+											{
+												g_iSpawnMaxCount -= 1;
+											}
 										}
 									}
 								}
+								iUnRechedLimitCount = 0;
 							}
-							iUnRechedLimitCount = 0;
 						}
 					}
+					// 检测完特感团队，如无在场特感，则继续检测能否刷新
 				}
-				// 检测完特感团队，如无在场特感，则继续检测能否刷新
 			}
 			// 选择刷特方式，阳间阴间
 			switch (g_iSpawnMode)
