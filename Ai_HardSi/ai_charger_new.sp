@@ -117,7 +117,7 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		}
 		else if (bHasSight && float(g_iStartChargeDistance) < fDistance < 1000.0 && fCurrentSpeed > 175.0)
 		{
-			if (iTarget > 0)
+			if (IsSurvivor(iTarget))
 			{
 				if (bHasSight)
 				{
@@ -205,13 +205,13 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 				}
 			}
 		}
-		if (iTarget > 0)
+		if (IsSurvivor(iTarget))
 		{
 			int iSurvivorDistance = GetSurvivorDistance(fChargerPos, iTarget);
 			int iChargerHealth = GetEntProp(charger, Prop_Send, "m_iHealth");
 			if (iChargerHealth > g_iHealthStartCharge || iSurvivorDistance > g_iStartChargeDistance)
 			{
-				if (!g_bShouldCharge[charger])
+				if (!g_bShouldCharge[charger] && ChargerCanCharge(charger))
 				{
 					BlockCharge(charger);
 					buttons |= IN_ATTACK2;
