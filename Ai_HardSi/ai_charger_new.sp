@@ -380,7 +380,7 @@ int GetCrowdPlace()
 
 bool IsValidClient(int client)
 {
-	if (client && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client))
+	if (client > 0 && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client))
 	{
 		return true;
 	}
