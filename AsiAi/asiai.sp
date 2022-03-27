@@ -321,7 +321,7 @@ public Action OnJockeyRunCmd(int client, int &buttons, float vel[3], float angle
 		{
 			if (angles[2] == 0.0)
 			{
-				angles[0] = GetRandomFloat(-50.0, -10.0);
+				angles[0] = GetRandomFloat(-30.0, -10.0);
 				TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
 			}
 			buttons |= IN_ATTACK;
