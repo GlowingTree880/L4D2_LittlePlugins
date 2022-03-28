@@ -38,7 +38,7 @@
 <br>（针对模式，管理员输入 !zhendui 可开启关闭，开启并选择某位玩家作为针对目标后，在场及后续复活的特感将优先以这位玩家为目标，直到这位玩家被控或关闭针对模式）
 * **TankStatusPanel：** After the Tank spawning, display the current tank status panel to human spectators and infected players, including the current tank HP, control, fire status, whether it is in bile status, and the current Tank controller, etc.
 <br>（Tank 刷新后，对旁观者与特感方显示的当前 Tank 状态面板，包含当前 Tank 血量，控制权，着火状态，是否处在胆汁状态中，与当前 Tank 控制者等信息）
-* **ThrowPunish：** Limit the number of times each player in the game can use each type of projectile (molotov, vomitjar, pipebomb) or the total number of three projectiles in a round (such as c2m1, c2m2), and for players who use more than the maximum number of times limit and punish players who throw molotov into safe areas
+* **ThrowPunish：** Limit the usage count of each player in the game can use each type of projectile (molotov, vomitjar, pipebomb) or the total usage count of three projectiles in a round (such as c2m1, c2m2), and for players who use more than the times limit and punish players who throw molotov into safeareas
 <br>（限制游戏内每位玩家在一关（如 c2m1，c2m2）中能够使用每种投掷物（燃烧瓶，胆汁，土制炸弹）的次数或三种投掷物的总次数，并且对使用超过次数上限的玩家进行惩罚与对向安全区域中投掷燃烧瓶的玩家给予惩罚（喜欢烧烤队友48））
 
   * 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件文件并修复反编译后的文件内容得到<br>（The above plugins's code which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
