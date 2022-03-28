@@ -1,0 +1,43 @@
+"Games"
+{
+	/*
+	 * All windows signatures/offsets were found by Forgetest
+	 */
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"TheCount"
+			{
+				"linux"
+				{
+					"signature"    "nav_update_lighting"
+					"read"        "17"
+				}
+				"windows"
+				{
+					"signature"    "nav_update_lighting"
+					"read"        "70"
+				}
+			}
+		}
+		"Offsets"
+		{
+			"TerrorNavArea::ScriptGetSpawnAttributes"
+			{
+				"windows"    "296"
+				"linux"        "300"
+			}
+		}
+		"Signatures"
+		{
+			"nav_update_lighting"
+			{
+				"library"    "server"
+				"linux"        "@_ZL19nav_update_lightingRK8CCommand"
+				"windows"    "\x55\x8B\xEC\x8B\x2A\x2A\x57\x33\x2A\x83\x2A\x02"
+				/* 55 8B EC 8B ? ? 57 33 ? 83 ? 02 */
+			}
+		}
+	}
+}
