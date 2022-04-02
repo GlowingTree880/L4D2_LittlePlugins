@@ -292,34 +292,44 @@ public void SDKHook_Pipebomb(int entity)
 		int client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
 		if (IsValidClient(client) && IsPlayerAlive(client))
 		{
-			if (g_iThrowType == 2)
+			// 取玩家投掷物武器槽的物品，需要判断模型，否则打爆煤气罐也算次数
+			int iSlots = GetPlayerWeaponSlot(client, 2);
+			if (IsValidEntity(iSlots) && IsValidEdict(iSlots))
 			{
-				g_iGrenadeTimes[client] += 1;
-				if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] > 0)
+				char modelname[128];
+				GetEntPropString(entity, Prop_Data, "m_ModelName", modelname, sizeof(modelname));
+				if (strcmp(modelname, "models/w_models/weapons/w_eq_pipebomb.mdl") == 0)
 				{
-					PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03土制炸药", g_iThrowTimes - g_iGrenadeTimes[client]);
-				}
-				else if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] < 0)
-				{
-					int iGrenadeReference = EntIndexToEntRef(entity);
-					GetPunish(client, iGrenadeReference);
-					PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03土制炸药");
-				}
-			}
-			else if (g_iThrowType == 4)
-			{
-				iAllTimes[client] += 1;
-				int All = g_iFireTimes[client] + g_iGrenadeTimes[client] + g_iVomitjarTimes[client];
-				g_iAllTimes[client] = All + iAllTimes[client];
-				if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] > 0)
-				{
-					PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03投掷物", g_iThrowTimes - g_iAllTimes[client]);
-				}
-				else if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] < 0)
-				{
-					int iGrenadeReference = EntIndexToEntRef(entity);
-					GetPunish(client, iGrenadeReference);
-					PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03任何投掷物");
+					if (g_iThrowType == 2)
+					{
+						g_iGrenadeTimes[client] += 1;
+						if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] > 0)
+						{
+							PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03土制炸药", g_iThrowTimes - g_iGrenadeTimes[client]);
+						}
+						else if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] < 0)
+						{
+							int iGrenadeReference = EntIndexToEntRef(entity);
+							GetPunish(client, iGrenadeReference);
+							PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03土制炸药");
+						}
+					}
+					else if (g_iThrowType == 4)
+					{
+						iAllTimes[client] += 1;
+						int All = g_iFireTimes[client] + g_iGrenadeTimes[client] + g_iVomitjarTimes[client];
+						g_iAllTimes[client] = All + iAllTimes[client];
+						if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] > 0)
+						{
+							PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03投掷物", g_iThrowTimes - g_iAllTimes[client]);
+						}
+						else if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] < 0)
+						{
+							int iGrenadeReference = EntIndexToEntRef(entity);
+							GetPunish(client, iGrenadeReference);
+							PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03任何投掷物");
+						}
+					}
 				}
 			}
 		}
