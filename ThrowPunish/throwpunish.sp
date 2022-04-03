@@ -10,13 +10,14 @@
 #define PROPANEMODEL "models/props_junk/propanecanister001a.mdl"
 #define GASCANMODEL "models/props_junk/gascan001a.mdl"
 #define NAVMESH_CHECKPOINT 2048
+#define MAXENTITIES 2048
 
 public Plugin myinfo = 
 {
 	name 			= "Throw Punish",
 	author 			= "夜羽真白",
 	description 	= "投掷物使用上限及安全区域扔燃烧瓶惩罚",
-	version 		= "1.0.1.0",
+	version 		= "1.0.1.1",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -25,6 +26,8 @@ ConVar g_hThrowPunishEnable, g_hThrowTimes, g_hThrowType, g_hPunishType, g_hSafe
 // Ints
 int g_iThrowTimes, g_iThrowType, g_iPunishType, g_iFireTimes[MAXPLAYERS + 1] = {0}, g_iVomitjarTimes[MAXPLAYERS + 1] = {0}, g_iGrenadeTimes[MAXPLAYERS + 1] = {0}, g_iAllTimes[MAXPLAYERS + 1] = {0}, iAllTimes[MAXPLAYERS + 1] = {0},
 g_iSpawnAttributeOffset = 0, g_iNavAreaCount = 0;
+// Floats
+float g_fLastThrow[MAXENTITIES + 1] = {0.0};
 // Bools
 bool g_bThrowPunishEnable, g_bSaferoomFirePunish, g_bPrintTimes,
 g_bBlockSound = false, g_bBlockFire = false;
@@ -51,6 +54,7 @@ public void OnPluginStart()
 	HookEvent("round_start", evt_RoundStart);
 	HookEvent("round_end", evt_RoundEnd);
 	HookEvent("map_transition", evt_MapTransistion);
+	HookEvent("weapon_fire", evt_WeaponFire);
 	// GetCvars
 	GetCvars();
 	// AddSoundHook
@@ -146,6 +150,87 @@ void GetMapNavAreaData()
 	}
 }
 
+// 土制炸弹使用 weapon_fire 事件检测，参考：Mart：[L4D1 & L4D2] Throwable Announcer：https://forums.alliedmods.net/showthread.php?t=327613
+public void evt_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+{
+	if (g_bThrowPunishEnable)
+	{
+		int iWeapon = event.GetInt("weaponid");
+		// 土制炸药武器ID为14
+		if (iWeapon == 14)
+		{
+			int client = GetClientOfUserId(event.GetInt("userid"));
+			if (IsValidClient(client) && IsPlayerAlive(client))
+			{
+				int iSlots = GetPlayerWeaponSlot(client, 2);
+				if (IsValidEntity(iSlots) && IsValidEdict(iSlots))
+				{
+					g_fLastThrow[iSlots] = GetGameTime();
+					RequestFrame(NexFrame_PipeBomb, EntIndexToEntRef(iSlots));
+				}
+			}
+		}
+	}
+}
+
+public void NexFrame_PipeBomb(int EntityReference)
+{
+	int entity = EntRefToEntIndex(EntityReference);
+	if (entity != INVALID_ENT_REFERENCE)
+	{
+		if (GetGameTime() - g_fLastThrow[entity] < 0.3)
+		{
+			if (GetEntProp(entity, Prop_Send, "m_bRedraw") == 0)
+			{
+				RequestFrame(NexFrame_PipeBomb, EntIndexToEntRef(entity));
+				return;
+			}
+			int client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
+			if (IsValidClient(client))
+			{
+				if (g_iThrowType == 2)
+				{
+					g_iGrenadeTimes[client] += 1;
+					if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] > 0)
+					{
+						PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03土制炸药", g_iThrowTimes - g_iGrenadeTimes[client]);
+					}
+					else if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] < 0)
+					{
+						int iGrenadeReference = EntIndexToEntRef(entity);
+						GetPunish(client, iGrenadeReference);
+						PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03土制炸药");
+					}
+				}
+				else if (g_iThrowType == 4)
+				{
+					iAllTimes[client] += 1;
+					int All = g_iFireTimes[client] + g_iGrenadeTimes[client] + g_iVomitjarTimes[client];
+					g_iAllTimes[client] = All + iAllTimes[client];
+					if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] > 0)
+					{
+						PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03投掷物", g_iThrowTimes - g_iAllTimes[client]);
+					}
+					else if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] < 0)
+					{
+						int iGrenadeReference = EntIndexToEntRef(entity);
+						GetPunish(client, iGrenadeReference);
+						PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03任何投掷物");
+					}
+				}
+			}
+		}
+	}
+}
+
+public void OnEntityDestroyed(int entity)
+{
+	if (IsValidEntity(entity) && IsValidEdict(entity))
+	{
+		g_fLastThrow[entity] = 0.0;
+	}
+}
+
 // ********************
 // 		   主要
 // ********************
@@ -171,10 +256,6 @@ public void OnEntityCreated(int entity, const char[] classname)
 		if (strcmp(classname, "vomitjar_projectile") == 0)
 		{
 			SDKHook(entity, SDKHook_SpawnPost, SDKHook_Vomitjar);
-		}
-		if (strcmp(classname, "pipe_bomb_projectile") == 0)
-		{
-			SDKHook(entity, SDKHook_SpawnPost, SDKHook_Pipebomb);
 		}
 		if (strcmp(classname, "inferno") == 0)
 		{
@@ -282,58 +363,6 @@ public void SDKHook_Vomitjar(int entity)
 			}
 		}
 		SDKUnhook(entity, SDKHook_SpawnPost, SDKHook_Vomitjar);
-	}
-}
-
-public void SDKHook_Pipebomb(int entity)
-{
-	if (IsValidEntity(entity) && IsValidEdict(entity))
-	{
-		int client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
-		if (IsValidClient(client) && IsPlayerAlive(client))
-		{
-			// 取玩家投掷物武器槽的物品，需要判断模型，否则打爆煤气罐也算次数
-			int iSlots = GetPlayerWeaponSlot(client, 2);
-			if (IsValidEntity(iSlots) && IsValidEdict(iSlots))
-			{
-				char modelname[128];
-				GetEntPropString(entity, Prop_Data, "m_ModelName", modelname, sizeof(modelname));
-				if (strcmp(modelname, "models/w_models/weapons/w_eq_pipebomb.mdl") == 0)
-				{
-					if (g_iThrowType == 2)
-					{
-						g_iGrenadeTimes[client] += 1;
-						if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] > 0)
-						{
-							PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03土制炸药", g_iThrowTimes - g_iGrenadeTimes[client]);
-						}
-						else if (g_bPrintTimes && g_iThrowTimes - g_iGrenadeTimes[client] < 0)
-						{
-							int iGrenadeReference = EntIndexToEntRef(entity);
-							GetPunish(client, iGrenadeReference);
-							PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03土制炸药");
-						}
-					}
-					else if (g_iThrowType == 4)
-					{
-						iAllTimes[client] += 1;
-						int All = g_iFireTimes[client] + g_iGrenadeTimes[client] + g_iVomitjarTimes[client];
-						g_iAllTimes[client] = All + iAllTimes[client];
-						if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] > 0)
-						{
-							PrintToChat(client, "\x04【提示】：\x05您在本关还可投掷 \x04%d \x05次\x03投掷物", g_iThrowTimes - g_iAllTimes[client]);
-						}
-						else if (g_bPrintTimes && g_iThrowTimes - g_iAllTimes[client] < 0)
-						{
-							int iGrenadeReference = EntIndexToEntRef(entity);
-							GetPunish(client, iGrenadeReference);
-							PrintToChat(client, "\x04【提示】：\x05您在本关已无法继续投掷\x03任何投掷物");
-						}
-					}
-				}
-			}
-		}
-		SDKUnhook(entity, SDKHook_SpawnPost, SDKHook_Pipebomb);
 	}
 }
 
