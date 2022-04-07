@@ -40,6 +40,8 @@
 <br>（Tank 刷新后，对旁观者与特感方显示的当前 Tank 状态面板，包含当前 Tank 血量，控制权，着火状态，是否处在胆汁状态中，与当前 Tank 控制者等信息）
 * **ThrowPunish：** Limit the usage count of each player in the game can use each type of projectile (molotov, vomitjar, pipebomb) or the total usage count of three projectiles in a round (such as c2m1, c2m2), and punish players who use more than the times limit and players who throw molotov into safeareas
 <br>（限制游戏内每位玩家在一关（如 c2m1，c2m2）中能够使用每种投掷物（燃烧瓶，胆汁，土制炸弹）的次数或三种投掷物的总次数，并且对使用超过次数上限的玩家进行惩罚与对向安全区域中投掷燃烧瓶的玩家给予惩罚（喜欢烧烤队友48））
+* **HappyDPS：** a happy DPS infected (Spitter, Boomer) plugin, this plugin controls whether there is still a Tank on the field that prohibits opening and closing the end saferoom door and controls melee damage to DPS special infected
+<br>（令人快乐的 DPS 特感（Spitter，Boomer）插件，控制近战对 DPS 特感的伤害同时令 DPS 特感免受除了近战伤害外的其他武器伤害，并且能控制是否在场上还有 Tank 存在时禁止开关终点安全门，阳间服必备）
 
   * 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件文件并修复反编译后的文件内容得到<br>（The above plugins's code which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
   * 关于反编译行为的合理性与 Sourcemod GPL version 3 许可证及编写的插件/拓展与许可证间的关系可查阅：<br>[SourceModLicense](https://www.sourcemod.net/license.php)<br>[Quoted from Azelphur](https://forums.alliedmods.net/showpost.php?p=1648709&postcount=80)<br>[Quoted from Silvers](https://forums.alliedmods.net/showpost.php?p=2709004&postcount=394)<br>[Quoted from Sazpaimon](https://forums.alliedmods.net/showpost.php?p=1587691&postcount=10)
