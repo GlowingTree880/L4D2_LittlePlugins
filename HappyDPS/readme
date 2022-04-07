@@ -1,0 +1,11 @@
+这是一个：令人快乐的 DPS 特感（Spitter，Boomer）插件，并且能控制是否在场上还有 Tank 存在时禁止开关终点安全门，阳间服必备
+
+Cvars：
+dps_damage_type 1：DPS特感受到伤害的类型：0=关闭插件，1=概率受到近战伤害，2=受到固定数值近战伤害，3=概率免伤
+spitter_damage_percent 50：Spitter每次只会受到第一次近战伤害 * 此数值的伤害
+boomer_damage_percent 50：Boomer每次只会受到第一次近战伤害 * 此数值的伤害
+spitter_damage 10：Spitter每次受到近战击打只会受到这么多伤害
+boomer_damage 10：Boomer每次受到近战击打只会受到这么多伤害
+boomer_no_damageper 50：Boomer每次受到近战伤害免伤的概率
+spitter_no_damageper 50：Spitter每次受到近战伤害免伤的概率
+tank_close_door 1：是否在坦克在场时关闭安全门
