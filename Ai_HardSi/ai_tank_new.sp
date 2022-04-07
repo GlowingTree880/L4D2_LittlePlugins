@@ -98,14 +98,16 @@ public void OnPluginStart()
 	g_hTankAttackVomitedNum = CreateConVar("ai_Tank_AttackVomitedNum", "1", "如果有这个数量的生还者被Boomer喷吐到，正在进行消耗的Tank将会攻击", FCVAR_NOTIFY, true, 0.0);
 	g_hVomitCanInstantAttack = CreateConVar("ai_Tank_VomitCanInstantAttack", "1", "是否开启固定数量生还者被喷吐后Tank立刻攻击", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hVomitAttackInterval = CreateConVar("ai_Tank_VomitAttackInterval", "20.0", "从开始被喷且Tank允许攻击时开始，这个时间内Tank允许攻击", FCVAR_NOTIFY, true, 0.0);
-	g_hTeleportForwardPercent = CreateConVar("ai_Tank_TeleportForwardPercent", "5", "Tank开始消耗时，记录此时生还者行进距离x，生还者前压超过x + 这个值时，Tank会传送至生还者处进行压制", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "3", "Tank最多进行消耗的次数", FCVAR_NOTIFY, true, 0.0);
+	g_hTeleportForwardPercent = CreateConVar("ai_Tank_TeleportForwardPercent", "10", "Tank开始消耗时，记录此时生还者行进距离x，生还者前压超过x + 这个值时，Tank会传送至生还者处进行压制", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "2", "Tank最多进行消耗的次数（这个值 * 50）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "3", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank");
 	g_hTankBhopHitWllDistance = CreateConVar("ai_TankBhopHitWallDistance", "100.0", "Tank视角前这个距离内有障碍物，Tank将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankRetreatAirAngles = CreateConVar("ai_TankRetreatAirAngles", "75.0", "Tank在回避的连跳过程中视角与速度超过这个值将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeAction = CreateConVar("ai_TankConsumeAction", "2", "Tank在消耗范围内将会：1=冰冻，2=可活动但不允许超出消耗范围", FCVAR_NOTIFY, true, 1.0, true, 2.0);
-	g_hTankConsumeDamagePercent = CreateConVar("ai_TankConsumeDamagePercent", "10", "Tank在消耗过程中只会受到这个百分比的伤害", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+	g_hTankConsumeDamagePercent = CreateConVar("ai_TankConsumeDamagePercent", "50", "Tank在消耗过程中只会受到这个百分比的伤害", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+	// 调试输出
 	g_hDebugMod = CreateConVar("ai_TankDebugMod", "0", "是否开启调试输出", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	// 其他 Cvar
 	g_hTankAttackRange = FindConVar("tank_attack_range");
 	g_hVsBossFlowBuffer = FindConVar("versus_boss_buffer");
 	g_hTankThrowForce = FindConVar("z_tank_throw_force");
@@ -337,6 +339,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 			float fTankEyeAngles[3], fForwardVec[3];
 			GetClientEyeAngles(tank, fTankEyeAngles);
 			GetAngleVectors(fTankEyeAngles, fForwardVec, NULL_VECTOR, NULL_VECTOR);
+			NormalizeVector(fForwardVec, fForwardVec);
 			ScaleVector(fForwardVec, g_fTankBhopSpeed);
 			if (g_bCanTankConsume[tank] && !g_bInConsumePlace[tank])
 			{
@@ -677,7 +680,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 			else
 			{
 				// 绕树生还突然跑出来接近坦克，如果有绕树情况，则选择treeTarget，不执行此段，坦克选择新目标后，绕树生还突然追坦克，清空绕树保存目标重新选择
-				if (g_iTreePlayer[specialInfected] > -1)
+				if (IsSurvivor(g_iTreePlayer[specialInfected]))
 				{
 					float fTreePlayerNewPos[3];
 					GetClientAbsOrigin(g_iTreePlayer[specialInfected], fTreePlayerNewPos);
