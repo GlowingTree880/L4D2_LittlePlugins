@@ -21,6 +21,9 @@
 #define ZC_TANK         8
 // 数据
 #define VEM_MAX 450.0
+#define MAXSURVIVORS 8
+#define SURVIVORHEIGHT 72.0
+#define FL_JUMPING 65922
 // SMOKER
 #define SMOKERMELEERANGE 300.0
 // JOCKEY
@@ -39,9 +42,10 @@
 #define HUNTERCOOLDOWNTIME 0.5
 // TANK
 #define TANKMELEESCANDELAY 0.0
-#define TANKROCKAIMTIME 10.0
+#define TANKROCKAIMTIME 3.0
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
+#define TANKTHROWHEIGHT 100.0
 // SPITTER
 #define SPITTERRUNSPEED 200.0
 #define SPITDELAY 2.0
@@ -87,6 +91,9 @@ void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char[] newV
 	g_fPlayBackRate = g_hPlayBackRate.FloatValue;
 }
 
+// 向量绘制
+// #include "vector/vector_show.sp"
+
 // *********************
 //		   事件
 // *********************
@@ -129,7 +136,7 @@ public Action L4D_OnCThrowActivate(int ability)
 {
 	SetConVarString(FindConVar("z_tank_throw_force"), "1000");
 	int tankclient = GetEntPropEnt(ability, Prop_Data, "m_hOwnerEntity");
-	if (tankclient > 0)
+	if (IsInfectedBot(tankclient) && GetZombieClass(tankclient) == ZC_TANK)
 	{
 		RequestFrame(NextFrame_JumpRock, tankclient);
 	}
@@ -139,7 +146,7 @@ public Action L4D_OnCThrowActivate(int ability)
 void NextFrame_JumpRock(int tankclient)
 {
 	int target = GetNearestSurvivor(tankclient);
-	if (target > 0)
+	if (IsValidSurvivor(target))
 	{
 		int flags = GetEntityFlags(tankclient);
 		if (flags & FL_ONGROUND)
@@ -450,6 +457,7 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 
 public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[3])
 {
+	bool bHasSight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
 	if (GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
 		float tankattackrange = -1.0, tankspeed = -1.0;
@@ -467,18 +475,124 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			DelayStart(client, 4);
 			SetConVarString(FindConVar("z_tank_throw_force"), "1000");
 		}
+		// 按了左键之后 0.25s 并在 0.25 + 10s内，锁定视野
 		if (DelayExpired(client, 4, TANKROCKAIMDELAY) && !DelayExpired(client, 3, TANKROCKAIMTIME))
 		{
-			int target = GetNearestSurvivor(client);
-			if (target > 0)
+			float selfpos[3] = {0.0}, targetpos[3] = {0.0}, aimangles[3] = {0.0};
+			GetClientAbsOrigin(client, selfpos);
+			selfpos[2] += TANKTHROWHEIGHT;
+			// 2022-4-8更新：判断目标有效，判断目标是否可见
+			int targetclient = 0, hittimes = 0, survivorcount = 0;
+			for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
 			{
-				if (angles[2] == 0.0)
+				if (IsValidSurvivor(newtarget))
 				{
-					float aimangles[3] = 0.0;
-					ComputeAimAngles(client, target, aimangles, AimEye);
-					aimangles[2] = 0.0;
+					survivorcount += 1;
+					GetClientAbsOrigin(newtarget, targetpos);
+					// 射线，坦克 z 高度 +115，作为石头出手高度
+					targetpos[2] += SURVIVORHEIGHT;
+					Handle hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, traceFilter, client);
+					if (!TR_DidHit(hTrace))
+					{
+						// 射线未撞击到物体，则跳出，找到可以被攻击的生还者
+						targetclient = newtarget;
+						if (IsValidSurvivor(targetclient))
+						{
+							GetClientAbsOrigin(targetclient, targetpos);
+							break;
+						}
+					}
+					else
+					{
+						int entity = TR_GetEntityIndex(hTrace);
+						char classname[64];
+						GetEntityClassname(entity, classname, sizeof(classname));
+						if (strcmp(classname, "player") != 0 && strcmp(classname, "env_physics_blocker") != 0 && strcmp(classname, "tank_rock") != 0)
+						{
+							hittimes += 1;
+						}
+					}
+					delete hTrace;
+				}
+			}
+			// 撞击次数和生还者数相等，所有生还者皆在障碍后，取最近目标
+			if (hittimes == survivorcount)
+			{
+				int nearesttarget = GetNearestSurvivor(client);
+				ComputeAimAngles(client, nearesttarget, aimangles, AimEye);
+				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+				return Plugin_Changed;
+			}
+			else
+			{
+				// 撞击次数与生还者数不相等，能直视某个生还，则计算角度
+				float absdist[3] = {0.0};
+				GetClientAbsOrigin(client, selfpos);
+				if (IsValidSurvivor(targetclient))
+				{
+					ComputeAimAngles(client, targetclient, aimangles, AimEye);
+					GetEntPropVector(targetclient, Prop_Send, "m_vecOrigin", absdist);
+					int dist = RoundToNearest(GetVectorDistance(selfpos, absdist));
+					float height = selfpos[2] - targetpos[2];
+					// PrintToChatAll("目标pos：%.2f %.2f %.2f", targetpos[0], targetpos[1], targetpos[2]);
+					// PrintToChatAll("dist：%d，height：%.2f, 余1000：%d", dist, height, dist / 1000);
+					// 距离小于 300，则说明离生还较近，直接瞄准生还下部即可
+					if (dist <= 300)
+					{
+						aimangles[0] += 30.0;
+					}
+					else if ((dist / 1000) == 0)
+					{
+						aimangles[0] = 0.0;
+						aimangles[0] -= (dist * 0.0050);
+						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
+						int flags = GetEntityFlags(client);
+						if (flags != FL_JUMPING)
+						{
+							if (height < 0.0)
+							{
+								// PrintToChatAll("克的位置位于生还下方，且距离小于1000");
+								aimangles[0] = 0.0;
+								aimangles[0] -= 0.060 * FloatAbs(height);
+							}
+							else if (height > 0.0)
+							{
+								// PrintToChatAll("克的位置位于生还上方，且距离小于1000");
+								aimangles[0] = 0.0;
+								aimangles[0] += 0.050 * height;
+							}
+						}
+					}
+					else
+					{
+						float times = dist / 1000.0;
+						aimangles[0] = 0.0;
+						aimangles[0] -= (dist * 0.0060) + (2.30 * times);
+						int flags = GetEntityFlags(client);
+						if (flags != FL_JUMPING)
+						{
+							if (height < 0.0)
+							{
+								// PrintToChatAll("克的位置位于生还下方，且距离大于1000");
+								aimangles[0] = 0.0;
+								aimangles[0] -= 0.070 * FloatAbs(height);
+							}
+							else if (height > 0.0)
+							{
+								// PrintToChatAll("克的位置位于生还上方，且距离大于1000");
+								aimangles[0] = 0.0;
+								aimangles[0] -= 0.020 * height;
+							}
+						}
+					}
+					// PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
 					TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
 					return Plugin_Changed;
+				}
+				else
+				{
+					// PrintToConsoleAll("[Ai-Tank]：找不到投石对象");
+					return Plugin_Continue;
 				}
 			}
 		}
@@ -490,6 +604,14 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 				buttons |= IN_ATTACK;
 				return Plugin_Changed;
 			}
+		}
+		if (bHasSight && DelayExpired(client, 4, TANKROCKAIMDELAY) && DelayExpired(client, 3, TANKROCKAIMTIME))
+		{
+			float aimangles[3] = {0.0};
+			int nearesttarget = GetNearestSurvivor(client);
+			ComputeAimAngles(client, nearesttarget, aimangles, AimChest);
+			TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+			return Plugin_Changed;
 		}
 	}
 	return Plugin_Continue;
@@ -735,4 +857,9 @@ bool IsPinned(int client)
 		if(GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0) bIsPinned = true;
 	}		
 	return bIsPinned;
+}
+
+bool traceFilter(int entity, int mask, int self)
+{
+	return entity != self;
 }
