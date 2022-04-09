@@ -589,15 +589,15 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 						aimangles[0] = 0.0;
 						aimangles[0] -= (dist * 0.0060);
 						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
-						if (flags != FL_ONGROUND)
+						if (flags == FL_ONGROUND)
 						{
-							if (height < 0.0)
+							if (height < 0.0 && height < -200.0)
 							{
 								// PrintToChatAll("克的位置位于生还下方，且距离小于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.060 * FloatAbs(height);
 							}
-							else if (height > 0.0)
+							else if (height > 0.0 && height > 200.0)
 							{
 								// PrintToChatAll("克的位置位于生还上方，且距离小于1000");
 								aimangles[0] = 0.0;
@@ -610,15 +610,15 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 						float times = dist / 1000.0;
 						aimangles[0] = 0.0;
 						aimangles[0] -= ((dist * 0.0060) + (2.35 * times));
-						if (flags != FL_JUMPING)
+						if (flags == FL_ONGROUND)
 						{
-							if (height < 0.0 && height < -120.0)
+							if (height < 0.0 && height < -200.0)
 							{
 								// PrintToChatAll("克的位置位于生还下方，且距离大于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.070 * FloatAbs(height);
 							}
-							else if (height > 0.0 && height > 120.0)
+							else if (height > 0.0 && height > 200.0)
 							{
 								// PrintToChatAll("克的位置位于生还上方，且距离大于1000");
 								aimangles[0] = 0.0;
