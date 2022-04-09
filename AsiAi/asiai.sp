@@ -626,7 +626,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							}
 						}
 					}
-					PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
+					// PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
 					TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
 					return Plugin_Changed;
 				}
