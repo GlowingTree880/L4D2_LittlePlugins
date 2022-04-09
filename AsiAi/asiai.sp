@@ -42,7 +42,7 @@
 #define HUNTERCOOLDOWNTIME 0.5
 // TANK
 #define TANKMELEESCANDELAY 0.0
-#define TANKROCKAIMTIME 3.0
+#define TANKROCKAIMTIME 2.5
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
 #define TANKTHROWHEIGHT 100.0
@@ -484,47 +484,83 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 		// 按了左键之后 0.25s 并在 0.25 + 10s内，锁定视野
 		if (DelayExpired(client, 4, TANKROCKAIMDELAY) && !DelayExpired(client, 3, TANKROCKAIMTIME))
 		{
+			Handle hTrace = INVALID_HANDLE;
+			int targetclient = 0, hittimes = 0, survivorcount = 0;
 			float selfpos[3] = {0.0}, targetpos[3] = {0.0}, aimangles[3] = {0.0};
 			GetClientAbsOrigin(client, selfpos);
 			selfpos[2] += TANKTHROWHEIGHT;
 			// 2022-4-8更新：判断目标有效，判断目标是否可见
-			int targetclient = 0, hittimes = 0, survivorcount = 0;
-			for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
+			for (int survivor = 1; survivor <= MaxClients; survivor++)
 			{
-				if (IsValidSurvivor(newtarget))
+				if (IsValidSurvivor(survivor))
 				{
 					survivorcount += 1;
-					GetClientAbsOrigin(newtarget, targetpos);
-					// 射线，坦克 z 高度 +115，作为石头出手高度
-					targetpos[2] += SURVIVORHEIGHT;
-					Handle hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, traceFilter, client);
-					if (!TR_DidHit(hTrace))
-					{
-						// 射线未撞击到物体，则跳出，找到可以被攻击的生还者
-						targetclient = newtarget;
-						if (IsValidSurvivor(targetclient))
-						{
-							GetClientAbsOrigin(targetclient, targetpos);
-							break;
-						}
-					}
-					else
-					{
-						int entity = TR_GetEntityIndex(hTrace);
-						char classname[64];
-						GetEntityClassname(entity, classname, sizeof(classname));
-						if (strcmp(classname, "player") != 0 && strcmp(classname, "env_physics_blocker") != 0 && strcmp(classname, "tank_rock") != 0)
-						{
-							hittimes += 1;
-						}
-					}
-					delete hTrace;
 				}
+			}
+			int firsttarget = GetNearestSurvivor(client);
+			if (IsValidSurvivor(firsttarget))
+			{
+				GetClientAbsOrigin(firsttarget, targetpos);
+				targetpos[2] += SURVIVORHEIGHT;
+				hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, traceFilter, client);
+				if (!TR_DidHit(hTrace))
+				{
+					targetclient = firsttarget;
+					GetClientAbsOrigin(targetclient, targetpos);
+					delete hTrace;
+					hTrace = INVALID_HANDLE;
+				}
+				else
+				{
+					int entity = 0;
+					char classname[64];
+					entity = TR_GetEntityIndex(hTrace);
+					GetEntityClassname(entity, classname, sizeof(classname));
+					if (strcmp(classname, "player") != 0 && strcmp(classname, "env_physics_blocker") != 0 && strcmp(classname, "tank_rock") != 0)
+					{
+						hittimes += 1;
+						for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
+						{
+							if (IsValidSurvivor(newtarget))
+							{
+								GetClientAbsOrigin(newtarget, targetpos);
+								// 射线，坦克 z 高度 +115，作为石头出手高度
+								targetpos[2] += SURVIVORHEIGHT;
+								hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, traceFilter, client);
+								if (!TR_DidHit(hTrace))
+								{
+									// 射线未撞击到物体，则跳出，找到可以被攻击的生还者
+									targetclient = newtarget;
+									if (IsValidSurvivor(targetclient))
+									{
+										GetClientAbsOrigin(targetclient, targetpos);
+										delete hTrace;
+										hTrace = INVALID_HANDLE;
+										break;
+									}
+								}
+								else
+								{
+									entity = TR_GetEntityIndex(hTrace);
+									GetEntityClassname(entity, classname, sizeof(classname));
+									if (strcmp(classname, "player") != 0 && strcmp(classname, "env_physics_blocker") != 0 && strcmp(classname, "tank_rock") != 0)
+									{
+										hittimes += 1;
+										delete hTrace;
+										hTrace = INVALID_HANDLE;
+									}
+								}
+							}
+						}
+					}
+				}
+				delete hTrace;
+				hTrace = INVALID_HANDLE;
 			}
 			// 撞击次数和生还者数相等，所有生还者皆在障碍后，取最近目标
 			if (hittimes == survivorcount)
 			{
-				PrintToConsoleAll("所有生还者均被遮挡");
+				PrintToConsoleAll("[Ai-Tank]：所有生还者均被遮挡");
 				int nearesttarget = GetNearestSurvivor(client);
 				ComputeAimAngles(client, nearesttarget, aimangles, AimEye);
 				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
@@ -551,9 +587,9 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 					else if ((dist / 1000) == 0)
 					{
 						aimangles[0] = 0.0;
-						aimangles[0] -= (dist * 0.0050);
+						aimangles[0] -= (dist * 0.0060);
 						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
-						if (flags != FL_JUMPING)
+						if (flags != FL_ONGROUND)
 						{
 							if (height < 0.0)
 							{
@@ -573,16 +609,16 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 					{
 						float times = dist / 1000.0;
 						aimangles[0] = 0.0;
-						aimangles[0] -= (dist * 0.0060) + (2.30 * times);
+						aimangles[0] -= ((dist * 0.0060) + (2.35 * times));
 						if (flags != FL_JUMPING)
 						{
-							if (height < 0.0)
+							if (height < 0.0 && height < -120.0)
 							{
 								// PrintToChatAll("克的位置位于生还下方，且距离大于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.070 * FloatAbs(height);
 							}
-							else if (height > 0.0)
+							else if (height > 0.0 && height > 120.0)
 							{
 								// PrintToChatAll("克的位置位于生还上方，且距离大于1000");
 								aimangles[0] = 0.0;
@@ -590,13 +626,13 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							}
 						}
 					}
-					// PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
+					PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
 					TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
 					return Plugin_Changed;
 				}
 				else
 				{
-					// PrintToConsoleAll("[Ai-Tank]：找不到投石对象");
+					PrintToConsoleAll("[Ai-Tank]：投石对象不是有效生还者");
 					return Plugin_Continue;
 				}
 			}
