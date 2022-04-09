@@ -469,7 +469,13 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 		{
 			tankspeed = GetConVarFloat(FindConVar("z_tank_speed"));
 		}
-		if (buttons & IN_ATTACK2)
+		int flags = GetEntityFlags(client);
+		if (flags == FL_JUMPING)
+		{
+			buttons &= ~IN_ATTACK2;
+			return Plugin_Changed;
+		}
+		else if (buttons & IN_ATTACK2)
 		{
 			DelayStart(client, 3);
 			DelayStart(client, 4);
@@ -518,6 +524,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			// 撞击次数和生还者数相等，所有生还者皆在障碍后，取最近目标
 			if (hittimes == survivorcount)
 			{
+				PrintToConsoleAll("所有生还者均被遮挡");
 				int nearesttarget = GetNearestSurvivor(client);
 				ComputeAimAngles(client, nearesttarget, aimangles, AimEye);
 				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
@@ -546,7 +553,6 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 						aimangles[0] = 0.0;
 						aimangles[0] -= (dist * 0.0050);
 						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
-						int flags = GetEntityFlags(client);
 						if (flags != FL_JUMPING)
 						{
 							if (height < 0.0)
@@ -568,7 +574,6 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 						float times = dist / 1000.0;
 						aimangles[0] = 0.0;
 						aimangles[0] -= (dist * 0.0060) + (2.30 * times);
-						int flags = GetEntityFlags(client);
 						if (flags != FL_JUMPING)
 						{
 							if (height < 0.0)
