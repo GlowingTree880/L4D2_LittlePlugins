@@ -12,6 +12,8 @@
 #define TEAM_INFECTED 3
 #define OBSTACLE_HEIGHT 18.0
 #define PLAYER_HEIGHT 72.0
+#define TANKAIMDELAY 0.25
+#define TANKAIMTIME 3.0
 // CommandAbot
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
@@ -53,17 +55,17 @@ public Plugin myinfo =
 ConVar g_hTankBhop, g_hTankThrow, g_hTankThrowDist, g_hTankTarget, g_hTankBhopSpeed, g_hTreeDetect, g_hTreeNewTarget, g_hTankAirAngles, g_hTankAttackRange, g_hTankConsumeFindPositionCount
 , g_hTankConsumeHeight, g_hTankConsumLimit, g_hTankConsumeNewPositionDistance, g_hTankConsumeRaidus, g_hTankAttackVomitedNum, g_hVomitCanInstantAttack, g_hVomitAttackInterval, g_hTeleportForwardPercent
 , g_hVsBossFlowBuffer, g_hTankConsumeLimitNum, g_hTankThrowForce, g_hTankConsume, g_hTankConsumeType, g_hTankBhopHitWllDistance, g_hTankRetreatAirAngles, g_hTankConsumeAction, g_hTankConsumeDamagePercent
-, g_hDebugMod;
+, g_hTankForceAttackDistance, g_hTankConsumeHealthLimit, g_hDebugMod;
 // Ints
 int g_iTankTarget, g_iTankThrowDist, g_iTreeDetect, g_iTreePlayer[MAXPLAYERS + 1] = -1, g_iTreeNewTarget, g_iTankConsumeFindPositionCount, g_iTankConsumeLimit, g_iTankConsumeChooseNewPositionDistance
 , g_iTankConsumeRaidus, g_iTankAttackVomitedNum, g_iVomitedPlayer = 0, g_iTeleportForwardPercent, g_iTankConsumeSurvivorProgress[MAXPLAYERS + 1] = 0
-, g_iTankConsumeNum, g_iTankConsumeLimitNum[MAXPLAYERS + 1] = 0, g_iTankConsumeType, g_iTankConsumeAction, g_iTankConsumeDamagePercent;
+, g_iTankConsumeNum, g_iTankConsumeLimitNum[MAXPLAYERS + 1] = 0, g_iTankConsumeType, g_iTankConsumeAction, g_iTankConsumeDamagePercent, g_iTankForceAttackDistance, g_iTankConsumeHealthLimit;
 // Bools
 bool g_bTankBhop, g_bTankThrow, g_bCanTankConsume[MAXPLAYERS + 1] = false, g_bInConsumePlace[MAXPLAYERS + 1] = false, g_bReturnConsumePlace[MAXPLAYERS + 1] = false, g_bCanTankAttack[MAXPLAYERS + 1] = true
 , g_bVomitCanInstantAttack, g_bVomitCanConsume[MAXPLAYERS + 1] = false, g_bTankConsume, g_bIsFirstConsumeCheck[MAXPLAYERS + 1] = true, g_bDebugMod;
 // Floats
 float g_fTankBhopSpeed, g_fTankAirAngles, g_fTankAttackRange, g_fTreePlayerOriginPos[3], g_fTankConsumeHeight, g_fConsumePosition[MAXPLAYERS + 1][3]
-, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles;
+, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles, g_fDelay[MAXPLAYERS + 1][8];
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -105,6 +107,9 @@ public void OnPluginStart()
 	g_hTankRetreatAirAngles = CreateConVar("ai_TankRetreatAirAngles", "75.0", "Tank在回避的连跳过程中视角与速度超过这个值将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeAction = CreateConVar("ai_TankConsumeAction", "2", "Tank在消耗范围内将会：1=冰冻，2=可活动但不允许超出消耗范围", FCVAR_NOTIFY, true, 1.0, true, 2.0);
 	g_hTankConsumeDamagePercent = CreateConVar("ai_TankConsumeDamagePercent", "50", "Tank在消耗过程中只会受到这个百分比的伤害", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+	// 2022-4-7新增
+	g_hTankForceAttackDistance = CreateConVar("ai_TankForceAttackDistance", "1000", "Tank在离最近生还这个距离时即使可以消耗也不会当着生还的面回避生还", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeHealthLimit = CreateConVar("ai_TankConsumeHealthLimit", "2500", "Tank在少于这么多血量时不会消耗", FCVAR_NOTIFY, true, 0.0);
 	// 调试输出
 	g_hDebugMod = CreateConVar("ai_TankDebugMod", "0", "是否开启调试输出", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	// 其他 Cvar
@@ -143,6 +148,8 @@ public void OnPluginStart()
 	g_hTankRetreatAirAngles.AddChangeHook(ConVarChanged_Cvars);
 	g_hTankConsumeAction.AddChangeHook(ConVarChanged_Cvars);
 	g_hTankConsumeDamagePercent.AddChangeHook(ConVarChanged_Cvars);
+	g_hTankForceAttackDistance.AddChangeHook(ConVarChanged_Cvars);
+	g_hTankConsumeHealthLimit.AddChangeHook(ConVarChanged_Cvars);
 	g_hDebugMod.AddChangeHook(ConVarChanged_Cvars);
 	// GetConVar
 	GetCvars();
@@ -231,6 +238,8 @@ void GetCvars()
 	g_fTankRetreatAirAngles = g_hTankRetreatAirAngles.FloatValue;
 	g_iTankConsumeAction = g_hTankConsumeAction.IntValue;
 	g_iTankConsumeDamagePercent = g_hTankConsumeDamagePercent.IntValue;
+	g_iTankForceAttackDistance = g_hTankForceAttackDistance.IntValue;
+	g_iTankConsumeHealthLimit = g_hTankConsumeHealthLimit.IntValue;
 	g_bDebugMod = g_hDebugMod.BoolValue;
 }
 
@@ -263,13 +272,18 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		{
 			buttons &= ~IN_ATTACK2;
 		}
+		if (buttons & IN_ATTACK2)
+		{
+			DelayStart(tank, 3);
+			DelayStart(tank, 4);
+		}
 		if (iTarget > 0)
 		{
 			// 连跳操作
 			if (g_bTankBhop)
 			{
-				// 有目标时，锁定视野
-				if (bHasSight)
+				// 有目标并且没有扔石头时，锁定视野
+				if (bHasSight && DelayExpired(tank, 4, TANKAIMDELAY) && DelayExpired(tank, 3, TANKAIMTIME))
 				{
 					float TargetAngles[3] = 0.0;
 					ComputeAimAngles(tank, iTarget, TargetAngles, AimChest);
@@ -335,53 +349,56 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		}
 		else
 		{
-			// 逃跑时，允许消耗且未在消耗位上，减少从消耗位里跳出来的概率
-			float fTankEyeAngles[3], fForwardVec[3];
-			GetClientEyeAngles(tank, fTankEyeAngles);
-			GetAngleVectors(fTankEyeAngles, fForwardVec, NULL_VECTOR, NULL_VECTOR);
-			NormalizeVector(fForwardVec, fForwardVec);
-			ScaleVector(fForwardVec, g_fTankBhopSpeed);
-			if (g_bCanTankConsume[tank] && !g_bInConsumePlace[tank])
+			if (!g_bInConsumePlace[tank])
 			{
-				if (g_bTankBhop)
+				// 逃跑时，前往消耗位的途中连跳，在消耗位时不允许连跳，减少从消耗位里跳出来的概率
+				float fTankEyeAngles[3], fForwardVec[3];
+				GetClientEyeAngles(tank, fTankEyeAngles);
+				GetAngleVectors(fTankEyeAngles, fForwardVec, NULL_VECTOR, NULL_VECTOR);
+				NormalizeVector(fForwardVec, fForwardVec);
+				ScaleVector(fForwardVec, g_fTankBhopSpeed);
+				if (g_bCanTankConsume[tank] && !g_bInConsumePlace[tank])
 				{
-					if (iFlags & FL_ONGROUND)
+					if (g_bTankBhop)
 					{
-						if (fCurrentSpeed > 190.0)
+						if (iFlags & FL_ONGROUND)
 						{
-							if (!BhopWillHitWall(tank, g_fTankBhopHitWallDistance))
+							if (fCurrentSpeed > 190.0)
 							{
-								buttons |= IN_JUMP;
-								buttons |= IN_DUCK;
-								if (DoBhop(tank, buttons, fForwardVec))
+								if (!BhopWillHitWall(tank, g_fTankBhopHitWallDistance))
 								{
-									return Plugin_Changed;
+									buttons |= IN_JUMP;
+									buttons |= IN_DUCK;
+									if (DoBhop(tank, buttons, fForwardVec))
+									{
+										return Plugin_Changed;
+									}
 								}
 							}
 						}
-					}
-					else if (iFlags == FL_JUMPING)
-					{
-						float fRetreatAnglePost[3];
-						GetVectorAngles(fSpeed, fAngles);
-						fRetreatAnglePost = fAngles;
-						fAngles[0] = fAngles[2] = 0.0;
-						GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
-						NormalizeVector(fAngles, fAngles);
-						static float fEyeAngles[3];
-						GetClientEyeAngles(tank, fEyeAngles);
-						fEyeAngles[0] = fEyeAngles[2] = 0.0;
-						GetAngleVectors(fEyeAngles, fEyeAngles, NULL_VECTOR, NULL_VECTOR);
-						NormalizeVector(fEyeAngles, fEyeAngles);
-						if (g_bDebugMod)
+						else if (iFlags == FL_JUMPING)
 						{
-							PrintToChatAll("\x05【提示】：无目标时速度与视角的角度：\x04%.2f", RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fEyeAngles))));
+							float fRetreatAnglePost[3];
+							GetVectorAngles(fSpeed, fAngles);
+							fRetreatAnglePost = fAngles;
+							fAngles[0] = fAngles[2] = 0.0;
+							GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
+							NormalizeVector(fAngles, fAngles);
+							static float fEyeAngles[3];
+							GetClientEyeAngles(tank, fEyeAngles);
+							fEyeAngles[0] = fEyeAngles[2] = 0.0;
+							GetAngleVectors(fEyeAngles, fEyeAngles, NULL_VECTOR, NULL_VECTOR);
+							NormalizeVector(fEyeAngles, fEyeAngles);
+							if (g_bDebugMod)
+							{
+								PrintToChatAll("\x05【提示】：无目标时速度与视角的角度：\x04%.2f", RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fEyeAngles))));
+							}
+							if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fEyeAngles))) < g_fTankRetreatAirAngles)
+							{
+								return Plugin_Continue;
+							}
+							TeleportEntity(tank, NULL_VECTOR, fRetreatAnglePost, fSpeed);
 						}
-						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fEyeAngles))) < g_fTankRetreatAirAngles)
-						{
-							return Plugin_Continue;
-						}
-						TeleportEntity(tank, NULL_VECTOR, fRetreatAnglePost, fSpeed);
 					}
 				}
 			}
@@ -390,6 +407,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 			{
 				if (iNearestTarget > 0)
 				{
+					PrintToChatAll("在消耗位上锁定视角");
 					float fNewTargetAngles[3] = 0.0;
 					ComputeAimAngles(tank, iNearestTarget, fNewTargetAngles, AimEye);
 					fNewTargetAngles[2] = 0.0;
@@ -511,7 +529,6 @@ void TankActionReset(int client)
 		g_fConsumePosition[client][0] = g_fConsumePosition[client][1] = g_fConsumePosition[client][2] = 0.0;
 		Logic_RunScript(COMMANDABOT_RESET, GetClientUserId(client));
 		g_bCanTankAttack[client] = true;
-		
 	}
 }
 
@@ -580,34 +597,38 @@ void DoConsume(int client)
 {
 	if (IsAiTank(client))
 	{
+		// 血量，距离限制，血量小于等于消耗限制血量且距离大于强制压制距离允许消耗
 		float fTankPos[3];
 		GetClientAbsOrigin(client, fTankPos);
 		int iNearestTarget = GetClosestSurvivor(fTankPos);
-		// 记录当前生还路程
-		int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
-		g_iTankConsumeSurvivorProgress[client] = iNowSurvivorPercent;
-		// 设置状态
-		g_bCanTankConsume[client] = true;
-		g_bCanTankAttack[client] = false;
-		// 找位
-		bool bHasFind;
-		for (int i = 0; i < g_iTankConsumeFindPositionCount; i++)
+		if (IsSurvivor(iNearestTarget) && GetClientHealth(client) <= g_iTankConsumeHealthLimit && GetSurvivorDistance(fTankPos, iNearestTarget) > g_iTankForceAttackDistance)
 		{
-			bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, g_iTankConsumeType, 50, g_fConsumePosition[client]);
-			// 如果找到的位置大于给定高度，跳出，否则随机找位
-			if (bHasFind)
+			// 记录当前生还路程
+			int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
+			g_iTankConsumeSurvivorProgress[client] = iNowSurvivorPercent;
+			// 设置状态
+			g_bCanTankConsume[client] = true;
+			g_bCanTankAttack[client] = false;
+			// 找位
+			bool bHasFind;
+			for (int i = 0; i < g_iTankConsumeFindPositionCount; i++)
 			{
-				if (g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
+				bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, g_iTankConsumeType, 50, g_fConsumePosition[client]);
+				// 如果找到的位置大于给定高度，跳出，否则随机找位
+				if (bHasFind)
 				{
-					break;
+					if (g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
+					{
+						break;
+					}
 				}
 			}
+			if (g_bDebugMod)
+			{
+				PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
+			}
+			Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
 		}
-		if (g_bDebugMod)
-		{
-			PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
-		}
-		Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
 	}
 }
 
@@ -864,6 +885,10 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	if (IsAiTank(client))
 	{
 		TankInitialization(client);
+		for (int index = 0; index < 8; index++)
+		{
+			g_fDelay[client][index] = GetGameTime();
+		}
 		SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 		if (g_bTankConsume)
 		{
@@ -1378,4 +1403,14 @@ float GetMaxSurvivorCompletion()
 		}
 	}
 	return (flow / L4D2Direct_GetMapMaxFlowDistance());
+}
+
+void DelayStart(int client, int number)
+{
+	g_fDelay[client][number] = GetGameTime();
+}
+
+bool DelayExpired(int client, int number, float delay)
+{
+	return view_as<bool>(GetGameTime() - g_fDelay[client][number] > delay);
 }
