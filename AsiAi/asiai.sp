@@ -23,7 +23,6 @@
 #define VEM_MAX 450.0
 #define MAXSURVIVORS 8
 #define SURVIVORHEIGHT 72.0
-#define FL_JUMPING 65922
 // SMOKER
 #define SMOKERMELEERANGE 300.0
 // JOCKEY
@@ -44,6 +43,7 @@
 #define TANKMELEESCANDELAY 0.0
 #define TANKROCKAIMTIME 3.5
 #define TANKAFTERTHROW 5.0
+#define TANKAFTERPUNCH 2.5
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
 #define TANKTHROWHEIGHT 100.0
@@ -167,6 +167,14 @@ void NextFrame_JumpRock(int tankclient)
 public void L4D_TankClaw_DoSwing_Pre(int tank, int claw)
 {
 	SetConVarString(FindConVar("z_tank_throw_force"), "500");
+}
+
+public void L4D_TankClaw_DoSwing_Post(int tank, int claw)
+{
+	if (IsInfectedBot(tank) && !IsGhost(tank) && GetZombieClass(tank) == ZC_TANK)
+	{
+		DelayStart(tank, 6);
+	}
 }
 
 // 修正玩家速度
@@ -472,19 +480,30 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			tankspeed = GetConVarFloat(FindConVar("z_tank_speed"));
 		}
 		int flags = GetEntityFlags(client);
-		if (flags == FL_JUMPING)
+		if (flags == 65922)
 		{
 			buttons &= ~IN_ATTACK2;
 			return Plugin_Changed;
 		}
-		else if (buttons & IN_ATTACK2)
+		if (buttons & IN_ATTACK2)
 		{
 			DelayStart(client, 3);
 			DelayStart(client, 4);
 			g_bTankDelay[client] = false;
 			SetConVarString(FindConVar("z_tank_throw_force"), "1000");
 		}
-		// 0.25 + 2.5s后，坦克可能继续锁定视角在扔石头位置，则继续锁定 5s 在最近生还身上
+		// 挥拳 +2.5s 后，如果是拍门，坦克可能继续锁定视角在拍门位置，则锁定视角 2.5s 在最近生还身上
+		if (!DelayExpired(client, 6, TANKAFTERPUNCH))
+		{
+			float aimangles[3] = {0.0};
+			int nearesttarget = GetNearestSurvivor(client);
+			if (IsValidSurvivor(nearesttarget))
+			{
+				ComputeAimAngles(client, nearesttarget, aimangles, AimChest);
+				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+			}
+		}
+		// 0.25 + 2.5s 后，坦克可能继续锁定视角在扔石头位置，则继续锁定 5s 在最近生还身上
 		if (DelayExpired(client, 3, TANKROCKAIMTIME) && !g_bTankDelay[client])
 		{
 			DelayStart(client, 5);
