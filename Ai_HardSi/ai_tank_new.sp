@@ -13,7 +13,7 @@
 #define OBSTACLE_HEIGHT 18.0
 #define PLAYER_HEIGHT 72.0
 #define TANKAIMDELAY 0.25
-#define TANKAIMTIME 3.0
+#define TANKAIMTIME 2.5
 // CommandAbot
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
@@ -601,7 +601,7 @@ void DoConsume(int client)
 		float fTankPos[3];
 		GetClientAbsOrigin(client, fTankPos);
 		int iNearestTarget = GetClosestSurvivor(fTankPos);
-		if (IsSurvivor(iNearestTarget) && GetClientHealth(client) <= g_iTankConsumeHealthLimit && GetSurvivorDistance(fTankPos, iNearestTarget) > g_iTankForceAttackDistance)
+		if (IsSurvivor(iNearestTarget) && GetClientHealth(client) >= g_iTankConsumeHealthLimit && GetSurvivorDistance(fTankPos, iNearestTarget) > g_iTankForceAttackDistance)
 		{
 			// 记录当前生还路程
 			int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
@@ -628,6 +628,10 @@ void DoConsume(int client)
 				PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
 			}
 			Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
+		}
+		else
+		{
+			PrintToConsoleAll("[Ai-Tank]：当前坦克不满足消耗条件");
 		}
 	}
 }

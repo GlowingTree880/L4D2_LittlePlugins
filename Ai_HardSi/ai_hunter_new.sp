@@ -319,7 +319,7 @@ public Action Hunter_OnPounce(int hunter)
 
 bool TracerayFilter(int impactEntity, int contentMask, int rayOriginEntity)
 {
-	return view_as<bool>(impactEntity != rayOriginEntity);
+	return view_as<bool>(impactEntity > MaxClients && impactEntity != rayOriginEntity);
 }
 
 void AngleLunge(int LungeEntity, float turnAngle)
