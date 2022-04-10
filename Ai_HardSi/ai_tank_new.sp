@@ -12,8 +12,6 @@
 #define TEAM_INFECTED 3
 #define OBSTACLE_HEIGHT 18.0
 #define PLAYER_HEIGHT 72.0
-#define TANKAIMDELAY 0.25
-#define TANKAIMTIME 2.5
 // CommandAbot
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
@@ -65,7 +63,7 @@ bool g_bTankBhop, g_bTankThrow, g_bCanTankConsume[MAXPLAYERS + 1] = false, g_bIn
 , g_bVomitCanInstantAttack, g_bVomitCanConsume[MAXPLAYERS + 1] = false, g_bTankConsume, g_bIsFirstConsumeCheck[MAXPLAYERS + 1] = true, g_bDebugMod;
 // Floats
 float g_fTankBhopSpeed, g_fTankAirAngles, g_fTankAttackRange, g_fTreePlayerOriginPos[3], g_fTankConsumeHeight, g_fConsumePosition[MAXPLAYERS + 1][3]
-, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles, g_fDelay[MAXPLAYERS + 1][8];
+, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -86,7 +84,7 @@ public void OnPluginStart()
 	g_hTankBhopSpeed = CreateConVar("ai_Tank_BhopSpeed", "80.0", "Tank连跳的速度", FCVAR_NOTIFY, true, 0.0);
 	g_hTankBhop = CreateConVar("ai_Tank_Bhop", "1", "是否开启Tank连跳功能：0=关闭，1=开启", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hTankThrow = CreateConVar("ai_Tank_Throw", "1", "是否允许Tank投掷石块：0=关闭，1=开启", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hTankThrowDist = CreateConVar("ai_Tank_ThrowDistance", "300", "Tank距离目标多近允许投掷石块", FCVAR_NOTIFY, true, 0.0);
+	g_hTankThrowDist = CreateConVar("ai_Tank_ThrowDistance", "2500", "Tank距离目标多近允许投掷石块", FCVAR_NOTIFY, true, 0.0);
 	g_hTankTarget = CreateConVar("ai_Tank_Target", "1", "Tank目标选择：1=最近，2=血量最少，3=血量最多", FCVAR_NOTIFY, true, 1.0, true, 3.0);
 	g_hTreeDetect = CreateConVar("ai_Tank_TreeDetect", "1", "生还者与Tank进行秦王绕柱时进行的操作：0=关闭此项，1=切换目标，2=将Tank传送至绕树的生还者后", FCVAR_NOTIFY, true, 0.0, true, 2.0);
 	g_hTreeNewTarget = CreateConVar("ai_Tank_TreeNewTargetDistance", "300", "Tank记录绕树生还者并选择新目标后，距离新目标多近重置绕树目标记录", FCVAR_NOTIFY, true, 0.0);
@@ -272,24 +270,11 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		{
 			buttons &= ~IN_ATTACK2;
 		}
-		if (buttons & IN_ATTACK2)
-		{
-			DelayStart(tank, 3);
-			DelayStart(tank, 4);
-		}
 		if (iTarget > 0)
 		{
 			// 连跳操作
 			if (g_bTankBhop)
 			{
-				// 有目标并且没有扔石头时，锁定视野
-				if (bHasSight && DelayExpired(tank, 4, TANKAIMDELAY) && DelayExpired(tank, 3, TANKAIMTIME))
-				{
-					float TargetAngles[3] = 0.0;
-					ComputeAimAngles(tank, iTarget, TargetAngles, AimChest);
-					TargetAngles[2] = 0.0;
-					TeleportEntity(tank, NULL_VECTOR, TargetAngles, NULL_VECTOR);
-				}
 				// 计算坦克与目标之间的距离
 				float fBuffer[3], fTargetPos[3];
 				GetClientAbsOrigin(iTarget, fTargetPos);
@@ -407,7 +392,6 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 			{
 				if (iNearestTarget > 0)
 				{
-					PrintToChatAll("在消耗位上锁定视角");
 					float fNewTargetAngles[3] = 0.0;
 					ComputeAimAngles(tank, iNearestTarget, fNewTargetAngles, AimEye);
 					fNewTargetAngles[2] = 0.0;
@@ -889,10 +873,6 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	if (IsAiTank(client))
 	{
 		TankInitialization(client);
-		for (int index = 0; index < 8; index++)
-		{
-			g_fDelay[client][index] = GetGameTime();
-		}
 		SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 		if (g_bTankConsume)
 		{
@@ -984,6 +964,9 @@ float UpdatePosition(int tank, int target, float fForce)
 	float fBuffer[3], fTankPos[3], fTargetPos[3];
 	GetClientAbsOrigin(tank, fTankPos);	GetClientAbsOrigin(target, fTargetPos);
 	SubtractVectors(fTargetPos, fTankPos, fBuffer);
+	FloatAbs(fBuffer[0]);
+	FloatAbs(fBuffer[1]);
+	fBuffer[2] = 0.0;
 	NormalizeVector(fBuffer, fBuffer);
 	ScaleVector(fBuffer, fForce);
 	return fBuffer;
@@ -1407,14 +1390,4 @@ float GetMaxSurvivorCompletion()
 		}
 	}
 	return (flow / L4D2Direct_GetMapMaxFlowDistance());
-}
-
-void DelayStart(int client, int number)
-{
-	g_fDelay[client][number] = GetGameTime();
-}
-
-bool DelayExpired(int client, int number, float delay)
-{
-	return view_as<bool>(GetGameTime() - g_fDelay[client][number] > delay);
 }
