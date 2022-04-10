@@ -42,7 +42,7 @@
 #define HUNTERCOOLDOWNTIME 0.5
 // TANK
 #define TANKMELEESCANDELAY 0.0
-#define TANKROCKAIMTIME 2.5
+#define TANKROCKAIMTIME 3.5
 #define TANKAFTERTHROW 5.0
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
@@ -636,7 +636,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							{
 								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离小于1000");
 								aimangles[0] = 0.0;
-								aimangles[0] += 0.050 * height;
+								aimangles[0] += 0.065 * height;
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
@@ -648,9 +648,9 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 					else
 					{
 						PrintToConsoleAll("[Ai-Tank]：克与最近生还者距离大于 1000，距离：%d，除以 1000：%d", dist, dist / 1000);
-						float times = dist / 1000.0;
+						int times = dist / 1000;
 						aimangles[0] = 0.0;
-						aimangles[0] -= ((dist * 0.0060) + (2.35 * times));
+						aimangles[0] -= ((dist * 0.0070) + (2.35 * times));
 						if (flags & FL_ONGROUND)
 						{
 							if (height < 0.0 && height < -100.0)
@@ -673,7 +673,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							else if (height > 0.0 && height < 100.0)
 							{
 								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
-								aimangles[0] += 0.090 * height;
+								aimangles[0] += 0.120 * height;
 							}
 						}
 					}
