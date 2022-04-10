@@ -43,6 +43,7 @@
 // TANK
 #define TANKMELEESCANDELAY 0.0
 #define TANKROCKAIMTIME 2.5
+#define TANKAFTERTHROW 5.0
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
 #define TANKTHROWHEIGHT 100.0
@@ -65,7 +66,7 @@ int g_iState[MAXPLAYERS + 1][8];
 // Floats
 float g_fPlayBackRate, g_fDelay[MAXPLAYERS + 1][8], g_fSiAttackTime, g_fMoveGrad[MAXPLAYERS + 1][3], g_fMoveSpeed[MAXPLAYERS + 1], g_fPos[MAXPLAYERS + 1][3];
 // Bools
-bool g_bAiEnable[MAXPLAYERS + 1];
+bool g_bAiEnable[MAXPLAYERS + 1], g_bTankDelay[MAXPLAYERS + 1] = false;
 
 public Plugin myinfo = 
 {
@@ -127,6 +128,7 @@ public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (IsInfectedBot(client) && IsPlayerAlive(client) && GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_TANK)
 	{
+		g_bTankDelay[client] = false;
 		SDKHook(client, SDKHook_PostThinkPost, UpdateThink);
 	}
 }
@@ -479,7 +481,24 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 		{
 			DelayStart(client, 3);
 			DelayStart(client, 4);
+			g_bTankDelay[client] = false;
 			SetConVarString(FindConVar("z_tank_throw_force"), "1000");
+		}
+		// 0.25 + 2.5s后，坦克可能继续锁定视角在扔石头位置，则继续锁定 5s 在最近生还身上
+		if (DelayExpired(client, 3, TANKROCKAIMTIME) && !g_bTankDelay[client])
+		{
+			DelayStart(client, 5);
+			g_bTankDelay[client] = true;
+		}
+		if (!DelayExpired(client, 5, TANKAFTERTHROW))
+		{
+			float aimangles[3] = {0.0};
+			int nearesttarget = GetNearestSurvivor(client);
+			if (IsValidSurvivor(nearesttarget))
+			{
+				ComputeAimAngles(client, nearesttarget, aimangles, AimChest);
+				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+			}
 		}
 		// 按了左键之后 0.25s 并在 0.25 + 10s内，锁定视野
 		if (DelayExpired(client, 4, TANKROCKAIMDELAY) && !DelayExpired(client, 3, TANKROCKAIMTIME))
@@ -560,10 +579,13 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			// 撞击次数和生还者数相等，所有生还者皆在障碍后，取最近目标
 			if (hittimes == survivorcount)
 			{
-				PrintToConsoleAll("[Ai-Tank]：所有生还者均被遮挡");
+				PrintToConsoleAll("[Ai-Tank]：所有生还者均被遮挡，锁定目标于最近生还者身上");
 				int nearesttarget = GetNearestSurvivor(client);
-				ComputeAimAngles(client, nearesttarget, aimangles, AimEye);
-				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+				if (IsValidSurvivor(nearesttarget))
+				{
+					ComputeAimAngles(client, nearesttarget, aimangles, AimChest);
+					TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
+				}
 				return Plugin_Changed;
 			}
 			else
@@ -571,6 +593,11 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 				// 撞击次数与生还者数不相等，能直视某个生还，则计算角度
 				float absdist[3] = {0.0};
 				GetClientAbsOrigin(client, selfpos);
+				if (targetclient == 0)
+				{
+					PrintToConsoleAll("[Ai-Tank]：所有生还均被遮挡，随机选取最近生还者");
+					targetclient = GetNearestSurvivor(client);
+				}
 				if (IsValidSurvivor(targetclient))
 				{
 					ComputeAimAngles(client, targetclient, aimangles, AimEye);
@@ -582,59 +609,77 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 					// 距离小于 300，则说明离生还较近，直接瞄准生还下部即可
 					if (dist <= 300)
 					{
+						PrintToConsoleAll("[Ai-Tank]：克与最近生还距离小于 300");
 						ComputeAimAngles(client, targetclient, aimangles, AimBody);
 						aimangles[0] += 20.0;
 					}
 					else if ((dist / 1000) == 0)
 					{
+						PrintToConsoleAll("[Ai-Tank]：克与最近生还者距离小于 1000，距离：%d，除以 1000：%d", dist, dist / 1000);
 						aimangles[0] = 0.0;
-						aimangles[0] -= (dist * 0.0060);
+						aimangles[0] -= (dist * 0.0065);
 						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
-						if (flags == FL_ONGROUND)
+						if (flags & FL_ONGROUND)
 						{
 							if (height < 0.0 && height < -100.0)
 							{
-								// PrintToChatAll("克的位置位于生还下方，且距离小于1000");
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，且距离小于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.060 * FloatAbs(height);
 							}
+							else if (height < 0.0 && height > -100.0)
+							{
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离小于1000", height);
+								aimangles[0] -= 0.045 * FloatAbs(height);
+							}
 							else if (height > 0.0 && height > 100.0)
 							{
-								// PrintToChatAll("克的位置位于生还上方，且距离小于1000");
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离小于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] += 0.050 * height;
+							}
+							else if (height > 0.0 && height < 100.0)
+							{
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离小于1000", height);
+								aimangles[0] += 0.080 * height;
 							}
 						}
 					}
 					else
 					{
+						PrintToConsoleAll("[Ai-Tank]：克与最近生还者距离大于 1000，距离：%d，除以 1000：%d", dist, dist / 1000);
 						float times = dist / 1000.0;
 						aimangles[0] = 0.0;
 						aimangles[0] -= ((dist * 0.0060) + (2.35 * times));
-						if (flags == FL_ONGROUND)
+						if (flags & FL_ONGROUND)
 						{
 							if (height < 0.0 && height < -100.0)
 							{
-								// PrintToChatAll("克的位置位于生还下方，且距离大于1000");
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，且距离大于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.070 * FloatAbs(height);
 							}
+							else if (height < 0.0 && height > -100.0)
+							{
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离大于1000", height);
+								aimangles[0] -= 0.060 * FloatAbs(height);
+							}
 							else if (height > 0.0 && height > 100.0)
 							{
-								// PrintToChatAll("克的位置位于生还上方，且距离大于1000");
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000");
 								aimangles[0] = 0.0;
 								aimangles[0] -= 0.020 * height;
 							}
+							else if (height > 0.0 && height < 100.0)
+							{
+								PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
+								aimangles[0] += 0.090 * height;
+							}
 						}
 					}
-					// PrintToChatAll("计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
+					PrintToConsoleAll("[Ai-Tank]：计算得出的角度：%.2f %.2f %.2f", aimangles[0], aimangles[1], aimangles[2]);
 					TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
 					return Plugin_Changed;
-				}
-				else
-				{
-					PrintToConsoleAll("[Ai-Tank]：投石对象不是有效生还者");
-					return Plugin_Continue;
 				}
 			}
 		}
