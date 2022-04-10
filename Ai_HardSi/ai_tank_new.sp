@@ -278,7 +278,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				// 计算坦克与目标之间的距离
 				float fBuffer[3], fTargetPos[3];
 				GetClientAbsOrigin(iTarget, fTargetPos);
-				fBuffer = UpdatePosition(tank, iTarget, g_fTankBhopSpeed);
+				fBuffer = UpdatePosition(tank, g_fTankBhopSpeed);
 				if (g_fTankAttackRange < iSurvivorDistance < 2000 && fCurrentSpeed > 190.0)
 				{
 					if (iFlags & FL_ONGROUND)
@@ -385,17 +385,6 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 							TeleportEntity(tank, NULL_VECTOR, fRetreatAnglePost, fSpeed);
 						}
 					}
-				}
-			}
-			// 不允许消耗时或允许消耗且在消耗位置时，锁定视野，不影响逃跑时的路线
-			if (g_bCanTankConsume[tank] && g_bInConsumePlace[tank])
-			{
-				if (iNearestTarget > 0)
-				{
-					float fNewTargetAngles[3] = 0.0;
-					ComputeAimAngles(tank, iNearestTarget, fNewTargetAngles, AimEye);
-					fNewTargetAngles[2] = 0.0;
-					TeleportEntity(tank, NULL_VECTOR, fNewTargetAngles, NULL_VECTOR);
 				}
 			}
 		}
@@ -825,8 +814,7 @@ bool BhopWillHitWall(int client, float fDistance)
 	GetClientEyePosition(client, fTankEyePos);
 	GetClientEyeAngles(client, fTankEyeAngles);
 	bool bHit = false;
-	Handle hTrace;
-	hTrace = TR_TraceRayFilterEx(fTankEyePos, fTankEyeAngles, MASK_SOLID, RayType_Infinite, traceFilter, client);
+	Handle hTrace = TR_TraceRayFilterEx(fTankEyePos, fTankEyeAngles, MASK_SOLID, RayType_Infinite, traceFilter, client);
 	if (TR_DidHit(hTrace))
 	{
 		float fHitPos[3], fCollisonDistance;
@@ -959,14 +947,17 @@ bool bHasLeftRoundPoint(float originPos[3], float nowPos[3], int radius)
 }
 
 // 计算加速后的向量
-float UpdatePosition(int tank, int target, float fForce)
+float UpdatePosition(int tank, float fForce)
 {
-	float fBuffer[3], fTankPos[3], fTargetPos[3];
-	GetClientAbsOrigin(tank, fTankPos);	GetClientAbsOrigin(target, fTargetPos);
-	SubtractVectors(fTargetPos, fTankPos, fBuffer);
-	FloatAbs(fBuffer[0]);
-	FloatAbs(fBuffer[1]);
-	fBuffer[2] = 0.0;
+	// float fBuffer[3], fTankPos[3], fTargetPos[3];
+	// GetClientAbsOrigin(tank, fTankPos);	GetClientAbsOrigin(target, fTargetPos);
+	// SubtractVectors(fTargetPos, fTankPos, fBuffer);
+	// FloatAbs(fBuffer[0]);
+	// FloatAbs(fBuffer[1]);
+	// fBuffer[2] = 0.0;
+	float fEyeAngles[3] = {0.0}, fBuffer[3] = {0.0};
+	GetClientEyeAngles(tank, fEyeAngles);
+	GetAngleVectors(fEyeAngles, fBuffer, NULL_VECTOR, NULL_VECTOR);
 	NormalizeVector(fBuffer, fBuffer);
 	ScaleVector(fBuffer, fForce);
 	return fBuffer;
