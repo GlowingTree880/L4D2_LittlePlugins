@@ -16,6 +16,7 @@
 #define NAV_MESH_HEIGHT 20.0
 #define PLAYER_HEIGHT 72.0
 #define PLAYER_CHEST 45.0
+#define INFECTED_COURCH_TIME 1.5
 
 // 插件基本信息，根据 GPL 许可证条款，需要修改插件请勿修改此信息！
 public Plugin myinfo = 
@@ -53,6 +54,15 @@ ArrayList aThreadHandle;
 	"jockey",
 	"charger"
 }; */
+
+enum VisibleType
+{
+	Visible_None = 0,
+	Cant_Visible,
+	Visible_Chest,
+	Visible_Eye,
+	Can_Visible,
+};
 
 public void OnPluginStart()
 {
@@ -400,7 +410,6 @@ void HardMode()
 		}
 	}
 	float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
-	// float fVisiblePos[3] = {0.0};
 	if (IsValidSurvivor(g_iTargetSurvivor))
 	{
 		// 根据指定生还者坐标，拓展刷新范围
@@ -418,7 +427,8 @@ void HardMode()
 		fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 		fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
 		// 找位条件，可视，是否在有效 NavMesh，是否卡住，否则先会判断是否在有效 Mesh 与是否卡住导致某些位置刷不出特感
-		while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
+		int iVisible = view_as<int>(IsPlayerVisibleTo(fSpawnPos));
+		while (iVisible == view_as<int>(Can_Visible) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
 		{
 			fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
 			fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
@@ -431,14 +441,12 @@ void HardMode()
 					TR_GetEndPosition(fEndPos);
 					fSpawnPos = fEndPos;
 					fSpawnPos[2] += NAV_MESH_HEIGHT;
-					// 如果不想刷新的那么阴间，比如 c5m2 台球桌后复活，可以增加 fVisiblePos，使用特感眼睛位置检测是否可见，否则只会使用离地面 + 20 高度的地方检测可见性
-					// fVisiblePos = fEndPos;
-					// fVisiblePos[2] += PLAYER_HEIGHT;
 					break;
 				}
 			}
 		}
-		if (!IsPlayerVisibleTo(fSpawnPos) && IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos))
+		// 完全不可见或只可见 67 眼部高度的射线，则令刷出的特感蹲下
+		if ((iVisible == view_as<int>(Visible_Eye) || iVisible == view_as<int>(Cant_Visible)) && IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos))
 		{
 			// 生还数量为 4，循环 4 次，检测此位置到生还的距离是否小于 750 是则刷特，此处可以刷新 1 ~ g_iSiLimit 只特感，如果此处刷完，则上面的 SpawnSpecial 将不再刷特
 			for (int count = 0; count < g_iSurvivorNum; count++)
@@ -452,6 +460,7 @@ void HardMode()
 					if (iZombieClass > 0)
 					{
 						int entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+						// 实体有效性
 						if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
 						{
 							if (g_iSpawnMaxCount > 0)
@@ -461,6 +470,11 @@ void HardMode()
 							if (g_hSpawnMax.IntValue < 100)
 							{
 								g_hSpawnMax.IntValue = 0;
+							}
+							if (iVisible == view_as<int>(Visible_Eye))
+							{
+								SetEntProp(entityindex, Prop_Send, "m_bDucked", 1);
+								SetEntProp(entityindex, Prop_Send, "m_fFlags", GetEntProp(entityindex, Prop_Send, "m_fFlags") | FL_DUCKING);
 							}
 						}
 					}
@@ -636,9 +650,14 @@ bool IsOnValidMesh(float fReferencePos[3])
 	}
 }	
 
-bool IsPlayerVisibleTo(float fSpawnPos[3])
+int IsPlayerVisibleTo(float fSpawnPos[3])
 {
-	bool bIsVisibleTo = false;
+	// 定义 fChestSpawnPos，令其 z 高度为 20，胸口位置，定义 fEyeSpawnPos，令其 z 高度为 67
+	float fChestSpawnPos[3] = {0.0}, fEyeSpawnPos[3] = {0.0};
+	CopyVectors(fSpawnPos, fChestSpawnPos);
+	CopyVectors(fSpawnPos, fEyeSpawnPos);
+	fChestSpawnPos[2] += 20.0;
+	fEyeSpawnPos[2] += 47.0;
 	for (int client = 1; client <= MaxClients; ++client)
 	{
 		if (IsValidSurvivor(client) && IsPlayerAlive(client))
@@ -646,16 +665,31 @@ bool IsPlayerVisibleTo(float fSpawnPos[3])
 			float fEyePos[3];
 			GetClientEyePosition(client, fEyePos);
 			Handle hTrace = TR_TraceRayFilterEx(fSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
-			if (!TR_DidHit(hTrace))
+			Handle hChestTrace = TR_TraceRayFilterEx(fChestSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
+			Handle hEyeTrace = TR_TraceRayFilterEx(fEyeSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
+			// 20 和 40 和 67 高度的射线都没撞到物体，一定可见，返回可见
+			if (!TR_DidHit(hTrace) && !TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
 			{
-				bIsVisibleTo = true;
-				delete hTrace;
-				break;
+				delete hTrace; delete hChestTrace; delete hEyeTrace;
+				return view_as<int>(Can_Visible);
 			}
-			delete hTrace;
+			// 67 高度的眼部射线可见，40 高度的胸部射线不可见 20 高度的射线也不可见，返回部分可见
+			else if (TR_DidHit(hTrace) && TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
+			{
+				delete hTrace; delete hChestTrace; delete hEyeTrace;
+				return view_as<int>(Visible_Eye);
+			}
+			// 20，67，40 高度的射线都不可见，返回不可见
+			else if (TR_DidHit(hTrace) && TR_DidHit(hChestTrace) && TR_DidHit(hEyeTrace))
+			{
+				delete hTrace; delete hChestTrace; delete hEyeTrace;
+				return view_as<int>(Cant_Visible);
+			}
+			// 用完一条射线，关闭一次句柄，防止内存泄漏
+			delete hTrace; delete hChestTrace; delete hEyeTrace;
 		}
 	}
-	return bIsVisibleTo;
+	return view_as<int>(Visible_None);
 }
 
 bool IsPlayerStuck(float fSpawnPos[3])
@@ -1183,4 +1217,11 @@ int IsBotTypeNeeded()
 int GetURandomIntRange(int min, int max)
 {
 	return (GetURandomInt() & (max - min + 1)) + min;
+}
+
+float CopyVectors(float origin[3], float result[3])
+{
+	result[0] = origin[0];
+	result[1] = origin[1];
+	result[2] = origin[2];
 }
