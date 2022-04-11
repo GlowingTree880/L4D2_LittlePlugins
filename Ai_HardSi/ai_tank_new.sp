@@ -67,6 +67,22 @@ bool g_bTankBhop, g_bTankThrow, g_bCanTankConsume[MAXPLAYERS + 1] = false, g_bIn
 float g_fTankBhopSpeed, g_fTankAirAngles, g_fTankAttackRange, g_fTreePlayerOriginPos[3], g_fTankConsumeHeight, g_fConsumePosition[MAXPLAYERS + 1][3]
 , g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles;
 
+enum PreferredSpecialDirection
+{
+	SPAWN_NO_PREFERENCE = -1,
+	SPAWN_ANYWHERE,
+	SPAWN_BEHIND_SURVIVORS,
+	SPAWN_NEAR_IT_VICTIM,
+	SPAWN_SPECIALS_IN_FRONT_OF_SURVIVORS,
+	SPAWN_SPECIALS_ANYWHERE,
+	SPAWN_FAR_AWAY_FRON_SURVIVORS,
+	SPAWN_ABOVE_SURVIVORS,
+	SPAWN_IN_FRONT_OF_SURVIVORS,
+	SPAWN_VERSUS_FINALE_DISTANCE,
+	SPAWN_LARGE_VOLUME,
+	SPAWN_NEAR_POSITION
+};
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	EngineVersion Engine = GetEngineVersion();
@@ -102,7 +118,7 @@ public void OnPluginStart()
 	g_hVomitAttackInterval = CreateConVar("ai_Tank_VomitAttackInterval", "20.0", "从开始被喷且Tank允许攻击时开始，这个时间内Tank允许攻击", FCVAR_NOTIFY, true, 0.0);
 	g_hTeleportForwardPercent = CreateConVar("ai_Tank_TeleportForwardPercent", "10", "Tank开始消耗时，记录此时生还者行进距离x，生还者前压超过x + 这个值时，Tank会传送至生还者处进行压制", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "2", "Tank最多进行消耗的次数（这个值 * 50）", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "3", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank");
+	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "3", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank", FCVAR_NOTIFY, true, 1.0, true, 8.0);
 	g_hTankBhopHitWllDistance = CreateConVar("ai_TankBhopHitWallDistance", "150.0", "Tank视角前这个距离内有障碍物，Tank将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankRetreatAirAngles = CreateConVar("ai_TankRetreatAirAngles", "75.0", "Tank在回避的连跳过程中视角与速度超过这个值将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeAction = CreateConVar("ai_TankConsumeAction", "2", "Tank在消耗范围内将会：1=冰冻，2=可活动但不允许超出消耗范围", FCVAR_NOTIFY, true, 1.0, true, 2.0);
@@ -522,7 +538,8 @@ void TankActionReset(int client)
 {
 	if (g_bCanTankConsume[client] && !g_bCanTankAttack[client])
 	{
-		Logic_RunScript(CHANGE_SPAWN_DIRECTION, 4);
+		// 更改为 SPAWN_ANYWHERE
+		Logic_RunScript(CHANGE_SPAWN_DIRECTION, SPAWN_ANYWHERE);
 		if (g_iTankConsumeAction == 1)
 		{
 			SetEntityMoveType(client, MOVETYPE_CUSTOM);
@@ -600,8 +617,8 @@ void DoConsume(int client)
 {
 	if (IsAiTank(client))
 	{
-		// 更改特感 PreferredSpecialDirection 为 SPAWN_ABOVE_SURVIVORS
-		Logic_RunScript(CHANGE_SPAWN_DIRECTION, 6);
+		// 更改特感 PreferredSpecialDirection 为 SPAWN_IN_FRONT_OF_SURVIVORS
+		Logic_RunScript(CHANGE_SPAWN_DIRECTION, SPAWN_IN_FRONT_OF_SURVIVORS);
 		// 血量，距离限制，血量小于等于消耗限制血量且距离大于强制压制距离允许消耗
 		float fTankPos[3];
 		GetClientAbsOrigin(client, fTankPos);
@@ -627,7 +644,12 @@ void DoConsume(int client)
 						break;
 					}
 				}
+				else
+				{
+					PrintToConsoleAll("[Ai-Tank]：当前克找位失败，尝试：%d 次", i + 1);
+				}
 			}
+			PrintToConsoleAll("[Ai-Tank]：当前克消耗找位成功：%.2f，%.2f，%.2f", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
 			if (g_bDebugMod)
 			{
 				PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
