@@ -10,6 +10,7 @@
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
 // 特感种类
+#define ZC_HUNTER 3
 #define ZC_SPITTER 4
 #define ZC_TANK 8
 // 数据
@@ -32,7 +33,7 @@ public Plugin myinfo =
 ConVar g_hSpawnDistanceMin, g_hSpawnDistanceMax, g_hTeleportSi, g_hTeleportDistance, g_hSiLimit, g_hSiInterval, g_hMaxPlayerZombies, g_hSbEscort, g_hSpawnMax, g_hEnableWaveSpawn, g_hWaveSpawnFrame, g_hSpawnMode;
 // Ints
 int g_iSiLimit, g_iSbEscort, iUnRechedLimitCount = 0, g_iWaveSpawnFrame, g_iSpawnMode,
-g_iTeleCount[MAXPLAYERS + 1] = {0}, g_iTargetSurvivor = -1, g_iSpawnMaxCount = 0, g_iSurvivorNum = 0, g_iSurvivors[MAXPLAYERS + 1] = {0};
+g_iTeleCount[MAXPLAYERS + 1] = {0}, g_iTargetSurvivor = -1, g_iSpawnMaxCount = 0, g_iSurvivorNum = 0, g_iSurvivors[MAXPLAYERS + 1] = {0}, g_iWaveCount = 0;
 // ArraySpecial[6] = {0};
 // Floats
 float g_fSpawnDistanceMin, g_fSpawnDistanceMax, g_fTeleportDistance, g_fSiInterval;
@@ -44,16 +45,28 @@ Handle g_hTeleHandle = INVALID_HANDLE;
 // ArrayList
 ArrayList aThreadHandle;
 
-/* static char InfectedName[7][] =
+stock const char InfectedName[10][] =
 {
-	"none",
+	"common",
 	"smoker",
 	"boomer",
 	"hunter",
 	"spitter",
 	"jockey",
-	"charger"
-}; */
+	"charger",
+	"witch",
+	"tank",
+	"survivor"
+};
+
+stock const char VisibleName[5][] =
+{
+	"无效可见性",
+	"完全不可见",
+	"可见至胸部",
+	"可见至眼部",
+	"完全可见"
+};
 
 enum VisibleType
 {
@@ -166,6 +179,7 @@ public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	}
 	g_bIsLate = false;
 	g_iSpawnMaxCount = 0;
+	g_iWaveCount = 0;
 	for (int hTimerHandle = aThreadHandle.Length - 1; hTimerHandle >= 0; hTimerHandle--)
 	{
 		KillTimer(aThreadHandle.Get(hTimerHandle));
@@ -201,6 +215,7 @@ public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 	{
 		if (GetEntProp(client, Prop_Send, "m_zombieClass") != ZC_SPITTER)
 		{
+			PrintToConsoleAll("[Infected-Spawn]：踢出特感：%N", client);
 			CreateTimer(0.5, Timer_KickBot, client);
 		}
 	}
@@ -271,6 +286,10 @@ public void OnGameFrame()
 											{
 												g_iSpawnMaxCount -= 1;
 											}
+										}
+										else if (g_iSpawnMaxCount <= 0)
+										{
+											g_iSpawnMaxCount = 0;
 										}
 									}
 								}
@@ -427,7 +446,7 @@ void HardMode()
 		fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 		fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
 		// 找位条件，可视，是否在有效 NavMesh，是否卡住，否则先会判断是否在有效 Mesh 与是否卡住导致某些位置刷不出特感
-		int iVisible = view_as<int>(IsPlayerVisibleTo(fSpawnPos));
+		int iVisible = IsPlayerVisibleTo(fSpawnPos);
 		while (iVisible == view_as<int>(Can_Visible) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
 		{
 			fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
@@ -446,7 +465,8 @@ void HardMode()
 			}
 		}
 		// 完全不可见或只可见 67 眼部高度的射线，则令刷出的特感蹲下
-		if ((iVisible == view_as<int>(Visible_Eye) || iVisible == view_as<int>(Cant_Visible)) && IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos))
+		iVisible = IsPlayerVisibleTo(fSpawnPos);
+		if ((iVisible == view_as<int>(Cant_Visible) || iVisible == view_as<int>(Visible_Eye) || iVisible == view_as<int>(Visible_Chest)) && IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos))
 		{
 			// 生还数量为 4，循环 4 次，检测此位置到生还的距离是否小于 750 是则刷特，此处可以刷新 1 ~ g_iSiLimit 只特感，如果此处刷完，则上面的 SpawnSpecial 将不再刷特
 			for (int count = 0; count < g_iSurvivorNum; count++)
@@ -456,27 +476,40 @@ void HardMode()
 				fSurvivorPos[2] -= 60.0;
 				if (L4D2_VScriptWrapper_NavAreaBuildPath(fSpawnPos, fSurvivorPos, g_fSpawnDistanceMax + 250.0, false, false, TEAM_INFECTED, false) && GetVectorDistance(fSurvivorPos, fSpawnPos) > g_fSpawnDistanceMin)
 				{
-					int iZombieClass = IsBotTypeNeeded();
-					if (iZombieClass > 0)
+					char classname[16];
+					int iZombieClass = IsBotTypeNeeded(), entityindex = -1;
+					if (iVisible == view_as<int>(Visible_Chest))
 					{
-						int entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
-						// 实体有效性
-						if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+						if (!HasReachedLimit(ZC_HUNTER))
 						{
-							if (g_iSpawnMaxCount > 0)
-							{
-								g_iSpawnMaxCount -= 1;
-							}
-							if (g_hSpawnMax.IntValue < 100)
-							{
-								g_hSpawnMax.IntValue = 0;
-							}
-							if (iVisible == view_as<int>(Visible_Eye))
-							{
-								SetEntProp(entityindex, Prop_Send, "m_bDucked", 1);
-								SetEntProp(entityindex, Prop_Send, "m_fFlags", GetEntProp(entityindex, Prop_Send, "m_fFlags") | FL_DUCKING);
-							}
+							entityindex = L4D2_SpawnSpecial(ZC_HUNTER, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+							GetEntityNetClass(entityindex, classname, sizeof(classname));
 						}
+					}
+					else if (iVisible != view_as<int>(Visible_Chest) && iZombieClass > 0)
+					{
+						if (!HasReachedLimit(iZombieClass))
+						{
+							entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+							GetEntityNetClass(entityindex, classname, sizeof(classname));
+						}
+					}
+					if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+					{
+						if (g_iSpawnMaxCount > 0)
+						{
+							g_iSpawnMaxCount -= 1;
+						}
+						else if (g_iSpawnMaxCount <= 0)
+						{
+							g_iSpawnMaxCount = 0;
+						}
+						if (g_hSpawnMax.IntValue < 100)
+						{
+							g_hSpawnMax.IntValue = 0;
+						}
+						PrintToConsoleAll("[Infected-Spawn]：当前位置可见性：%s，刷新特感：%s，位置：%.2f，%.2f，%.2f，剩余刷新特感数量：%d"
+						, VisibleName[iVisible], classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2], g_iSpawnMaxCount);
 					}
 				}
 			}
@@ -579,15 +612,15 @@ public Action SpawnNewInfected(Handle timer)
 		g_hSpawnMax.IntValue = 0;
 		g_hSpawnDistanceMax.FloatValue = 500.0;
 		g_iSpawnMaxCount += 1;
-		// 当一定时间内刷不出特感，触发时钟使 g_iSpawnMaxCount 超过 g_iSiLimit 值时，最多允许刷出 g_iSiLimit + 2 只特感，防止连续刷 2-3 波的情况
-		if (g_iSiLimit < g_iSpawnMaxCount)
+		// 当一定时间内刷不出特感，触发时钟使 g_iSpawnMaxCount 超过 g_iSiLimit 值时，使 g_iSpawnMaxCount = g_iSiLimit 不多刷
+		if (g_iSpawnMaxCount > g_iSiLimit)
 		{
-			int iNewInfectedLimit = g_iSiLimit + 2;
-			if (g_iSpawnMaxCount > iNewInfectedLimit)
-			{
-				g_iSpawnMaxCount = iNewInfectedLimit;
-			}
+			g_iSpawnMaxCount = g_iSiLimit;
 			g_hSbEscort.IntValue =  1;
+		}
+		else if (g_iSpawnMaxCount == g_iSiLimit)
+		{
+			PrintToConsoleAll("[Infected-Spawn]：开始第：%d 波特感刷新", g_iWaveCount += 1);
 		}
 	}
 	return Plugin_Continue;
@@ -652,7 +685,8 @@ bool IsOnValidMesh(float fReferencePos[3])
 
 int IsPlayerVisibleTo(float fSpawnPos[3])
 {
-	// 定义 fChestSpawnPos，令其 z 高度为 20，胸口位置，定义 fEyeSpawnPos，令其 z 高度为 67
+	int iVisible = view_as<int>(Visible_None);	bool bVisible = false;
+	// 定义 fChestSpawnPos，令其 z 高度为 40，胸口位置，定义 fEyeSpawnPos，令其 z 高度为 67
 	float fChestSpawnPos[3] = {0.0}, fEyeSpawnPos[3] = {0.0};
 	CopyVectors(fSpawnPos, fChestSpawnPos);
 	CopyVectors(fSpawnPos, fEyeSpawnPos);
@@ -660,36 +694,42 @@ int IsPlayerVisibleTo(float fSpawnPos[3])
 	fEyeSpawnPos[2] += 47.0;
 	for (int client = 1; client <= MaxClients; ++client)
 	{
-		if (IsValidSurvivor(client) && IsPlayerAlive(client))
+		if (IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client))
 		{
-			float fEyePos[3];
+			float fEyePos[3] = {0.0};
 			GetClientEyePosition(client, fEyePos);
-			Handle hTrace = TR_TraceRayFilterEx(fSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
-			Handle hChestTrace = TR_TraceRayFilterEx(fChestSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
-			Handle hEyeTrace = TR_TraceRayFilterEx(fEyeSpawnPos, fEyePos, MASK_VISIBLE_AND_NPCS, RayType_EndPoint, TraceFilter, client);
-			// 20 和 40 和 67 高度的射线都没撞到物体，一定可见，返回可见
-			if (!TR_DidHit(hTrace) && !TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
+			Handle hTrace = TR_TraceRayFilterEx(fSpawnPos, fEyePos, MASK_SHOT, RayType_EndPoint, TraceFilter, client);
+			Handle hChestTrace = TR_TraceRayFilterEx(fChestSpawnPos, fEyePos, MASK_SHOT, RayType_EndPoint, TraceFilter, client);
+			Handle hEyeTrace = TR_TraceRayFilterEx(fEyeSpawnPos, fEyePos, MASK_SHOT, RayType_EndPoint, TraceFilter, client);
+			if (TR_DidHit(hTrace) && TR_DidHit(hChestTrace) && TR_DidHit(hEyeTrace))
 			{
+				iVisible = view_as<int>(Cant_Visible);
 				delete hTrace; delete hChestTrace; delete hEyeTrace;
-				return view_as<int>(Can_Visible);
 			}
-			// 67 高度的眼部射线可见，40 高度的胸部射线不可见 20 高度的射线也不可见，返回部分可见
 			else if (TR_DidHit(hTrace) && TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
 			{
+				iVisible = view_as<int>(Visible_Eye);
 				delete hTrace; delete hChestTrace; delete hEyeTrace;
-				return view_as<int>(Visible_Eye);
 			}
-			// 20，67，40 高度的射线都不可见，返回不可见
-			else if (TR_DidHit(hTrace) && TR_DidHit(hChestTrace) && TR_DidHit(hEyeTrace))
+			else if (TR_DidHit(hTrace) && !TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
 			{
+				iVisible = view_as<int>(Visible_Chest);
 				delete hTrace; delete hChestTrace; delete hEyeTrace;
-				return view_as<int>(Cant_Visible);
 			}
-			// 用完一条射线，关闭一次句柄，防止内存泄漏
+			else if (!TR_DidHit(hTrace) && !TR_DidHit(hChestTrace) && !TR_DidHit(hEyeTrace))
+			{
+				bVisible = true;
+				iVisible = view_as<int>(Can_Visible);
+				delete hTrace; delete hChestTrace; delete hEyeTrace;
+			}
 			delete hTrace; delete hChestTrace; delete hEyeTrace;
 		}
 	}
-	return view_as<int>(Visible_None);
+	if (bVisible)
+	{
+		iVisible = view_as<int>(Can_Visible);
+	}
+	return iVisible;
 }
 
 bool IsPlayerStuck(float fSpawnPos[3])
@@ -709,17 +749,20 @@ bool IsPlayerStuck(float fSpawnPos[3])
 
 bool TraceFilter(int entity, int contentsMask)
 {
-	if (entity || entity <= MaxClients || !IsValidEntity(entity))
+	if (entity <= MaxClients)
 	{
 		return false;
 	}
 	else
 	{
-		static char sClassName[9];
-		GetEntityClassname(entity, sClassName, sizeof(sClassName));
-		if (strcmp(sClassName, "infected") == 0 || strcmp(sClassName, "witch") == 0 || strcmp(sClassName, "prop_physics") == 0)
+		static char classname[9];
+		GetEntityClassname(entity, classname, sizeof(classname));
+		if (classname[0] == 'i' || classname[0] == 'w' || classname[0] == 'p')
 		{
-			return false;
+			if (strcmp(classname, "infected") == 0 || strcmp(classname, "witch") == 0 || strcmp(classname, "prop_physics") == 0)
+			{
+				return false;
+			}
 		}
 	}
 	return true;
@@ -980,6 +1023,28 @@ int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 	}
 	return iCount;
 } */
+
+// 当前某种特感数量是否达到 Convar 值限制
+bool HasReachedLimit(int zombieclass)
+{
+	int count = 0;	char convar[16] = '\0';
+	for (int infected = 1; infected <= MaxClients; infected++)
+	{
+		if (IsClientConnected(infected) && IsClientInGame(infected) && GetEntProp(infected, Prop_Send, "m_zombieClass") == zombieclass)
+		{
+			count += 1;
+		}
+	}
+	FormatEx(convar, sizeof(convar), "z_%s_limit", InfectedName[zombieclass]);
+	if (count == GetConVarInt(FindConVar(convar)))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
 
 // 传送落后特感
 public void SDK_UpdateThink(int client)
