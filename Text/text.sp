@@ -7,14 +7,14 @@
 #include <left4dhooks>
 #include <colors>
 
-#define PLUGIN_DATE "2022-3-3"
+#define PLUGIN_DATE "2022-4-11"
 
 // ConVars
-ConVar g_hInfectedTime, g_hInfectedLimit, g_hTankBhop, g_hSpawnMode, g_hWeapon, g_hCvarCoop;
+ConVar g_hInfectedTime, g_hInfectedLimit, g_hTankBhop, g_hSpawnMode, g_hWeapon, g_hCvarCoop, g_hTankConsume;
 // Ints
 int g_iInfectedTime, g_iInfectedLimit, g_iSpawnMode, g_iMaxPlayers, g_iRoundCount = 1;
 // Bools
-bool g_bTankBhop, g_bWeapon, g_bCvarCoop;
+bool g_bTankBhop, g_bWeapon, g_bCvarCoop, g_bTankConsume;
 // Chars
 char currentmap[8], previousmap[8];
 
@@ -33,6 +33,7 @@ public void OnPluginStart()
 	g_hInfectedLimit = FindConVar("l4d_infected_limit");
 	g_hTankBhop = FindConVar("ai_Tank_Bhop");
 	g_hSpawnMode = FindConVar("inf_SpawnMode");
+	g_hTankConsume = FindConVar("ai_TankConsume");
 	// CreateConVar
 	g_hWeapon = CreateConVar("ZonemodWeapon", "0", "是否使用Zonemod武器参数", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hCvarCoop = CreateConVar("coopmode", "0", "游戏模式设定", FCVAR_NOTIFY, true, 0.0, true, 1.0);
@@ -54,6 +55,7 @@ public void OnPluginStart()
 	g_hWeapon.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarCoop.AddChangeHook(ConVarChanged_Cvars);
 	g_hSpawnMode.AddChangeHook(ConVarChanged_Cvars);
+	g_hTankConsume.AddChangeHook(ConVarChanged_Cvars);
 	// GetCvars
 	GetCvars();
 }
@@ -74,6 +76,7 @@ void GetCvars()
 	g_bWeapon = g_hWeapon.BoolValue;
 	g_bCvarCoop = g_hCvarCoop.BoolValue;
 	g_iSpawnMode = g_hSpawnMode.IntValue;
+	g_bTankConsume = g_hTankConsume.BoolValue;
 }
 
 // *********************
@@ -169,11 +172,11 @@ void PrintStatus(int client = -1)
 	{
 		case 1:
 		{
-			spawnmode = "阳间";
+			spawnmode = "简单";
 		}
 		case 2:
 		{
-			spawnmode = "阴间";
+			spawnmode = "正常";
 		}
 		case 3:
 		{
@@ -182,51 +185,51 @@ void PrintStatus(int client = -1)
 	}
 	if (client == -1)
 	{
-		if (g_bTankBhop)
+		if (g_bTankConsume)
 		{
 			if (g_bWeapon)
 			{
-				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank消耗{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 			else
 			{
-				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank消耗{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 		}
 		else
 		{
 			if (g_bWeapon)
 			{
-				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank消耗{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 			else
 			{
-				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChatAll("{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank消耗{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 		}
 	}
 	else
 	{
-		if (g_bTankBhop)
+		if (g_bTankConsume)
 		{
 			if (g_bWeapon)
 			{
-				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank消耗{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 			else
 			{
-				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank消耗{G}[{O}开启{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 		}
 		else
 		{
 			if (g_bWeapon)
 			{
-				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Zone{G}] {LG}Tank消耗{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 			else
 			{
-				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank连跳{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
+				CPrintToChat(client, "{LG}回合{G}[{O}%d{G}] {LG}武器{G}[{O}Anne{G}] {LG}Tank消耗{G}[{O}关闭{G}] {LG}特感{G}[{O}%s%d特%d秒{G}] {LG}插件{G}[{O}%s{G}]", g_iRoundCount, spawnmode, g_iInfectedLimit, g_iInfectedTime, PLUGIN_DATE);
 			}
 		}
 	}
