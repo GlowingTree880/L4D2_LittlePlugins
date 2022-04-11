@@ -108,7 +108,7 @@ public void OnPluginStart()
 	g_hTreeNewTarget = CreateConVar("ai_Tank_TreeNewTargetDistance", "300", "Tank记录绕树生还者并选择新目标后，距离新目标多近重置绕树目标记录", FCVAR_NOTIFY, true, 0.0);
 	g_hTankAirAngles = CreateConVar("ai_TankAirAngles", "60.0", "Tank在空中的速度向量与到生还者的方向向量夹角大于这个值停止连跳", FCVAR_NOTIFY, true, 0.0, true, 90.0);
 	g_hTankConsume = CreateConVar("ai_TankConsume", "1", "是否开启Tank消耗功能", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hTankConsumeFindPositionCount = CreateConVar("ai_Tank_ConsumeFindPositionCount", "10", "Tank进行消耗时的找位次数", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeFindPositionCount = CreateConVar("ai_Tank_ConsumeFindPositionCount", "10", "Tank进行消耗时的找位次数（这个值 * 50 次）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeHeight = CreateConVar("ai_Tank_ConsumeHeight", "100", "Tank进行消耗时将会优先选择高于这个高度的位置，如无则随机选位", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumLimit = CreateConVar("ai_Tank_ConsumeLimit", "2", "感染者团队少于多少特感时，Tank会进行消耗", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeNewPositionDistance = CreateConVar("ai_Tank_ConsumeChooseNewPositionDistance", "150", "当Tank进入消耗位置时生还者距离Tank多近它会选择新的消耗位置", FCVAR_NOTIFY, true, 0.0);
@@ -117,7 +117,7 @@ public void OnPluginStart()
 	g_hVomitCanInstantAttack = CreateConVar("ai_Tank_VomitCanInstantAttack", "1", "是否开启固定数量生还者被喷吐后Tank立刻攻击", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hVomitAttackInterval = CreateConVar("ai_Tank_VomitAttackInterval", "20.0", "从开始被喷且Tank允许攻击时开始，这个时间内Tank允许攻击", FCVAR_NOTIFY, true, 0.0);
 	g_hTeleportForwardPercent = CreateConVar("ai_Tank_TeleportForwardPercent", "10", "Tank开始消耗时，记录此时生还者行进距离x，生还者前压超过x + 这个值时，Tank会传送至生还者处进行压制", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "2", "Tank最多进行消耗的次数（这个值 * 50）", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "5", "Tank最多进行消耗的次数（找到一次消耗位并抵达消耗位算 1 次消耗）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "3", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank", FCVAR_NOTIFY, true, 1.0, true, 8.0);
 	g_hTankBhopHitWllDistance = CreateConVar("ai_TankBhopHitWallDistance", "150.0", "Tank视角前这个距离内有障碍物，Tank将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankRetreatAirAngles = CreateConVar("ai_TankRetreatAirAngles", "75.0", "Tank在回避的连跳过程中视角与速度超过这个值将会停止连跳", FCVAR_NOTIFY, true, 0.0);
