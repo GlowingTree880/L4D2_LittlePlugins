@@ -356,8 +356,10 @@ void EasyMode()
 	int iZombieClass = IsBotTypeNeeded();
 	if (IsValidSurvivor(g_iTargetSurvivor) && iZombieClass > 0)
 	{
+		char classname[16] = '\0';
 		L4D_GetRandomPZSpawnPosition(g_iTargetSurvivor, iZombieClass, 1, fSpawnPos);
-		if (!IsPlayerVisibleTo(fSpawnPos))
+		int iVisible = IsPlayerVisibleTo(fSpawnPos), entityindex = -1;
+		if (iVisible == view_as<int>(Cant_Visible) || iVisible == view_as<int>(Visible_Chest))
 		{
 			GetClientAbsOrigin(g_iTargetSurvivor, fSurvivorPos);
 			// 当生还者不在有效的 Nav Area 时，也允许刷特感，只需计算距离
@@ -365,36 +367,31 @@ void EasyMode()
 			{
 				if (200 < GetSurvivorDistance(fSpawnPos) < RoundToNearest(fSpawnDistanceMax))
 				{
-					int entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
-					if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
-					{
-						if (g_iSpawnMaxCount > 0)
-						{
-							g_iSpawnMaxCount -= 1;
-						}
-						if (g_hSpawnMax.IntValue < 100)
-						{
-							g_hSpawnMax.IntValue = 0;
-						}
-					}
+					entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
 				}
 			}
 			// 当生还者在有效 Nav Area 时，则需计算两块 Nav Area 之间的可达距离
 			fDistance = L4D2_NavAreaTravelDistance(fSpawnPos, fSurvivorPos, false);
 			if (250.0 < fDistance < fSpawnDistanceMax + 500.0)
 			{
-				int entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
-				if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+				entityindex = L4D2_SpawnSpecial(iZombieClass, fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+			}
+			if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+			{
+				if (g_iSpawnMaxCount > 0)
 				{
-					if (g_iSpawnMaxCount > 0)
-					{
-						g_iSpawnMaxCount -= 1;
-					}
-					if (g_hSpawnMax.IntValue < 100)
-					{
-						g_hSpawnMax.IntValue = 0;
-					}
+					g_iSpawnMaxCount -= 1;
 				}
+				else if (g_iSpawnMaxCount <= 0)
+				{
+					g_iSpawnMaxCount = 0;
+				}
+				if (g_hSpawnMax.IntValue < 100)
+				{
+					g_hSpawnMax.IntValue = 0;
+				}
+				PrintToConsoleAll("[Infected-Spawn]：阳间模式：当前位置可见性：%s，刷新特感：%s，位置：%.2f，%.2f，%.2f，剩余刷新特感数量：%d"
+				, VisibleName[iVisible], classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2], g_iSpawnMaxCount);
 			}
 		}
 	}
