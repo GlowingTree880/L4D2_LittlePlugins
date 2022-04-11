@@ -17,6 +17,7 @@
 #define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
 #define COMMANDABOT_ATTACK "CommandABot({cmd = 0, bot = GetPlayerFromUserID(%i), target = GetPlayerFromUserID(%i)})"
 #define COMMANDABOT_RESET "CommandABot({cmd = 3, bot = GetPlayerFromUserID(%i)})"
+#define CHANGE_SPAWN_DIRECTION "g_ModeScript.DirectorOptions.PreferredSpecialDirection<-%i"
 // RockThrowSequence
 #define SEQUENCE_ONEHAND 49
 #define SEQUENCE_UNDERHAND 50
@@ -521,6 +522,7 @@ void TankActionReset(int client)
 {
 	if (g_bCanTankConsume[client] && !g_bCanTankAttack[client])
 	{
+		Logic_RunScript(CHANGE_SPAWN_DIRECTION, 4);
 		if (g_iTankConsumeAction == 1)
 		{
 			SetEntityMoveType(client, MOVETYPE_CUSTOM);
@@ -598,6 +600,8 @@ void DoConsume(int client)
 {
 	if (IsAiTank(client))
 	{
+		// 更改特感 PreferredSpecialDirection 为 SPAWN_ABOVE_SURVIVORS
+		Logic_RunScript(CHANGE_SPAWN_DIRECTION, 6);
 		// 血量，距离限制，血量小于等于消耗限制血量且距离大于强制压制距离允许消耗
 		float fTankPos[3];
 		GetClientAbsOrigin(client, fTankPos);
