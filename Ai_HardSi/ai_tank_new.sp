@@ -7,7 +7,7 @@
 #include <left4dhooks>
 #include <colors>
 
-#define DEBUG_DOWNLINE 1
+#define DEBUG_DOWNLINE 0
 #define DEBUG_EYELINE 0
 // Defines
 #define TEAM_SURVIVOR 2 
