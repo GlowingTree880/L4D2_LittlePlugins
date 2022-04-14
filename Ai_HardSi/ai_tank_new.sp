@@ -7,11 +7,14 @@
 #include <left4dhooks>
 #include <colors>
 
+#define DEBUG_DOWNLINE 1
+#define DEBUG_EYELINE 0
 // Defines
 #define TEAM_SURVIVOR 2 
 #define TEAM_INFECTED 3
 #define OBSTACLE_HEIGHT 18.0
 #define PLAYER_HEIGHT 72.0
+#define TANK_UNSTUCK_TRIES 100
 // CommandAbot
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
@@ -54,18 +57,23 @@ public Plugin myinfo =
 ConVar g_hTankBhop, g_hTankThrow, g_hTankThrowDist, g_hTankTarget, g_hTankBhopSpeed, g_hTreeDetect, g_hTreeNewTarget, g_hTankAirAngles, g_hTankAttackRange, g_hTankConsumeFindPositionCount
 , g_hTankConsumeHeight, g_hTankConsumLimit, g_hTankConsumeNewPositionDistance, g_hTankConsumeRaidus, g_hTankAttackVomitedNum, g_hVomitCanInstantAttack, g_hVomitAttackInterval, g_hTeleportForwardPercent
 , g_hVsBossFlowBuffer, g_hTankConsumeLimitNum, g_hTankThrowForce, g_hTankConsume, g_hTankConsumeType, g_hTankBhopHitWllDistance, g_hTankRetreatAirAngles, g_hTankConsumeAction, g_hTankConsumeDamagePercent
-, g_hTankForceAttackDistance, g_hTankConsumeHealthLimit, g_hTankAttackIncapped, g_hDebugMod;
+, g_hTankForceAttackDistance, g_hTankConsumeHealthLimit, g_hTankAttackIncapped, g_hTankConsumeValidRaidus, g_hTankConsumeDistance;
 // Ints
 int g_iTankTarget, g_iTankThrowDist, g_iTreeDetect, g_iTreePlayer[MAXPLAYERS + 1] = -1, g_iTreeNewTarget, g_iTankConsumeFindPositionCount, g_iTankConsumeLimit, g_iTankConsumeChooseNewPositionDistance
 , g_iTankConsumeRaidus, g_iTankAttackVomitedNum, g_iVomitedPlayer = 0, g_iTeleportForwardPercent, g_iTankConsumeSurvivorProgress[MAXPLAYERS + 1] = 0
 , g_iTankConsumeNum, g_iTankConsumeLimitNum[MAXPLAYERS + 1] = 0, g_iTankConsumeType, g_iTankConsumeAction, g_iTankConsumeDamagePercent, g_iTankForceAttackDistance, g_iTankConsumeHealthLimit, g_iTankAttackIncapped
-, g_iTankIncappedCount[MAXPLAYERS + 1][1];
+, g_iTankConsumeValidRaidus, g_iTankConsumeDistance, g_iTankIncappedCount[MAXPLAYERS + 1][1], g_iTankConsumeValidPos[MAXPLAYERS + 1][1], g_iTankSecondAttackDistance[MAXPLAYERS + 1][1]
+, g_iDistanceCount[MAXPLAYERS + 1][1], g_iTankUnstuckTimes[MAXPLAYERS + 1][2];
+
 // Bools
 bool g_bTankBhop, g_bTankThrow, g_bCanTankConsume[MAXPLAYERS + 1] = false, g_bInConsumePlace[MAXPLAYERS + 1] = false, g_bReturnConsumePlace[MAXPLAYERS + 1] = false, g_bCanTankAttack[MAXPLAYERS + 1] = true
-, g_bVomitCanInstantAttack, g_bVomitCanConsume[MAXPLAYERS + 1] = false, g_bTankConsume, g_bIsFirstConsumeCheck[MAXPLAYERS + 1] = true, g_bDebugMod;
+, g_bVomitCanInstantAttack, g_bVomitCanConsume[MAXPLAYERS + 1] = false, g_bTankConsume, g_bIsFirstConsumeCheck[MAXPLAYERS + 1] = true, g_bDistanceHandle[MAXPLAYERS + 1] = false
+, g_bTankActionReset[MAXPLAYERS + 1] = false;
 // Floats
 float g_fTankBhopSpeed, g_fTankAirAngles, g_fTankAttackRange, g_fTreePlayerOriginPos[3], g_fTankConsumeHeight, g_fConsumePosition[MAXPLAYERS + 1][3]
 , g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles;
+// Handles
+Handle g_hDistanceTimer[MAXPLAYERS + 1] = INVALID_HANDLE;
 
 enum PreferredSpecialDirection
 {
@@ -102,33 +110,33 @@ public void OnPluginStart()
 	g_hTankBhopSpeed = CreateConVar("ai_Tank_BhopSpeed", "80.0", "Tank连跳的速度", FCVAR_NOTIFY, true, 0.0);
 	g_hTankBhop = CreateConVar("ai_Tank_Bhop", "1", "是否开启Tank连跳功能：0=关闭，1=开启", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hTankThrow = CreateConVar("ai_Tank_Throw", "1", "是否允许Tank投掷石块：0=关闭，1=开启", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hTankThrowDist = CreateConVar("ai_Tank_ThrowDistance", "2500", "Tank距离目标多近允许投掷石块", FCVAR_NOTIFY, true, 0.0);
+	g_hTankThrowDist = CreateConVar("ai_Tank_ThrowDistance", "1700", "Tank距离目标多近允许投掷石块", FCVAR_NOTIFY, true, 0.0);
 	g_hTankTarget = CreateConVar("ai_Tank_Target", "1", "Tank目标选择：1=最近，2=血量最少，3=血量最多", FCVAR_NOTIFY, true, 1.0, true, 3.0);
 	g_hTreeDetect = CreateConVar("ai_Tank_TreeDetect", "1", "生还者与Tank进行秦王绕柱时进行的操作：0=关闭此项，1=切换目标，2=将Tank传送至绕树的生还者后", FCVAR_NOTIFY, true, 0.0, true, 2.0);
 	g_hTreeNewTarget = CreateConVar("ai_Tank_TreeNewTargetDistance", "300", "Tank记录绕树生还者并选择新目标后，距离新目标多近重置绕树目标记录", FCVAR_NOTIFY, true, 0.0);
 	g_hTankAirAngles = CreateConVar("ai_TankAirAngles", "60.0", "Tank在空中的速度向量与到生还者的方向向量夹角大于这个值停止连跳", FCVAR_NOTIFY, true, 0.0, true, 90.0);
 	g_hTankConsume = CreateConVar("ai_TankConsume", "1", "是否开启Tank消耗功能", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hTankConsumeFindPositionCount = CreateConVar("ai_Tank_ConsumeFindPositionCount", "10", "Tank进行消耗时的找位次数（这个值 * 50 次）", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeFindPositionCount = CreateConVar("ai_Tank_ConsumeFindPositionCount", "15", "Tank进行消耗时的找位次数（这个值 * 50 次）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeHeight = CreateConVar("ai_Tank_ConsumeHeight", "100", "Tank进行消耗时将会优先选择高于这个高度的位置，如无则随机选位", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumLimit = CreateConVar("ai_Tank_ConsumeLimit", "2", "感染者团队少于多少特感时，Tank会进行消耗", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeNewPositionDistance = CreateConVar("ai_Tank_ConsumeChooseNewPositionDistance", "150", "当Tank进入消耗位置时生还者距离Tank多近它会选择新的消耗位置", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeRaidus = CreateConVar("ai_Tank_ConsumeRaidus", "150.0", "Tank消耗位置的范围，从中心坐标以这个半径画圆", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeNewPositionDistance = CreateConVar("ai_Tank_ConsumeChooseNewPositionDistance", "300", "当Tank进入消耗位置时生还者距离Tank多近它会选择新的消耗位置", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeRaidus = CreateConVar("ai_Tank_ConsumeRaidus", "80.0", "Tank消耗位置的范围，从中心坐标以这个半径画圆", FCVAR_NOTIFY, true, 0.0);
 	g_hTankAttackVomitedNum = CreateConVar("ai_Tank_AttackVomitedNum", "1", "如果有这个数量的生还者被Boomer喷吐到，正在进行消耗的Tank将会攻击", FCVAR_NOTIFY, true, 0.0);
 	g_hVomitCanInstantAttack = CreateConVar("ai_Tank_VomitCanInstantAttack", "1", "是否开启固定数量生还者被喷吐后Tank立刻攻击", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hVomitAttackInterval = CreateConVar("ai_Tank_VomitAttackInterval", "20.0", "从开始被喷且Tank允许攻击时开始，这个时间内Tank允许攻击", FCVAR_NOTIFY, true, 0.0);
 	g_hTeleportForwardPercent = CreateConVar("ai_Tank_TeleportForwardPercent", "10", "Tank开始消耗时，记录此时生还者行进距离x，生还者前压超过x + 这个值时，Tank会传送至生还者处进行压制", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeLimitNum = CreateConVar("ai_Tank_ConsumeLimitNum", "5", "Tank最多进行消耗的次数（找到一次消耗位并抵达消耗位算 1 次消耗）", FCVAR_NOTIFY, true, 0.0);
-	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "3", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank", FCVAR_NOTIFY, true, 1.0, true, 8.0);
+	g_hTankConsumeType = CreateConVar("ai_TankConsumeType", "1", "Tank进行消耗将会按照哪种特感类型找位：1=Smoker，2=Boomer，3=Hunter，4=Spitter，5=Jockey，6=Charger，8=Tank", FCVAR_NOTIFY, true, 1.0, true, 8.0);
 	g_hTankBhopHitWllDistance = CreateConVar("ai_TankBhopHitWallDistance", "150.0", "Tank视角前这个距离内有障碍物，Tank将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankRetreatAirAngles = CreateConVar("ai_TankRetreatAirAngles", "75.0", "Tank在回避的连跳过程中视角与速度超过这个值将会停止连跳", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeAction = CreateConVar("ai_TankConsumeAction", "2", "Tank在消耗范围内将会：1=冰冻，2=可活动但不允许超出消耗范围", FCVAR_NOTIFY, true, 1.0, true, 2.0);
 	g_hTankConsumeDamagePercent = CreateConVar("ai_TankConsumeDamagePercent", "50", "Tank在消耗过程中只会受到这个百分比的伤害", FCVAR_NOTIFY, true, 0.0, true, 100.0);
 	// 2022-4-7新增
-	g_hTankForceAttackDistance = CreateConVar("ai_TankForceAttackDistance", "800", "Tank在离最近生还这个距离时即使可以消耗也不会当着生还的面回避生还（强制压制）", FCVAR_NOTIFY, true, 0.0);
+	g_hTankForceAttackDistance = CreateConVar("ai_TankForceAttackDistance", "650", "Tank在离最近生还这个距离时即使可以消耗也不会当着生还的面回避生还（强制压制）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankAttackIncapped = CreateConVar("ai_TankIncappedCount", "1", "强制压制时，需要拍倒这个数量的生还者才允许继续检测是否可以消耗", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeHealthLimit = CreateConVar("ai_TankConsumeHealthLimit", "2500", "Tank在少于这么多血量时不会消耗", FCVAR_NOTIFY, true, 0.0);
-	// 调试输出
-	g_hDebugMod = CreateConVar("ai_TankDebugMod", "0", "是否开启调试输出", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hTankConsumeValidRaidus = CreateConVar("ai_TankConsumeValidRaidus", "1800", "Tank在当前消耗位上，如果当前消耗位不能直视生还，则以这个半径重新找位", FCVAR_NOTIFY, true, 0.0);
+	g_hTankConsumeDistance = CreateConVar("ai_TankConsumeDistance", "1200", "Tank消耗找位的位置必须离生还者大于这个距离", FCVAR_NOTIFY, true, 0.0);
 	// 其他 Cvar
 	g_hTankAttackRange = FindConVar("tank_attack_range");
 	g_hVsBossFlowBuffer = FindConVar("versus_boss_buffer");
@@ -169,7 +177,8 @@ public void OnPluginStart()
 	g_hTankForceAttackDistance.AddChangeHook(ConVarChanged_Cvars);
 	g_hTankConsumeHealthLimit.AddChangeHook(ConVarChanged_Cvars);
 	g_hTankAttackIncapped.AddChangeHook(ConVarChanged_Cvars);
-	g_hDebugMod.AddChangeHook(ConVarChanged_Cvars);
+	g_hTankConsumeValidRaidus.AddChangeHook(ConVarChanged_Cvars);
+	g_hTankConsumeDistance.AddChangeHook(ConVarChanged_Cvars);
 	// GetConVar
 	GetCvars();
 	// 数组初始化
@@ -205,7 +214,7 @@ public Action Cmd_Consume(int client, int args)
 }
 
 // 向量绘制
-// #include "vector/vector_show.sp"
+#include "vector/vector_show.sp"
 
 // ******************
 //		Natives
@@ -260,12 +269,49 @@ void GetCvars()
 	g_iTankForceAttackDistance = g_hTankForceAttackDistance.IntValue;
 	g_iTankConsumeHealthLimit = g_hTankConsumeHealthLimit.IntValue;
 	g_iTankAttackIncapped = g_hTankAttackIncapped.IntValue;
-	g_bDebugMod = g_hDebugMod.BoolValue;
+	g_iTankConsumeValidRaidus = g_hTankConsumeValidRaidus.IntValue;
+	g_iTankConsumeDistance = g_hTankConsumeDistance.IntValue;
 }
 
 // **************
 //		主要
 // **************
+// 坦克扔石头力度大小，跳砖设置，在消耗位上时，不允许跳砖
+public Action L4D_OnCThrowActivate(int ability)
+{
+	SetConVarString(FindConVar("z_tank_throw_force"), "1000");
+	int tankclient = GetEntPropEnt(ability, Prop_Data, "m_hOwnerEntity");
+	if (IsAiTank(tankclient) && GetEntProp(tankclient, Prop_Send, "m_zombieClass") == ZC_TANK && !g_bCanTankConsume[tankclient] && g_bCanTankAttack[tankclient])
+	{
+		RequestFrame(NextFrame_JumpRock, tankclient);
+	}
+	return Plugin_Continue;
+}
+
+void NextFrame_JumpRock(int tankclient)
+{
+	if (IsAiTank(tankclient))
+	{
+		float tankpos[3] = {0.0};
+		GetClientAbsOrigin(tankclient, tankpos);
+		int target = GetClosestSurvivor(tankpos);
+		if (IsSurvivor(target))
+		{
+			int flags = GetEntityFlags(tankclient);
+			if (flags & FL_ONGROUND)
+			{
+				float eyeangles[3] = 0.0, lookat[3] = 0.0;
+				GetClientEyeAngles(tankclient, eyeangles);
+				GetAngleVectors(eyeangles, lookat, NULL_VECTOR, NULL_VECTOR);
+				NormalizeVector(lookat, lookat);
+				ScaleVector(lookat, 300.0);
+				lookat[2] = 300.0;
+				TeleportEntity(tankclient, NULL_VECTOR, NULL_VECTOR, lookat);
+			}
+		}
+	}
+}
+
 public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
 	if (IsAiTank(tank))
@@ -292,8 +338,15 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		{
 			buttons &= ~IN_ATTACK2;
 		}
-		if (iTarget > 0)
+		if (IsSurvivor(iTarget))
 		{
+			if (bHasSight && !g_bCanTankConsume[tank] && g_bCanTankAttack[tank] && iSurvivorDistance < 500)
+			{
+				float TargetAngles[3];
+				ComputeAimAngles(tank, iTarget, TargetAngles, AimChest);
+				TargetAngles[2] = 0.0;
+				TeleportEntity(tank, NULL_VECTOR, TargetAngles, NULL_VECTOR);
+			}
 			// 连跳操作
 			if (g_bTankBhop)
 			{
@@ -318,7 +371,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 					}
 					else if (iFlags == FL_JUMPING)
 					{
-						if (!g_bCanTankConsume[tank])
+						if (!g_bCanTankConsume[tank] && g_bCanTankAttack[tank])
 						{
 							if (iSurvivorDistance > g_fTankAttackRange)
 							{
@@ -352,7 +405,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		}
 		else
 		{
-			if (!g_bInConsumePlace[tank])
+			if (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank] && !g_bInConsumePlace[tank] && bHasLeftRoundPoint(g_fConsumePosition[tank], fTankPos, g_iTankConsumeRaidus * 4))
 			{
 				// 逃跑时，前往消耗位的途中连跳，在消耗位时不允许连跳，减少从消耗位里跳出来的概率
 				float fTankEyeAngles[3], fForwardVec[3];
@@ -405,58 +458,74 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		// 消耗操作
 		if (g_bTankConsume)
 		{
-			// 最近生还位置小于设置值，且能直视，进行压制
-			if (iSurvivorDistance < g_iTankForceAttackDistance && bHasSight)
-			{
-				// PrintToConsoleAll("[Ai-Tank]：克与最近生还距离：%d < %d，且有视野", iSurvivorDistance, g_iTankForceAttackDistance);
-				// PrintToConsoleAll("[Ai-Tank]：克是否可以消耗：%b", g_bCanTankConsume[tank]);
-				if (g_bCanTankConsume[tank])
-				{
-					// 没有锤倒人或锤倒的人小于限制人数，则进行压制
-					if (g_iTankIncappedCount[tank][0] < g_iTankAttackIncapped)
-					{
-						// PrintToConsoleAll("[Ai-Tank]：当前可以消耗，没有锤倒人，进行压制");
-						TankActionReset(tank);
-						g_bCanTankConsume[tank] = false;
-						g_bCanTankAttack[tank] = true;
-					}
-				}
-				else
-				{
-					if (g_iTankIncappedCount[tank][0] >= g_iTankAttackIncapped)
-					{
-						PrintToConsoleAll("[Ai-Tank]：重新检查当前坦克是否可以消耗");
-						CheckCanTankConsume(tank);
-					}
-				}
-				return Plugin_Changed;
-			}
 			if (!g_bIsFirstConsumeCheck[tank])
 			{
-				CheckCanTankConsume(tank);
+				CheckCanTankConsume(tank, iSurvivorDistance);
 			}
-			// 消耗位置判断
+			// 消耗位置判断，有消耗位置时，执行以下内容，否则不执行
 			if ((g_fConsumePosition[tank][0] != 0.0) && (g_fConsumePosition[tank][1] != 0.0) && (g_fConsumePosition[tank][2] != 0.0))
 			{
+				float survivorpos[3] = {0.0};
+				int survivorcount = GetSurvivorCount();
 				if (!g_bInConsumePlace[tank])
 				{
 					// 为假，则坦克进入了范围内
 					if (!bHasLeftRoundPoint(g_fConsumePosition[tank], fTankPos, g_iTankConsumeRaidus))
 					{
+						buttons &= ~IN_JUMP;
+						buttons &= ~IN_DUCK;
+						buttons |= IN_ATTACK2;
+						SetConVarInt(FindConVar("z_tank_throw_interval"), 3);
+						SetConVarInt(FindConVar("tank_throw_min_interval"), 3);
+						PrintToConsoleAll("[Ai-Tank]：当前克进入到了消耗范围中，半径：%d", g_iTankConsumeRaidus);
+						// 循环判断是否可视生还，如果所有生还均不可直视，则更换消耗位
+						if (g_hDistanceTimer[tank] != INVALID_HANDLE)
+						{
+							delete g_hDistanceTimer[tank];
+							g_hDistanceTimer[tank] = INVALID_HANDLE;
+						}
+						g_bDistanceHandle[tank] = false;
+						for (int survivor = 1; survivor <= MaxClients; survivor++)
+						{
+							if (IsClientConnected(survivor) && IsClientInGame(survivor) && GetClientTeam(survivor) == TEAM_SURVIVOR && IsPlayerAlive(survivor))
+							{
+								float rockpos[3] = {0.0};
+								rockpos[0] = g_fConsumePosition[tank][0]; rockpos[1] = g_fConsumePosition[tank][1]; rockpos[2] = g_fConsumePosition[tank][2] + 110.0;
+								GetClientEyePosition(survivor, survivorpos);
+								Handle hTrace = TR_TraceRayFilterEx(rockpos, survivorpos, MASK_SHOT, RayType_EndPoint, traceFilter, tank);
+								if (TR_DidHit(hTrace))
+								{
+									g_iTankConsumeValidPos[tank][0] += 1;
+									if (g_iTankConsumeValidPos[tank][0] > survivorcount)
+									{
+										g_iTankConsumeValidPos[tank][0] = survivorcount;
+									}
+								}
+								delete hTrace;
+							}
+							else
+							{
+								continue;
+							}
+						}
+						PrintToConsoleAll("[Ai-Tank]：当前视线不可直接可视生还人数：%d", g_iTankConsumeValidPos[tank][0]);
 						// 重设锤倒人数
 						g_iTankIncappedCount[tank][0] = 0;
-						// 如果进入了消耗范围内仍然能看到生还者，或者最近生还者位置与坦克位置小于200，则选择新的消耗位置，进入消耗范围，消耗次数才增加
-						if (IsVisible(tank, iNearestTarget) || iSurvivorDistance < g_iTankConsumeChooseNewPositionDistance)
+						// 如果最近生还者位置与坦克位置小于 200，则选择新的消耗位置，进入消耗范围，消耗次数才增加
+						if (iSurvivorDistance < g_iTankConsumeChooseNewPositionDistance)
 						{
 							g_bInConsumePlace[tank] = false;
 							if (g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum)
 							{
 								DoConsume(tank);
-								g_iTankConsumeLimitNum[tank] += 1;
 							}
 							else
 							{
-								TankActionReset(tank);
+								if (g_bTankActionReset[tank])
+								{
+									TankActionReset(tank);
+									g_bTankActionReset[tank] = false;
+								}
 							}
 						}
 						else
@@ -468,12 +537,117 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 								case 1:
 								{
 									SetEntityMoveType(tank, MOVETYPE_NONE);
-									return Plugin_Changed;
 								}
 								case 2:
 								{
 									buttons |= IN_ATTACK2;
-									return Plugin_Changed;
+								}
+							}
+						}
+					}
+					// 为真，坦克还没有进到消耗范围内，检测是否卡住
+					else
+					{
+						if (IsPlayerStuck(fTankPos, tank) && iFlags != FL_JUMPING || GetEntityMoveType(tank) != MOVETYPE_LADDER && !IsTankAttacking(tank) && fCurrentSpeed < 50.0)
+						{
+							bool bHasFind = false;
+							float newpos[3] = {0.0};
+							g_iTankUnstuckTimes[tank][0] += 1;
+							if (g_iTankUnstuckTimes[tank][0] > TANK_UNSTUCK_TRIES)
+							{
+								Address pNowNav = L4D2Direct_GetTerrorNavArea(fTankPos);
+								if (pNowNav == Address_Null)
+								{
+									bHasFind = L4D_GetRandomPZSpawnPosition(tank, g_iTankConsumeType, 50, newpos);
+									if (bHasFind)
+									{
+										TeleportEntity(tank, newpos, NULL_VECTOR, NULL_VECTOR);
+									}
+									return Plugin_Stop;
+								}
+								buttons |= IN_ATTACK;
+								buttons |= IN_FORWARD;
+								TeleportSmooth(tank);
+								bHasFind = L4D_GetRandomPZSpawnPosition(tank, g_iTankConsumeType, 50, newpos);
+								if (bHasFind)
+								{
+									PrintToConsoleAll("[Ai-Tank]：当前克卡住，重新执行找位，位置：%.2f，%.2f，%.2f", newpos[0], newpos[1], newpos[2]);
+									Logic_RunScript(COMMANDABOT_MOVE, newpos[0], newpos[1], newpos[2], GetClientUserId(tank));
+								}
+								g_iTankUnstuckTimes[tank][0] = 0;
+								return Plugin_Stop;
+							}
+						}
+						else if (g_iTankUnstuckTimes[tank][0] == g_iTankUnstuckTimes[tank][0])
+						{
+							g_iTankUnstuckTimes[tank][1] += 1;
+							if (g_iTankUnstuckTimes[tank][1] >= 50)
+							{
+								g_iTankUnstuckTimes[tank][0] = 0;
+								g_iTankUnstuckTimes[tank][1] = 0;
+							}
+						}
+					}
+				}
+				if (g_iTankConsumeValidPos[tank][0] == survivorcount)
+				{
+					float nearestpos[3] = {0.0}, rayangles[3] = {0.0}, mins[2] = {0.0}, maxs[2] = {0.0}, rayz = 0.0, raypos[3] = {0.0};
+					rayangles[0] = 90.0;
+					if (IsSurvivor(iNearestTarget))
+					{
+						GetClientAbsOrigin(iNearestTarget, nearestpos);
+						mins[0] = nearestpos[0];	mins[1] = nearestpos[1];
+						maxs[0] = nearestpos[0];	maxs[1] = nearestpos[1];
+						mins[0] -= float(g_iTankConsumeValidRaidus);
+						mins[1] -= float(g_iTankConsumeValidRaidus);
+						maxs[0] += float(g_iTankConsumeValidRaidus);
+						maxs[1] += float(g_iTankConsumeValidRaidus);
+						raypos[0] = GetRandomFloat(mins[0], maxs[0]);
+						raypos[1] = GetRandomFloat(mins[1], maxs[1]);
+						rayz = g_fConsumePosition[tank][2] + 500.0;
+						raypos[2] = GetRandomFloat(g_fConsumePosition[tank][2], rayz);
+						TR_TraceRay(raypos, rayangles, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
+						if (TR_DidHit())
+						{
+							float endpos[3] = {0.0}, survivoreyepos[3] = {0.0};
+							TR_GetEndPosition(endpos);
+							endpos[2] += 110.0;
+							#if (DEBUG_DOWNLINE)
+								ShowLaser(4, raypos, endpos);
+							#endif
+							for (int survivor = 1; survivor <= MaxClients; survivor++)
+							{
+								if (IsClientConnected(survivor) && IsClientInGame(survivor) && GetClientTeam(survivor) == TEAM_SURVIVOR)
+								{
+									GetClientEyePosition(survivor, survivoreyepos);
+									Handle hSecondTrace = TR_TraceRayFilterEx(endpos, survivoreyepos, MASK_ALL, RayType_EndPoint, traceFilter, tank);
+									#if (DEBUG_EYELINE)
+										ShowLaser(2, endpos, survivoreyepos);
+									#endif
+									if (!TR_DidHit(hSecondTrace))
+									{
+										if (endpos[2] >= g_fConsumePosition[tank][2] - 80.0 && GetVectorDistance(endpos, survivoreyepos) >= float(g_iTankConsumeDistance) && IsOnValidMesh(endpos) && !IsPlayerStuck(endpos, tank) && IsPosAhead(endpos))
+										{
+											PrintToConsoleAll("[Ai-Tank]：当前消耗位置无法直视生还，新位置：%.2f，%.2f，%.2f，距离：%.2f，是否在生还路程前？%b"
+											, endpos[0], endpos[1], endpos[2] - 110.0, GetVectorDistance(endpos, survivoreyepos), IsPosAhead(endpos));
+											g_fConsumePosition[tank][0] = endpos[0];
+											g_fConsumePosition[tank][1] = endpos[1];
+											g_fConsumePosition[tank][2] = endpos[2];
+											if (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank])
+											{
+												Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[tank][0], g_fConsumePosition[tank][1], g_fConsumePosition[tank][2], GetClientUserId(tank));
+												g_iTankConsumeValidPos[tank][0] = 0;
+												g_bInConsumePlace[tank] = false;
+												delete hSecondTrace;
+												break;
+											}
+										}
+									}
+									delete hSecondTrace;
+								}
+								else
+								{
+									continue;
 								}
 							}
 						}
@@ -489,6 +663,8 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 						{
 							if (!g_bReturnConsumePlace[tank])
 							{
+								buttons &= ~IN_JUMP;
+								buttons &= ~IN_DUCK;
 								Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[tank][0], g_fConsumePosition[tank][1], g_fConsumePosition[tank][2], GetClientUserId(tank));
 								g_bReturnConsumePlace[tank] = true;
 							}
@@ -505,15 +681,11 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				{
 					bool bHasFind;
 					bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, ZC_TANK, 50, g_fTeleportPosition[tank]);
-					if (bHasFind)
+					if (bHasFind && (g_fTeleportPosition[tank][0] != 0.0) && (g_fTeleportPosition[tank][1] != 0.0) && (g_fTeleportPosition[tank][2] != 0.0))
 					{
-						// 传送位置有效
-						if ((g_fTeleportPosition[tank][0] != 0.0) && (g_fTeleportPosition[tank][1] != 0.0) && (g_fTeleportPosition[tank][2] != 0.0))
-						{
-							TeleportEntity(tank, g_fTeleportPosition[tank], NULL_VECTOR, NULL_VECTOR);
-							g_bCanTankConsume[tank] = false;
-							g_bCanTankAttack[tank] = true;
-						}
+						TeleportEntity(tank, g_fTeleportPosition[tank], NULL_VECTOR, NULL_VECTOR);
+						g_bCanTankConsume[tank] = false;
+						g_bCanTankAttack[tank] = true;
 					}
 				}
 			}
@@ -536,79 +708,140 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 // 重置坦克行动状态
 void TankActionReset(int client)
 {
+	SetConVarInt(FindConVar("z_tank_throw_interval"), 8);
+	SetConVarInt(FindConVar("tank_throw_min_interval"), 8);
 	if (g_bCanTankConsume[client] && !g_bCanTankAttack[client])
 	{
-		// 更改为 SPAWN_ANYWHERE
-		Logic_RunScript(CHANGE_SPAWN_DIRECTION, SPAWN_ANYWHERE);
+		// 更改为 SPAWN_NO_PREFERENCE
+		Logic_RunScript(CHANGE_SPAWN_DIRECTION, SPAWN_NO_PREFERENCE);
 		if (g_iTankConsumeAction == 1)
 		{
-			SetEntityMoveType(client, MOVETYPE_CUSTOM);
+			SetEntityMoveType(client, MOVETYPE_WALK);
 		}
+		g_bCanTankAttack[client] = true;
 		g_bCanTankConsume[client] = false;
+		g_bInConsumePlace[client] = false;
+		g_bReturnConsumePlace[client] = false;
 		g_fConsumePosition[client][0] = g_fConsumePosition[client][1] = g_fConsumePosition[client][2] = 0.0;
 		Logic_RunScript(COMMANDABOT_RESET, GetClientUserId(client));
-		g_bCanTankAttack[client] = true;
 	}
 }
 
-void CheckCanTankConsume(int tank)
+void CheckCanTankConsume(int tank, int survivordist)
 {
 	int iInfectedCount = GetInfectedCount();
-	// PrintToConsoleAll("[Ai-Tank]：当前在场感染者：%d，限制：%d", iInfectedCount, g_iTankConsumeLimit);
+	float fTankPos[3] = {0.0};	GetClientAbsOrigin(tank, fTankPos);
 	if (iInfectedCount < g_iTankConsumeLimit)
 	{
-		// 被喷后，重新设置状态
-		if (g_iVomitedPlayer >= g_iTankAttackVomitedNum)
+		// 一定数量生还者被喷后，重新设置状态
+		if (g_iVomitedPlayer >= g_iTankAttackVomitedNum && g_bVomitCanInstantAttack)
 		{
 			g_bCanTankConsume[tank] = false;
 			g_bCanTankAttack[tank] = true;
-		}
-		if (!g_bCanTankConsume[tank])
-		{
-			// 如果开启被喷吐后立刻攻击，尽管允许消耗，也可以攻击，未开启，则继续消耗
-			if (g_bVomitCanInstantAttack)
+			if (g_bTankActionReset[tank])
 			{
-				if (g_iVomitedPlayer >= g_iTankAttackVomitedNum)
+				TankActionReset(tank);
+				g_bTankActionReset[tank] = false;
+			}
+			if (!g_bVomitCanConsume[tank])
+			{
+				CreateTimer(g_fVomitAttackInterval, Timer_VomitAttackAgain, TIMER_FLAG_NO_MAPCHANGE);
+				g_bVomitCanConsume[tank] = true;
+			}
+		}
+		// 没有一定数量生还被喷，检测是否可以消耗
+		else
+		{
+			// PrintToConsoleAll("是否可以消耗：%b，压制：%b，距离：%d，限制：%d", g_bCanTankConsume[tank], g_bCanTankAttack[tank], survivordist, g_iTankSecondAttackDistance[tank][0]);
+			if (!g_bCanTankConsume[tank] && g_bCanTankAttack[tank] && survivordist > g_iTankSecondAttackDistance[tank][0] && g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum && GetClientHealth(tank) > g_iTankConsumeHealthLimit)
+			{
+				PrintToConsoleAll("[Ai-Tank]：正常消耗找位，行 754，当前最近生还距离：%d，克强制压制距离：%d", survivordist, g_iTankSecondAttackDistance[tank][0]);
+				DoConsume(tank);
+				g_bVomitCanConsume[tank] = false;
+			}
+			// 最近生还者距离克小于限制距离
+			if (survivordist <= g_iTankSecondAttackDistance[tank][0])
+			{
+				// PrintToConsoleAll("[Ai-Tank]：当前最近生还者离克最近距离：%d，限制距离：%d", survivordist, g_iTankSecondAttackDistance[tank][0]);
+				// 如果克拍倒了大于限制人数的人，消耗次数小于限制，血量高于限制，则消耗，创建时钟检测最近生还与克的距离
+				if (g_iTankIncappedCount[tank][0] >= g_iTankAttackIncapped && g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum && GetClientHealth(tank) > g_iTankConsumeHealthLimit)
 				{
-					TankActionReset(tank);
-					g_fConsumePosition[tank][0] = g_fConsumePosition[tank][1] = g_fConsumePosition[tank][2] = 0.0;
-					if (!g_bVomitCanConsume[tank])
+					if (!g_bCanTankConsume[tank] && g_bCanTankAttack[tank] && !g_bInConsumePlace[tank])
 					{
-						CreateTimer(g_fVomitAttackInterval, Timer_VomitAttackAgain, TIMER_FLAG_NO_MAPCHANGE);
-						g_bVomitCanConsume[tank] = true;
+						if (!g_bDistanceHandle[tank])
+						{
+							PrintToConsoleAll("[Ai-Tank]：当前克拍倒：%d 人，大于限制：%d 人，创建时钟追踪是否有生还继续压制", g_iTankIncappedCount[tank][0], g_iTankIncappedCount);
+							g_hDistanceTimer[tank] = CreateTimer(1.0, Timer_DistanceTrack, tank, TIMER_REPEAT);
+							g_bDistanceHandle[tank] = true;
+						}
+						PrintToConsoleAll("开始消耗");
+						DoConsume(tank);
+					}
+					// 当前克可以消耗，但距离计数超过了 5 次，说明生还已经跟在克后面 5s，继续压制
+					else if (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank] && g_iDistanceCount[tank][0] >= 5)
+					{
+						PrintToConsoleAll("[Ai-Tank]：当前有生还继续压制在克后多于：%d 次，强制压制", g_iDistanceCount[tank][0]);
+						if (g_bTankActionReset[tank])
+						{
+							TankActionReset(tank);
+							g_bTankActionReset[tank] = false;
+							g_iTankIncappedCount[tank][0] = 0;
+							g_iDistanceCount[tank][0] = 0;
+							g_iTankSecondAttackDistance[tank][0] = g_iTankForceAttackDistance;
+							if (g_hDistanceTimer[tank] != INVALID_HANDLE)
+							{
+								delete g_hDistanceTimer[tank];
+								g_hDistanceTimer[tank] = INVALID_HANDLE;
+							}
+						}
 					}
 				}
+				// 没有拍倒大于限制的人数，直接压制
 				else
 				{
-					if (g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum)
+					// PrintToConsoleAll("不符合消耗条件，当前拍倒人数：%d，限制：%d，血量：%d", g_iTankIncappedCount[tank][0], g_iTankIncappedCount, GetClientHealth(tank));
+					if (g_bTankActionReset[tank])
 					{
-						DoConsume(tank);
-						g_bVomitCanConsume[tank] = false;
-					}
-					else
-					{
+						PrintToConsoleAll("[Ai-Tank]：当前克拍倒的人数：%d，小于限制人数：%d，强制压制", g_iTankIncappedCount[tank][0], g_iTankIncappedCount);
 						TankActionReset(tank);
+						g_bTankActionReset[tank] = false;
 					}
 				}
 			}
-			else
+			// 克消耗次数多于限制或血量少于限制血量，重置
+			if (g_iTankConsumeLimitNum[tank] > g_iTankConsumeNum || GetClientHealth(tank) <= g_iTankConsumeHealthLimit)
 			{
-				if (g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum)
+				if (g_bTankActionReset[tank])
 				{
-					PrintToConsoleAll("[Ai-Tank]：当前坦克消耗次数：%d <= %d", g_iTankConsumeLimitNum[tank], g_iTankConsumeNum);
-					DoConsume(tank);
-				}
-				else
-				{
-					PrintToConsoleAll("[Ai-Tank]：当前坦克消耗次数大于限制，重置行为");
+					PrintToConsoleAll("[Ai-Tank]：当前克血量：%d，小于消耗血量：%d，强制压制", GetClientHealth(tank), g_iTankConsumeHealthLimit);
 					TankActionReset(tank);
+					g_bTankActionReset[tank] = false;
 				}
 			}
 		}
 	}
 	else
 	{
-		TankActionReset(tank);
+		if (g_bTankActionReset[tank])
+		{
+			PrintToConsoleAll("[Ai-Tank]：当前特感数量：%d，多于消耗限制数量：%d，强制压制", iInfectedCount, g_iTankConsumeLimit);
+			TankActionReset(tank);
+			g_bTankActionReset[tank] = false;
+		}
+	}
+}
+
+public Action Timer_DistanceTrack(Handle timer, int client)
+{
+	if (IsAiTank(client))
+	{
+		float tankpos[3] = {0.0};
+		GetClientAbsOrigin(client, tankpos);
+		int distance = GetSurvivorDistance(tankpos);
+		if (distance < g_iTankSecondAttackDistance[client][0])
+		{
+			g_iDistanceCount[client][0] += 1;
+		}
 	}
 }
 
@@ -617,48 +850,43 @@ void DoConsume(int client)
 {
 	if (IsAiTank(client))
 	{
+		g_iTankConsumeLimitNum[client] += 1;
 		// 更改特感 PreferredSpecialDirection 为 SPAWN_IN_FRONT_OF_SURVIVORS
 		Logic_RunScript(CHANGE_SPAWN_DIRECTION, SPAWN_IN_FRONT_OF_SURVIVORS);
-		// 血量，距离限制，血量小于等于消耗限制血量且距离大于强制压制距离允许消耗
 		float fTankPos[3];
 		GetClientAbsOrigin(client, fTankPos);
 		int iNearestTarget = GetClosestSurvivor(fTankPos);
-		if (IsSurvivor(iNearestTarget) && GetClientHealth(client) >= g_iTankConsumeHealthLimit)
+		if (IsSurvivor(iNearestTarget))
 		{
 			// 记录当前生还路程
+			float fNearestTargetPos[3] = {0.0};
+			GetClientAbsOrigin(iNearestTarget, fNearestTargetPos);
 			int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
 			g_iTankConsumeSurvivorProgress[client] = iNowSurvivorPercent;
 			// 设置状态
 			g_bCanTankConsume[client] = true;
 			g_bCanTankAttack[client] = false;
+			g_bTankActionReset[client] = true;
 			// 找位
-			bool bHasFind;
+			bool bHasFind = false;
 			for (int i = 0; i < g_iTankConsumeFindPositionCount; i++)
 			{
 				bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, g_iTankConsumeType, 50, g_fConsumePosition[client]);
 				// 如果找到的位置大于给定高度，跳出，否则随机找位
-				if (bHasFind)
+				if (bHasFind && GetVectorDistance(g_fConsumePosition[client], fNearestTargetPos) >= float(g_iTankConsumeDistance) && g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
 				{
-					if (g_fConsumePosition[client][2] >= g_fTankConsumeHeight)
-					{
-						break;
-					}
+					PrintToConsoleAll("[Ai-Tank]：当前克消耗找位成功：%.2f，%.2f，高度：%.2f，距离：%.2f"
+					, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetVectorDistance(g_fConsumePosition[client], fNearestTargetPos));
+					break;
 				}
 				else
 				{
 					PrintToConsoleAll("[Ai-Tank]：当前克找位失败，尝试：%d 次", i + 1);
 				}
 			}
-			PrintToConsoleAll("[Ai-Tank]：当前克消耗找位成功：%.2f，%.2f，%.2f", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
-			if (g_bDebugMod)
-			{
-				PrintToChatAll("\x05【提示】：找到了位置：\x04%.2f，%.2f，%.2f，正在前往", g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2]);
-			}
+			PrintToConsoleAll("[Ai-Tank]：最终位置：%.2f，%.2f，%.2f，距离：%.2f"
+			, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetVectorDistance(g_fConsumePosition[client], fNearestTargetPos));
 			Logic_RunScript(COMMANDABOT_MOVE, g_fConsumePosition[client][0], g_fConsumePosition[client][1], g_fConsumePosition[client][2], GetClientUserId(client));
-		}
-		else
-		{
-			PrintToConsoleAll("[Ai-Tank]：当前坦克不满足消耗条件");
 		}
 	}
 }
@@ -812,7 +1040,7 @@ public Action L4D_TankRock_OnRelease(int tank, int rock, float vecPos[3], float 
 		fTargetPos[2] += fDelta;
 		while(fDelta < PLAYER_HEIGHT)
 		{
-			if (!WillHitWll(tank, rock, -1, fTargetPos))
+			if (!WillHitWall(tank, rock, -1, fTargetPos))
 			{
 				break;
 			}
@@ -837,7 +1065,7 @@ public Action L4D_TankRock_OnRelease(int tank, int rock, float vecPos[3], float 
 	}
 }
 
-bool WillHitWll(int iTank, int iEntity, int iTarget = -1, const float vEndPos[3] = NULL_VECTOR)
+bool WillHitWall(int iTank, int iEntity, int iTarget = -1, const float vEndPos[3] = NULL_VECTOR)
 {
 	static float fSource[3], fTargetPos[3];
 	GetClientEyePosition(iTank, fSource);
@@ -868,7 +1096,7 @@ bool BhopWillHitWall(int client, float fDistance)
 	GetClientEyePosition(client, fTankEyePos);
 	GetClientEyeAngles(client, fTankEyeAngles);
 	bool bHit = false;
-	Handle hTrace = TR_TraceRayFilterEx(fTankEyePos, fTankEyeAngles, MASK_SOLID, RayType_Infinite, traceFilter, client);
+	Handle hTrace = TR_TraceRayFilterEx(fTankEyePos, fTankEyeAngles, MASK_SHOT, RayType_Infinite, traceFilter, client);
 	if (TR_DidHit(hTrace))
 	{
 		float fHitPos[3], fCollisonDistance;
@@ -920,6 +1148,11 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 		{
 			CreateTimer(1.5, Timer_CheckCanConsume, client, TIMER_FLAG_NO_MAPCHANGE);
 		}
+		if (g_hDistanceTimer[client] != INVALID_HANDLE)
+		{
+			delete g_hDistanceTimer[client];
+			g_hDistanceTimer[client] = INVALID_HANDLE;
+		}
 	}
 }
 
@@ -927,7 +1160,9 @@ public Action Timer_CheckCanConsume(Handle timer, int client)
 {
 	if (g_bIsFirstConsumeCheck[client])
 	{
-		CheckCanTankConsume(client);
+		float tankpos[3] = {0.0};	GetClientAbsOrigin(client, tankpos);
+		int dist = GetSurvivorDistance(tankpos);
+		CheckCanTankConsume(client, dist);
 		g_bIsFirstConsumeCheck[client] = false;
 	}
 }
@@ -945,10 +1180,10 @@ public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 public void evt_PlayerNowIt(Event event, const char[] name, bool dontBroadcast)
 {
 	int iTank = FindTank();
-	if (iTank > 0)
+	if (IsAiTank(iTank))
 	{
 		// 坦克可以进行消耗或正在消耗，触发玩家被喷事件，计算被喷玩家数量
-		if (g_bCanTankConsume[iTank])
+		if (g_bCanTankConsume[iTank] && !g_bCanTankAttack[iTank])
 		{
 			g_iVomitedPlayer += 1;
 		}
@@ -962,6 +1197,12 @@ public void evt_PlayerIncapped(Event event, const char[] name, bool dontBroadcas
 	if (IsSurvivor(victim) && IsAiTank(attacker))
 	{
 		g_iTankIncappedCount[attacker][0] += 1;
+		PrintToConsoleAll("[Ai-Tank]：倒地：%N，攻击者：%N，目前：%d", victim, attacker, g_iTankIncappedCount[attacker][0]);
+		g_iTankSecondAttackDistance[attacker][0] /= 2;
+		if (g_iTankSecondAttackDistance[attacker][0] < 300)
+		{
+			g_iTankSecondAttackDistance[attacker][0] = 300;
+		}
 	}
 }
 
@@ -980,6 +1221,13 @@ void TankInitialization(int client)
 	g_iTankConsumeLimitNum[client] = 0;
 	g_bIsFirstConsumeCheck[client] = true;
 	g_iTankIncappedCount[client][0] = 0;
+	g_iTankConsumeValidPos[client][0] = 0;
+	g_iTankSecondAttackDistance[client][0] = g_iTankForceAttackDistance;
+	g_bDistanceHandle[client] = false;
+	g_iDistanceCount[client][0] = 0;
+	g_bTankActionReset[client] = false;
+	g_iTankUnstuckTimes[client][0] = 0;
+	g_iTankUnstuckTimes[client][1] = 0;
 }
 
 // **************
@@ -1288,21 +1536,20 @@ void ComputeAimAngles(int client, int target, float angles[3], AimType type = Ai
 }
 
 // 获取生还距离
-int GetSurvivorDistance(const float refpos[3], int SpecificSur = -1)
+int GetSurvivorDistance(float refpos[3], int SpecificSur = -1)
 {
 	int TargetSur;
-	float TargetSurPos[3], RefSurPos[3];
-	RefSurPos[0] = refpos[0];	RefSurPos[1] = refpos[1];	RefSurPos[2] = refpos[2];
-	if (SpecificSur > 0 && IsSurvivor(SpecificSur))
+	float TargetSurPos[3];
+	if (IsSurvivor(SpecificSur))
 	{
 		TargetSur = SpecificSur;
 	}
 	else
 	{
-		TargetSur = GetClosestSurvivor(RefSurPos);
+		TargetSur = GetClosestSurvivor(refpos);
 	}
 	GetEntPropVector(TargetSur, Prop_Send, "m_vecOrigin", TargetSurPos);
-	return RoundToNearest(GetVectorDistance(RefSurPos, TargetSurPos));
+	return RoundToNearest(GetVectorDistance(refpos, TargetSurPos));
 }
 
 // 有目的性选择最近生还
@@ -1350,12 +1597,25 @@ bool IsPinned(int client)
 	return bIsPinned;
 }
 
+int GetSurvivorCount()
+{
+	int iSurvivorCount = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (client && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == TEAM_SURVIVOR)
+		{
+			iSurvivorCount += 1;
+		}
+	}
+	return iSurvivorCount;
+}
+
 int GetInfectedCount()
 {
 	int iInfectedCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (client && client <= MaxClients && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == TEAM_INFECTED && GetEntProp(client, Prop_Send, "m_zombieClass") != ZC_TANK)
+		if (client && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == TEAM_INFECTED && GetEntProp(client, Prop_Send, "m_zombieClass") != ZC_TANK)
 		{
 			iInfectedCount += 1;
 		}
@@ -1446,4 +1706,106 @@ float GetMaxSurvivorCompletion()
 		}
 	}
 	return (flow / L4D2Direct_GetMapMaxFlowDistance());
+}
+
+bool IsOnValidMesh(float fReferencePos[3])
+{
+	Address pNavArea = L4D2Direct_GetTerrorNavArea(fReferencePos);
+	if (pNavArea != Address_Null)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool IsPlayerStuck(float fSpawnPos[3], int client)
+{
+	bool IsStuck = true;
+	float fMins[3] = {0.0}, fMaxs[3] = {0.0}, fNewPos[3] = {0.0};
+	fNewPos = fSpawnPos;
+	fNewPos[2] += 35.0;
+	fMins[0] = fMins[1] = -16.0;
+	fMins[2] = 0.0;
+	fMaxs[0] = fMaxs[1] = 16.0;
+	fMaxs[2] = 72.0;
+	TR_TraceHullFilter(fSpawnPos, fNewPos, fMins, fMaxs, MASK_NPCSOLID_BRUSHONLY, TraceRay_NoPlayers, client);
+	IsStuck = TR_DidHit();
+	return IsStuck;
+}
+
+public bool TraceRay_NoPlayers(int entity, int mask, any data)
+{
+    if(entity == data || (entity >= 1 && entity <= MaxClients))
+    {
+        return false;
+    }
+    return true;
+}
+
+stock float CopyVectors(float origin[3], float result[3])
+{
+	result[0] = origin[0];
+	result[1] = origin[1];
+	result[2] = origin[2];
+}
+
+bool TeleportSmooth(int client)
+{
+	return TeleportPlayerSmooth(client, 150.0, 251.0);
+}
+
+bool TeleportPlayerSmooth(int client, float distance, float power = 251.0)
+{
+	static float angles[3] = {0.0},	dir[3] = {0.0},	current[3] = {0.0},	result[3] = {0.0}, selfpos[3] = {0.0}, vectarget[3] = {0.0};
+	GetClientAbsOrigin(client, selfpos);
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", current);
+	int target = GetClosestSurvivor(selfpos);
+	if (IsSurvivor(target))
+	{
+		GetClientAbsOrigin(target, vectarget);
+		float newvec[3] = {0.0};
+		SubtractVectors(selfpos, vectarget, angles);
+		NormalizeVector(newvec, newvec);
+		GetVectorAngles(newvec, angles);
+		TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
+	}
+	GetClientEyeAngles(client, angles);
+	GetAngleVectors(angles, dir, NULL_VECTOR, NULL_VECTOR);
+	ScaleVector(dir, distance);
+	result[0] = current[0] + dir[0];
+	result[1] = current[1] + dir[1];
+	result[2] = power;
+	TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, result);
+	return true;
+}
+
+bool IsTankAttacking(int client)
+{
+	return GetEntProp(client, Prop_Send, "m_fireLayerSequence") > 0;
+}
+
+bool IsPosAhead(float vecpos[3])
+{
+	float tmpflow = 0.0;
+	Address pnownav = L4D2Direct_GetTerrorNavArea(vecpos);
+	if (pnownav == Address_Null)
+	{
+		pnownav = view_as<Address>(L4D_GetNearestNavArea(vecpos));
+	}
+	tmpflow = L4D2Direct_GetTerrorNavAreaFlow(pnownav);
+	tmpflow = tmpflow / L4D2Direct_GetMapMaxFlowDistance();
+	float tankproximity = tmpflow + g_hVsBossFlowBuffer.FloatValue / L4D2Direct_GetMapMaxFlowDistance();
+	tankproximity > 1.0 ? 1.0 : tankproximity;
+	int newtankproximity = RoundToNearest(tankproximity * 100.0);
+	if (newtankproximity > RoundToNearest(GetBossProximity() * 100.0))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
