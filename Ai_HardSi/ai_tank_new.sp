@@ -319,6 +319,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		float fTankPos[3];
 		GetClientAbsOrigin(tank, fTankPos);
 		int iSurvivorDistance, iTarget, iFlags, iNearestTarget;
+		int iInfectedCount = GetInfectedCount();
 		iSurvivorDistance = GetSurvivorDistance(fTankPos);	iTarget = GetClientAimTarget(tank, true);	iNearestTarget = GetClosestSurvivor(fTankPos);
 		// 获取坦克状态，速度
 		iFlags = GetEntityFlags(tank);
@@ -460,7 +461,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 		{
 			if (!g_bIsFirstConsumeCheck[tank])
 			{
-				CheckCanTankConsume(tank, iSurvivorDistance);
+				CheckCanTankConsume(tank, iSurvivorDistance, iInfectedCount);
 			}
 			// 消耗位置判断，有消耗位置时，执行以下内容，否则不执行
 			if ((g_fConsumePosition[tank][0] != 0.0) && (g_fConsumePosition[tank][1] != 0.0) && (g_fConsumePosition[tank][2] != 0.0))
@@ -548,7 +549,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 					// 为真，坦克还没有进到消耗范围内，检测是否卡住
 					else
 					{
-						if (IsPlayerStuck(fTankPos, tank) && iFlags != FL_JUMPING || GetEntityMoveType(tank) != MOVETYPE_LADDER && !IsTankAttacking(tank) && fCurrentSpeed < 50.0)
+						if (IsPlayerStuck(fTankPos, tank) && iTarget == -1 && iFlags != FL_JUMPING || GetEntityMoveType(tank) != MOVETYPE_LADDER && !IsTankAttacking(tank) && fCurrentSpeed < 50.0)
 						{
 							bool bHasFind = false;
 							float newpos[3] = {0.0};
@@ -589,7 +590,9 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 						}
 					}
 				}
-				if (g_iTankConsumeValidPos[tank][0] == survivorcount)
+				// 还能消耗在消耗位上时，且可直视生还，距离超过 g_iTankForceAttackDistance + 400 且路程在生还前方时，继续找新的消耗位
+				if (g_iTankConsumeValidPos[tank][0] == survivorcount 
+				|| (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank] && g_bInConsumePlace[tank] && bHasSight && iSurvivorDistance < g_iTankForceAttackDistance + 400 && IsPosAhead(fTankPos)))
 				{
 					float nearestpos[3] = {0.0}, rayangles[3] = {0.0}, mins[2] = {0.0}, maxs[2] = {0.0}, rayz = 0.0, raypos[3] = {0.0};
 					rayangles[0] = 90.0;
@@ -659,7 +662,7 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 					{
 						g_bInConsumePlace[tank] = false;
 						// 出了消耗范围，重新进入
-						if (g_bCanTankConsume[tank])
+						if (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank])
 						{
 							if (!g_bReturnConsumePlace[tank])
 							{
@@ -673,16 +676,17 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 				}
 			}
 			// 消耗时生还者前压判断
-			if (g_bCanTankConsume[tank])
+			if (g_bCanTankConsume[tank] && !g_bCanTankAttack[tank])
 			{
 				int iNowSurvivorPercent = RoundToNearest(GetBossProximity() * 100.0);
 				// 当前路程大于等于开始消耗的路程加给定路程，生还者前压，找位传送
-				if (iNowSurvivorPercent >= g_iTankConsumeSurvivorProgress[tank] + g_iTeleportForwardPercent)
+				if (iNowSurvivorPercent >= g_iTankConsumeSurvivorProgress[tank] + g_iTeleportForwardPercent && !IsPosAhead(fTankPos))
 				{
 					bool bHasFind;
 					bHasFind = L4D_GetRandomPZSpawnPosition(iNearestTarget, ZC_TANK, 50, g_fTeleportPosition[tank]);
 					if (bHasFind && (g_fTeleportPosition[tank][0] != 0.0) && (g_fTeleportPosition[tank][1] != 0.0) && (g_fTeleportPosition[tank][2] != 0.0))
 					{
+						PrintToConsoleAll("[Ai-Tank]：当前克路程小于生还者当前路程：%d 且在后面，传送", iNowSurvivorPercent);
 						TeleportEntity(tank, g_fTeleportPosition[tank], NULL_VECTOR, NULL_VECTOR);
 						g_bCanTankConsume[tank] = false;
 						g_bCanTankAttack[tank] = true;
@@ -727,9 +731,8 @@ void TankActionReset(int client)
 	}
 }
 
-void CheckCanTankConsume(int tank, int survivordist)
+void CheckCanTankConsume(int tank, int survivordist, int iInfectedCount)
 {
-	int iInfectedCount = GetInfectedCount();
 	float fTankPos[3] = {0.0};	GetClientAbsOrigin(tank, fTankPos);
 	if (iInfectedCount < g_iTankConsumeLimit)
 	{
@@ -1162,7 +1165,8 @@ public Action Timer_CheckCanConsume(Handle timer, int client)
 	{
 		float tankpos[3] = {0.0};	GetClientAbsOrigin(client, tankpos);
 		int dist = GetSurvivorDistance(tankpos);
-		CheckCanTankConsume(client, dist);
+		int iInfectedCount = GetInfectedCount();
+		CheckCanTankConsume(client, dist, iInfectedCount);
 		g_bIsFirstConsumeCheck[client] = false;
 	}
 }
