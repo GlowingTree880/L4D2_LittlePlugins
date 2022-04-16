@@ -140,7 +140,7 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 				TeleportEntity(smoker, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
 			}
 			// 由于舌头需要拉人，所以此时需要判断可见性
-			if (IsSurvivor(iTarget) && !IsIncapped(iTarget) && IsVisible(smoker, iTarget))
+			if (IsSurvivor(iTarget) && !IsIncapped(iTarget) && bHasSight)
 			{
 				if (fDistance < SMOKER_MELEE_RANGE)
 				{
@@ -507,33 +507,6 @@ bool IsSurvivor(int client)
 bool IsIncapped(int client)
 {
     return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
-}
-
-// 是否两者可见？
-bool IsVisible(int client, int target)
-{
-	bool bCanSee = false;
-	float selfpos[3], targetpos[3], lookat[3], angles[3];
-	GetClientEyePosition(client, selfpos);
-	GetClientEyePosition(target, targetpos);
-	MakeVectorFromPoints(selfpos, targetpos, lookat);
-	GetVectorAngles(lookat, angles);
-	Handle hTrace = TR_TraceRayFilterEx(selfpos, angles, MASK_SOLID, RayType_Infinite, traceFilter, client);
-	if (TR_DidHit(hTrace))
-	{
-		int hit = TR_GetEntityIndex(hTrace);
-		if (hit == target)
-		{
-			bCanSee = true;
-		}
-	}
-	delete hTrace;
-	return bCanSee;
-}
-
-bool traceFilter(int entity, int mask, int self)
-{
-	return entity != self;
 }
 
 // 选择最近玩家

@@ -18,7 +18,7 @@ public Plugin myinfo =
 	name 			= "Ai-Charger增强",
 	author 			= "Breezy，High Cookie，Standalone，Newteee，cravenge，Harry，Sorallll，PaimonQwQ，夜羽真白",
 	description 	= "觉得Ai-Charger不够强？ Try this！",
-	version 		= "1.0.1.0",
+	version 		= "2022-4-16",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -81,7 +81,7 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 {
 	if (IsAiCharger(charger))
 	{
-		float fChargerPos[3], fTargetAngles[3];
+		float fChargerPos[3];
 		GetClientAbsOrigin(charger, fChargerPos);
 		static float fLeftGroundMaxSpeed[MAXPLAYERS + 1];
 		// 获取状态
@@ -119,13 +119,6 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		{
 			if (IsSurvivor(iTarget))
 			{
-				if (bHasSight)
-				{
-					// 锁定视野
-					ComputeAimAngles(charger, iTarget, fTargetAngles, AimChest);
-					fTargetAngles[2] = 0.0;
-					TeleportEntity(charger, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
-				}
 				// 其他操作
 				float fBuffer[3], fTargetPos[3];
 				GetClientAbsOrigin(iTarget, fTargetPos);
@@ -169,6 +162,8 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 							// 重新设置速度方向
 							float fNewVelocity[3];
 							MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+							NormalizeVector(fNewVelocity, fNewVelocity);
+							ScaleVector(fNewVelocity, fCurrentSpeed);
 							TeleportEntity(charger, NULL_VECTOR, fAnglesPost, fNewVelocity);
 						}
 					}
@@ -178,13 +173,6 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 					buttons &= ~IN_JUMP;
 					buttons &= ~IN_DUCK;
 				}
-			}
-			else
-			{
-				int iNewTarget = GetClosestSurvivor(fChargerPos);
-				ComputeAimAngles(charger, iNewTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(charger, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
 			}
 		}
 		else if (float(g_iStartChargeDistance) - 10.0 < fDistance < float(g_iStartChargeDistance) + 100.0 && fCurrentSpeed > 260.0)
