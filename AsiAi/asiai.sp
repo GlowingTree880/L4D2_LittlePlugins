@@ -23,6 +23,7 @@
 #define VEM_MAX 450.0
 #define MAXSURVIVORS 8
 #define SURVIVORHEIGHT 72.0
+#define ASSULTDELAY 0.3
 // SMOKER
 #define SMOKERMELEERANGE 300.0
 // JOCKEY
@@ -117,9 +118,16 @@ public Action evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (IsInfectedBot(client))
 	{
+		CreateTimer(ASSULTDELAY, Timer_Assult, client, TIMER_FLAG_NO_MAPCHANGE);
 		g_bAiEnable[client] = true;
 	}
 	return Plugin_Continue;
+}
+
+public Action Timer_Assult(Handle timer, int client)
+{
+	CheatCommand(client, "nb_assault");
+	return Plugin_Stop;
 }
 
 public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -477,6 +485,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			int targetclient = 0, hittimes = 0, survivorcount = 0;
 			float selfpos[3] = {0.0}, targetpos[3] = {0.0}, aimangles[3] = {0.0};
 			GetClientAbsOrigin(client, selfpos);
+			// 射线，坦克 z 高度 +100，作为石头出手高度
 			selfpos[2] += TANKTHROWHEIGHT;
 			// 2022-4-8更新：判断目标有效，判断目标是否可见
 			for (int survivor = 1; survivor <= MaxClients; survivor++)
@@ -513,7 +522,6 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							if (IsValidSurvivor(newtarget))
 							{
 								GetClientAbsOrigin(newtarget, targetpos);
-								// 射线，坦克 z 高度 +115，作为石头出手高度
 								targetpos[2] += SURVIVORHEIGHT;
 								hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, traceFilter, client);
 								if (!TR_DidHit(hTrace))
@@ -549,7 +557,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			// 撞击次数和生还者数相等，所有生还者皆在障碍后，取最近目标
 			if (hittimes == survivorcount)
 			{
-				PrintToConsoleAll("[Ai-Tank]：所有生还者均被遮挡，锁定目标于最近生还者身上");
+				// PrintToConsoleAll("[Ai-Tank]：所有生还者均被遮挡，锁定目标于最近生还者身上");
 				int nearesttarget = GetNearestSurvivor(client);
 				if (IsValidSurvivor(nearesttarget))
 				{
@@ -600,12 +608,12 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							else if (height < 0.0 && height > -100.0)
 							{
 								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离小于1000", height);
-								aimangles[0] -= 0.045 * FloatAbs(height);
+								aimangles[0] -= 0.035 * FloatAbs(height);
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
 								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离小于1000");
-								aimangles[0] += 0.040 * height;
+								aimangles[0] += 0.045 * height;
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
@@ -631,17 +639,17 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							else if (height < 0.0 && height > -100.0)
 							{
 								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离大于1000", height);
-								aimangles[0] -= 0.060 * FloatAbs(height);
+								aimangles[0] -= 0.040 * FloatAbs(height);
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
 								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000");
-								aimangles[0] += 0.030 * height;
+								aimangles[0] += 0.050 * height;
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
 								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
-								aimangles[0] += 0.125 * height;
+								aimangles[0] += 0.120 * height;
 							}
 						}
 					}
@@ -709,7 +717,7 @@ public Action OnSpitterRunCmd(int client, int &buttons, float vel[3], float angl
 // *********************
 bool IsValidSurvivor(int client)
 {
-	if (client && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR)
 	{
 		return true;
 	}
@@ -721,7 +729,7 @@ bool IsValidSurvivor(int client)
 
 bool IsInfectedBot(int client)
 {
-	if (client && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client) && GetClientTeam(client) == TEAM_INFECTED)
 	{
 		return true;
 	}
@@ -917,4 +925,41 @@ bool IsPinned(int client)
 bool traceFilter(int entity, int mask, int self)
 {
 	return entity != self;
+}
+
+void CheatCommand(int client, char[] commandName, char[] argument1 = "", char[] argument2 = "")
+{
+    if (GetCommandFlags(commandName) != INVALID_FCVAR_FLAGS)
+	{
+		if (!(client > 0 && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client)))
+		{
+			int[] player = new int[MaxClients];
+			int numplayer = 0;
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i))
+				{
+					player[numplayer] = i;
+					numplayer++;
+				}
+			}
+			client = player[GetRandomInt(0, numplayer - 1)];
+		}
+		if (client > 0 && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client))
+		{
+		    int originalUserFlags = GetUserFlagBits(client);
+		    int originalCommandFlags = GetCommandFlags(commandName);            
+		    SetUserFlagBits(client, ADMFLAG_ROOT); 
+		    SetCommandFlags(commandName, originalCommandFlags ^ FCVAR_CHEAT);               
+		    FakeClientCommand(client, "%s %s %s", commandName, argument1, argument2);
+		    SetCommandFlags(commandName, originalCommandFlags);
+		    SetUserFlagBits(client, originalUserFlags);
+		}
+		else
+		{
+			char pluginName[128];
+			GetPluginFilename(INVALID_HANDLE, pluginName, sizeof(pluginName));        
+			LogError("%s could not find or create a client through which to execute cheat command %s", pluginName, commandName);
+		}
+    }
 }
