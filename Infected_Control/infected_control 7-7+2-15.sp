@@ -1,10 +1,11 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-// 头文件
+// 头文件：2022-4-21 新增 l4d2_saferoom_detect 检测是否在终点安全屋刷特
 #include <sourcemod>
 #include <sdktools>
 #include <left4dhooks>
+#include <l4d2_saferoom_detect>
 
 #define CVAR_FLAG FCVAR_NOTIFY
 #define TEAM_SURVIVOR 2
@@ -18,6 +19,8 @@
 #define PLAYER_HEIGHT 72.0
 #define PLAYER_CHEST 45.0
 #define INFECTED_COURCH_TIME 1.5
+#define INFECTED_TELE_INTERVAL 3
+#define RAY_DIRECTION view_as<float>({90.0, 0.0, 0.0})
 
 // 插件基本信息，根据 GPL 许可证条款，需要修改插件请勿修改此信息！
 public Plugin myinfo = 
@@ -76,6 +79,7 @@ enum VisibleType
 	Can_Visible,
 };
 
+// 玩家蹲下检测结构体，结构体数组，结构体成员：当前玩家是否可以蹲下，可以蹲下时的时间戳
 enum struct DuckCheck
 {
 	bool CanDuck;
@@ -291,8 +295,9 @@ public void OnGameFrame()
 	{
 		CreateTimer(0.1, MaxSpecialsSet);
 	}
-	// 构建刷特队列，使用 ArrayList 动态数组实现，队列索引：g_iQueueIndex 于开局与终局设置为 0，同时将队列 Resize 为 1，当队列索引小于刷特限制时，随机 1-6 的元素（少于 Cvar 限制且少于在场特感种类限制）
-	// 入队，同时队列索引增加，刷特时，队列索引减少，当队列索引等于 g_iSiLimit + 1 时，队满，不再执行以下入队代码，时间与空间复杂度为 O(1)
+	// 构建刷特队列，相对于以前刷特时才随机特感种类，此方法在 OnGameFrame 时（空闲时）执行，减少性能使用，使用 ArrayList 动态数组实现，队列索引：g_iQueueIndex 于开局与终局设置为 0，同时将队列 Resize 为 1
+	//，当队列索引小于刷特限制时，随机 1-6 的元素（少于 Cvar 限制且少于在场特感种类限制）入队，同时队列索引增加，刷特时，队列索引减少，当队列索引等于 g_iSiLimit + 1 时，队满，不再执行以下入队代码
+	//，时间与空间复杂度为 O(1)
 	if (g_iQueueIndex < g_iSiLimit)
 	{
 		int zombieclass = 0;
@@ -453,6 +458,14 @@ void EasyMode()
 			}
 			if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
 			{
+				GetEntityNetClass(entityindex, classname, sizeof(classname));
+				// 检测特感是否刷在终点安全屋内
+				if (SAFEDETECT_IsEntityInEndSaferoom(entityindex))
+				{
+					ForcePlayerSuicide(entityindex);
+					PrintToConsoleAll("[Infected-Spawn]：阳间模式：特感：%s，位置：%.2f，%.2f，%.2f，刷新在终点安全屋内，强制处死", classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2]);
+					return;
+				}
 				if (g_iSpawnMaxCount > 0)
 				{
 					g_iSpawnMaxCount -= 1;
@@ -508,7 +521,7 @@ void HardMode()
 			g_fSpawnDistanceMax = 1500.0;
 		}
 	}
-	float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
+	float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
 	if (IsValidSurvivor(g_iTargetSurvivor))
 	{
 		// 根据指定生还者坐标，拓展刷新范围
@@ -518,15 +531,12 @@ void HardMode()
 		fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
 		fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
 		fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
-		// 规定射线方向
-		fDirection[0] = 90.0;
-		fDirection[1] = fDirection[2] = 0.0;
 		// 随机刷新位置
 		fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
 		fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 		fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
 		// 找位条件，可视，是否在有效 NavMesh，是否卡住，否则先会判断是否在有效 Mesh 与是否卡住导致某些位置刷不出特感
-		TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
+		TR_TraceRay(fSpawnPos, RAY_DIRECTION, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
 		if (TR_DidHit())
 		{
 			TR_GetEndPosition(fEndPos);
@@ -542,46 +552,56 @@ void HardMode()
 			{
 				char classname[16] = '\0';
 				int index = g_iSurvivors[count], entityindex = -1;
-				GetClientAbsOrigin(index, fSurvivorPos);
-				if (!HasReachedLimit(aSpawnQueue.Get(0)) && g_iSpawnMaxCount > 0)
+				if (IsValidSurvivor(index))
 				{
-					entityindex = L4D2_SpawnSpecial(aSpawnQueue.Get(0), fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
-					GetEntityNetClass(entityindex, classname, sizeof(classname));
-					if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
+					GetClientAbsOrigin(index, fSurvivorPos);
+					if (!HasReachedLimit(aSpawnQueue.Get(0)) && g_iSpawnMaxCount > 0)
 					{
-						if (g_iSpawnMaxCount > 0)
+						entityindex = L4D2_SpawnSpecial(aSpawnQueue.Get(0), fSpawnPos, view_as<float>({0.0, 0.0, 0.0}));
+						if (IsValidEntity(entityindex) && IsValidEdict(entityindex))
 						{
-							g_iSpawnMaxCount -= 1;
-							if (aSpawnQueue.Length > 0 && g_iQueueIndex > 0)
+							GetEntityNetClass(entityindex, classname, sizeof(classname));
+							// 检测生成的特感是否处于终点安全屋内，是，则处死当前生成在安全屋内的特感，跳出循环，这个位置作废，重新找下一个刷特位置
+							if (SAFEDETECT_IsEntityInEndSaferoom(entityindex))
 							{
-								aSpawnQueue.Erase(0);
-								g_iQueueIndex -= 1;
+								ForcePlayerSuicide(entityindex);
+								PrintToConsoleAll("[Infected-Spawn]：正常模式：特感：%s，位置：%.2f，%.2f，%.2f，刷新在终点安全屋内，强制处死，跳出当前位置循环", classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2]);
+								break;
 							}
+							if (g_iSpawnMaxCount > 0)
+							{
+								g_iSpawnMaxCount -= 1;
+								if (aSpawnQueue.Length > 0 && g_iQueueIndex > 0)
+								{
+									aSpawnQueue.Erase(0);
+									g_iQueueIndex -= 1;
+								}
+							}
+							if (g_iSpawnMaxCount <= 0)
+							{
+								g_iSpawnMaxCount = 0;
+								// 不可直接 Clear，Clear 相当于 Resize(0)，则索引 0 的位置会无效化，如果再次执行 Get(0) 会报错，所以 Resize(1)，留出一个索引位置
+								aSpawnQueue.Resize(1);
+								g_iQueueIndex = 0;
+								GetSiLimit();
+							}
+							if (iVisible == view_as<int>(Visible_Eye))
+							{
+								g_CanDuck[entityindex].CanDuck = true;
+								g_CanDuck[entityindex].DuckTime = GetGameTime();
+							}
+							if (g_hSpawnMax.IntValue < 100)
+							{
+								g_hSpawnMax.IntValue = 0;
+							}
+							PrintToConsoleAll("[Infected-Spawn]：正常模式，当前位置可见性：%s，刷新特感：%s，位置：%.2f，%.2f，%.2f，剩余刷新特感数量：%d，队列索引：%d"
+							, VisibleName[iVisible], classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2], g_iSpawnMaxCount, g_iQueueIndex);
 						}
-						if (g_iSpawnMaxCount <= 0)
-						{
-							g_iSpawnMaxCount = 0;
-							// 不可直接 Clear，Clear 相当于 Resize(0)，则索引 0 的位置会无效化，如果再次执行 Get(0) 会报错，所以 Resize(1)，留出一个索引位置
-							aSpawnQueue.Resize(1);
-							g_iQueueIndex = 0;
-							GetSiLimit();
-						}
-						if (iVisible == view_as<int>(Visible_Eye))
-						{
-							g_CanDuck[entityindex].CanDuck = true;
-							g_CanDuck[entityindex].DuckTime = GetGameTime();
-						}
-						if (g_hSpawnMax.IntValue < 100)
-						{
-							g_hSpawnMax.IntValue = 0;
-						}
-						PrintToConsoleAll("[Infected-Spawn]：正常模式，当前位置可见性：%s，刷新特感：%s，位置：%.2f，%.2f，%.2f，剩余刷新特感数量：%d，队列索引：%d"
-						, VisibleName[iVisible], classname, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2], g_iSpawnMaxCount, g_iQueueIndex);
 					}
-				}
-				else if (HasReachedLimit(aSpawnQueue.Get(0)))
-				{
-					ReachedLimit();
+					else if (HasReachedLimit(aSpawnQueue.Get(0)))
+					{
+						ReachedLimit();
+					}
 				}
 			}
 		}
@@ -653,6 +673,7 @@ public Action SpawnFirstInfected(Handle timer)
 			aThreadHandle.Push(aSpawnTimer);
 			TriggerTimer(aSpawnTimer, true);
 		}
+		// 创建间隔为 1.0 秒的循环时钟，检测特感是否可以传送，总共检测 6 次
 		if (g_bTeleportSi)
 		{
 			g_hTeleHandle = CreateTimer(1.0, Timer_PositionSi, _, TIMER_REPEAT);
@@ -720,7 +741,7 @@ public Action SpawnNewInfected(Handle timer)
 	return Plugin_Continue;
 }
 
-// 开局重置特感状态
+// 开局重置特感特感传送次数为 0，并复活死亡玩家
 public Action SafeRoomReset(Handle timer)
 {
 	for (int client = 1; client <= MaxClients; client++)
@@ -777,10 +798,12 @@ bool IsOnValidMesh(float fReferencePos[3])
 	}
 }
 
+// 检测某个坐标是否对玩家可视，定义 fChestSpawnPos，令其 z 高度为 40，胸口位置，定义 fEyeSpawnPos，令其 z 高度为 67，总共使用三条射线
+// 当三条射线均撞到物体，则为完全不可见，当 20 和 40 的高度射线撞到物体，而 67 高度的射线未撞到物体，则返回可见至眼部，这时令刷出的特感蹲下
+// 当 20 的射线撞到物体，40 和 67 高度的射线未撞到物体，返回可见至胸部，当三条射线均未撞到物体，则返回完全可见，不允许在完全可见的状态下刷特
 int IsPlayerVisibleTo(float fSpawnPos[3])
 {
 	int iVisible = view_as<int>(Visible_None);	bool bVisible = false;
-	// 定义 fChestSpawnPos，令其 z 高度为 40，胸口位置，定义 fEyeSpawnPos，令其 z 高度为 67
 	float fChestSpawnPos[3] = {0.0}, fEyeSpawnPos[3] = {0.0};
 	CopyVectors(fSpawnPos, fChestSpawnPos);
 	CopyVectors(fSpawnPos, fEyeSpawnPos);
@@ -902,13 +925,14 @@ bool CanBeTeleport(int client)
 	}
 }
 
+// 检测特感是否可以传送，特感不是 Tank 且特感未控到人，如果 g_iTeleCount[client] 大于 6 次，如果当前位置不可直视生还，则传送至有效位置
 public Action Timer_PositionSi(Handle timer)
 {
 	for (int client = 1; client <= MaxClients; client++)
 	{
 		if (CanBeTeleport(client))
 		{
-			if (g_iTeleCount[client] > 6)
+			if (g_iTeleCount[client] > INFECTED_TELE_INTERVAL)
 			{
 				float fSelfPos[3] = {0.0};
 				GetClientEyePosition(client, fSelfPos);
@@ -1117,7 +1141,7 @@ void HardTeleMode(int client)
 	GetClientEyePosition(client, fEyePos);
 	if (!IsPlayerVisibleTo(fEyePos) && !IsPinningSomeone(client))
 	{
-		float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fDirection[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
+		float fSpawnPos[3] = {0.0}, fSurvivorPos[3] = {0.0}, fEndPos[3] = {0.0}, fMins[3] = {0.0}, fMaxs[3] = {0.0};
 		if (IsValidSurvivor(g_iTargetSurvivor))
 		{
 			GetClientEyePosition(g_iTargetSurvivor, fSurvivorPos);
@@ -1127,24 +1151,15 @@ void HardTeleMode(int client)
 			fMins[1] = fSurvivorPos[1] - g_fSpawnDistanceMax;
 			fMaxs[1] = fSurvivorPos[1] + g_fSpawnDistanceMax;
 			fMaxs[2] = fSurvivorPos[2] + g_fSpawnDistanceMax;
-			fDirection[0] = 90.0;
-			fDirection[1] = fDirection[2] = 0.0;
 			fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
 			fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
 			fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-			while (IsPlayerVisibleTo(fSpawnPos) || !IsOnValidMesh(fSpawnPos) || IsPlayerStuck(fSpawnPos))
+			TR_TraceRay(fSpawnPos, RAY_DIRECTION, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
+			if (TR_DidHit())
 			{
-				fSpawnPos[0] = GetRandomFloat(fMins[0], fMaxs[0]);
-				fSpawnPos[1] = GetRandomFloat(fMins[1], fMaxs[1]);
-				fSpawnPos[2] = GetRandomFloat(fSurvivorPos[2], fMaxs[2]);
-				TR_TraceRay(fSpawnPos, fDirection, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite);
-				if (TR_DidHit())
-				{
-					TR_GetEndPosition(fEndPos);
-					fSpawnPos = fEndPos;
-					fSpawnPos[2] += NAV_MESH_HEIGHT;
-					break;
-				}
+				TR_GetEndPosition(fEndPos);
+				fSpawnPos = fEndPos;
+				fSpawnPos[2] += NAV_MESH_HEIGHT;
 			}
 			if (IsOnValidMesh(fSpawnPos) && !IsPlayerStuck(fSpawnPos) && !IsPlayerVisibleTo(fSpawnPos))
 			{
