@@ -23,13 +23,14 @@ public Plugin myinfo =
 }
 
 // ConVars
-ConVar g_hHunterFastPounceDistance, g_hPounceVerticalAngle, g_hPounceAngleMean, g_hPounceAngleStd, g_hStraightPounceDistance, g_hHunterAimOffset, g_hWallPounceDistance, g_hHunterTarget, g_hShotGunCheckRange;
+ConVar g_hHunterFastPounceDistance, g_hPounceVerticalAngle, g_hPounceAngleMean, g_hPounceAngleStd, g_hStraightPounceDistance, g_hHunterAimOffset, g_hWallPounceDistance, g_hHunterTarget, g_hShotGunCheckRange
+, g_hMeleeAvoid;
 // Ints
 int g_iPounceVerticalAngle, g_iPounceAngleMean, g_iPounceAngleStd, g_iHunterAimOffset, g_iHunterTarget, g_iShotgunPlayer = -1, g_iMobileSurvivor = 0;
 // Floats
 float g_fHunterFastPounceDistance, g_fStraightPounceDistance, g_fWallPounceDistance, g_fShotGunCheckRange;
 // Bools
-bool g_bHasQueuedLunge[MAXPLAYERS + 1], g_bCanLunge[MAXPLAYERS + 1];
+bool g_bMeleeAvoid = false, g_bHasQueuedLunge[MAXPLAYERS + 1], g_bCanLunge[MAXPLAYERS + 1];
 
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
@@ -51,6 +52,7 @@ public void OnPluginStart()
 	g_hHunterAimOffset = CreateConVar("ai_HunterAimOffset", "360", "目标与Hunter处在这一角度范围内，Hunter将不会直扑", FCVAR_NOTIFY, true, 0.0);
 	g_hWallPounceDistance = CreateConVar("ai_HunterWallDetectDistance", "-1", "在这个范围内，Hunter突袭时将会优先检测是否有墙体", FCVAR_NOTIFY);
 	g_hHunterTarget = CreateConVar("ai_HunterTarget", "2", "Hunter目标选择：1=自然目标选择，2=最近目标，3=手持非霰弹枪的生还者", FCVAR_NOTIFY, true, 1.0, true, 2.0);
+	g_hMeleeAvoid = CreateConVar("ai_HunterMeleeAvoid", "1", "Hunter是否回避手持近战的玩家", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_hShotGunCheckRange = CreateConVar("ai_HunterShotGunCheckRange", "150.0", "目标选择为3时，Hunter在大于这个距离时允许进行目标枪械检测", FCVAR_NOTIFY, true, 0.0);
 	// HookEvents
 	HookEvent("player_spawn", evt_PlayerSpawn);
@@ -65,6 +67,7 @@ public void OnPluginStart()
 	g_hWallPounceDistance.AddChangeHook(ConVarChanged_Cvars);
 	g_hHunterTarget.AddChangeHook(ConVarChanged_Cvars);
 	g_hShotGunCheckRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hMeleeAvoid.AddChangeHook(ConVarChanged_Cvars);
 	// GetCvars
 	GetCvars();
 }
@@ -85,6 +88,7 @@ void GetCvars()
 	g_fWallPounceDistance = g_hWallPounceDistance.FloatValue;
 	g_iHunterTarget = g_hHunterTarget.IntValue;
 	g_fShotGunCheckRange = g_hShotGunCheckRange.FloatValue;
+	g_bMeleeAvoid = g_hMeleeAvoid.BoolValue;
 }
 
 public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3], float eyeAngles[3], int& weapon)
@@ -94,47 +98,31 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 		buttons &= ~IN_ATTACK2;
 		int iFlags = GetEntityFlags(hunter);
 		float fDistance = NearestSurvivorDistance(hunter);
-		float fHunterPos[3], fTargetAngles[3];
+		float fHunterPos[3] = {0.0}, fTargetAngles[3] = {0.0};
 		GetClientAbsOrigin(hunter, fHunterPos);
 		int iTarget = GetClientAimTarget(hunter, true);
 		bool bHasSight = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_hasVisibleThreats"));
-		if (iTarget > 0)
+		if (IsSurvivor(iTarget) && GetEntProp(hunter, Prop_Send, "m_isAttemptingToPounce") && bHasSight)
 		{
-			if (bHasSight)
-			{
-				ComputeAimAngles(hunter, iTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
-			}
+			ComputeAimAngles(hunter, iTarget, fTargetAngles, AimChest);
+			fTargetAngles[2] = 0.0;
+			TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
 		}
-		else
+		if ((iFlags & FL_DUCKING) && (iFlags & FL_ONGROUND) && bHasSight)
 		{
-			if (bHasSight)
+			if (fDistance < g_fHunterFastPounceDistance)
 			{
-				int iNewTarget = GetClosestSurvivor(fHunterPos);
-				ComputeAimAngles(hunter, iNewTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(hunter, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
-			}
-		}
-		if ((iFlags & FL_DUCKING) && (iFlags & FL_ONGROUND))
-		{
-			if (bHasSight)
-			{
-				if (fDistance < g_fHunterFastPounceDistance)
+				buttons &= ~IN_ATTACK;
+				if (!g_bHasQueuedLunge[hunter])
 				{
-					buttons &= ~IN_ATTACK;
-					if (!g_bHasQueuedLunge[hunter])
-					{
-						g_bCanLunge[hunter] = false;
-						g_bHasQueuedLunge[hunter] = true;
-						CreateTimer(GetConVarFloat(FindConVar("z_lunge_interval")), Timer_LungeInterval, hunter, TIMER_FLAG_NO_MAPCHANGE);
-					}
-					else if (g_bCanLunge[hunter])
-					{
-						buttons |= IN_ATTACK;
-						g_bHasQueuedLunge[hunter] = false;
-					}
+					g_bCanLunge[hunter] = false;
+					g_bHasQueuedLunge[hunter] = true;
+					CreateTimer(GetConVarFloat(FindConVar("z_lunge_interval")), Timer_LungeInterval, hunter, TIMER_FLAG_NO_MAPCHANGE);
+				}
+				else if (g_bCanLunge[hunter])
+				{
+					buttons |= IN_ATTACK;
+					g_bHasQueuedLunge[hunter] = false;
 				}
 			}
 		}
@@ -158,7 +146,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	{
 		float fSelfPos[3];
 		GetClientAbsOrigin(specialInfected, fSelfPos);
-		if (curTarget > 0)
+		if (IsSurvivor(curTarget))
 		{
 			float fTargetPos[3], fDistance;
 			GetClientAbsOrigin(curTarget, fTargetPos);
@@ -166,37 +154,61 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 			if (IsPinned(curTarget) || IsIncapped(curTarget))
 			{
 				curTarget = GetClosestSurvivor(fSelfPos, curTarget);
-				return Plugin_Changed;
+				if (IsSurvivor(curTarget))
+				{
+					return Plugin_Changed;
+				}
 			}
+			// 近战回避，目标拿着近战且团队中不是所有人都拿着近战，选择其他目标
+			if (g_bMeleeAvoid && ClientMeleeCheck(curTarget) && TeamMeleeCheck() != g_iMobileSurvivor)
+			{
+				g_iMobileSurvivor = 0;
+				curTarget = GetClosestSurvivor(fSelfPos, curTarget);
+				if (IsSurvivor(curTarget))
+				{
+					return Plugin_Changed;
+				}
+			}
+			else
+			{
+				g_iMobileSurvivor = 0;
+			}
+			// 选择 hunter 目标
 			switch (g_iHunterTarget)
 			{
 				case 2:
 				{
-					curTarget = GetClosestSurvivor(fSelfPos);
+					int nearesttarget = GetClosestSurvivor(fSelfPos);
+					if (IsSurvivor(nearesttarget) && IsPlayerAlive(nearesttarget) && !IsPinned(nearesttarget) && !IsIncapped(nearesttarget))
+					{
+						curTarget = GetClosestSurvivor(fSelfPos);
+						return Plugin_Changed;
+					}
 				}
 				case 3:
 				{
 					if (fDistance > g_fShotGunCheckRange)
 					{
-						int iTeamShotgunCount = TeamShotgunCheck();
-						// 团队中所有人（未被控，未倒地，未死亡）都拿着霰弹枪，随机选择最近目标
-						if (iTeamShotgunCount == g_iMobileSurvivor)
+						// 团队中所有人（未被控，未倒地，未死亡）都拿着霰弹枪，随机选择最近目标，如果目标有效则改变目标，如果目标无效则重新执行上面的选择有效目标
+						if (TeamShotgunCheck() == g_iMobileSurvivor)
 						{
-							curTarget = GetClosestSurvivor(fSelfPos);
 							g_iMobileSurvivor = 0;
-							iTeamShotgunCount = 0;
-							return Plugin_Changed;
+							int nearesttarget = GetClosestSurvivor(fSelfPos);
+							if (IsSurvivor(curTarget) && IsPlayerAlive(curTarget) && !IsPinned(curTarget) && !IsIncapped(curTarget))
+							{
+								curTarget = nearesttarget;
+								return Plugin_Changed;
+							}
 						}
 						else
 						{
 							g_iMobileSurvivor = 0;
-							iTeamShotgunCount = 0;
 						}
-						if (curTarget)
+						if (IsSurvivor(curTarget) && IsPlayerAlive(curTarget) && !IsPinned(curTarget) && !IsIncapped(curTarget))
 						{
 							// 检测目标是否手持霰弹枪
 							int iActiveWeapon = GetEntPropEnt(curTarget, Prop_Send, "m_hActiveWeapon");
-							if (iActiveWeapon)
+							if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 							{
 								char sWeaponName[64];
 								GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
@@ -221,11 +233,9 @@ int TeamShotgunCheck()
 	int iTeamShotgunCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && IsPinned(client))
+		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && !IsPinned(client))
 		{
 			g_iMobileSurvivor += 1;
-			char sName[64];
-			GetClientName(client, sName, sizeof(sName));
 			int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 			if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 			{
@@ -239,6 +249,47 @@ int TeamShotgunCheck()
 		}
 	}
 	return iTeamShotgunCount;
+}
+
+bool ClientMeleeCheck(int client = -1)
+{
+	if (client != -1)
+	{
+		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if (IsValidEntity(activeweapon) && IsValidEdict(activeweapon))
+		{
+			char classname[64] = '\0';
+			GetEdictClassname(activeweapon, classname, sizeof(classname));
+			if (strcmp(classname[7], "melee") == 0 || strcmp(classname, "weapon_chainsaw") == 0)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+int TeamMeleeCheck()
+{
+	int teammeleenum = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && !IsPinned(client))
+		{
+			g_iMobileSurvivor += 1;
+			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+			if (IsValidEntity(activeweapon) && IsValidEdict(activeweapon))
+			{
+				char classname[64];
+				GetEdictClassname(activeweapon, classname, sizeof(classname));
+				if (strcmp(classname[7], "melee") == 0 || strcmp(classname, "weapon_chainsaw") == 0)
+				{
+					teammeleenum += 1;
+				}
+			}
+		}
+	}
+	return teammeleenum;
 }
 
 bool IsPinned(int client)
