@@ -56,7 +56,7 @@ public Plugin myinfo =
 ConVar g_hTankBhop, g_hTankThrow, g_hTankThrowDist, g_hTankBlockThrowDist, g_hTankTarget, g_hTankBhopSpeed, g_hTreeDetect, g_hTreeNewTarget, g_hTankAirAngles, g_hTankAttackRange
 , g_hTankConsumeHeight, g_hTankConsumLimit, g_hTankConsumeRaidus, g_hTankAttackVomitedNum, g_hVomitCanInstantAttack, g_hVomitAttackInterval, g_hTeleportForwardPercent
 , g_hVsBossFlowBuffer, g_hTankConsumeLimitNum, g_hTankThrowForce, g_hTankConsume, g_hTankConsumeType, g_hTankBhopHitWllDistance, g_hTankRetreatAirAngles, g_hTankConsumeAction, g_hTankConsumeDamagePercent
-, g_hTankForceAttackDistance, g_hTankConsumeHealthLimit, g_hTankAttackIncapped, g_hTankConsumeValidRaidus, g_hTankConsumeDistance, g_hSiLimit;
+, g_hTankForceAttackDistance, g_hTankConsumeHealthLimit, g_hTankAttackIncapped, g_hTankConsumeValidRaidus, g_hTankConsumeDistance, g_hRandomRock, g_hRockModles, g_hRockModelScale, g_hSiLimit;
 // Ints
 int g_iTankTarget, g_iTankThrowDist, g_iTankBlockThrowDist, g_iTreeDetect, g_iTreePlayer[MAXPLAYERS + 1] = -1, g_iTreeNewTarget, g_iTankConsumeLimit
 , g_iTankConsumeRaidus, g_iTankAttackVomitedNum, g_iVomitedPlayer = 0, g_iTeleportForwardPercent, g_iTankConsumeSurvivorProgress[MAXPLAYERS + 1] = 0
@@ -67,10 +67,10 @@ int g_iTankTarget, g_iTankThrowDist, g_iTankBlockThrowDist, g_iTreeDetect, g_iTr
 // Bools
 bool g_bTankBhop, g_bTankThrow, g_bCanTankConsume[MAXPLAYERS + 1] = false, g_bInConsumePlace[MAXPLAYERS + 1] = false, g_bReturnConsumePlace[MAXPLAYERS + 1] = false, g_bCanTankAttack[MAXPLAYERS + 1] = true
 , g_bVomitCanInstantAttack, g_bVomitCanConsume[MAXPLAYERS + 1] = false, g_bTankConsume, g_bIsFirstConsumeCheck[MAXPLAYERS + 1] = true, g_bDistanceHandle[MAXPLAYERS + 1] = false
-, g_bTankActionReset[MAXPLAYERS + 1] = false;
+, g_bTankActionReset[MAXPLAYERS + 1] = false, g_bRandomRock = false;
 // Floats
 float g_fTankBhopSpeed, g_fTankAirAngles, g_fTankAttackRange, g_fTreePlayerOriginPos[3], g_fTankConsumeHeight, g_fConsumePosition[MAXPLAYERS + 1][3]
-, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles;
+, g_fTeleportPosition[MAXPLAYERS + 1][3], g_fVomitAttackInterval, g_fRunTopSpeed[MAXPLAYERS + 1], g_fTankBhopHitWallDistance, g_fTankRetreatAirAngles, g_fRockModelScale;
 // Handles
 Handle g_hDistanceTimer[MAXPLAYERS + 1] = INVALID_HANDLE;
 
@@ -114,11 +114,15 @@ public void OnPluginStart()
 	g_hTankConsumeAction = CreateConVar("ai_TankConsumeAction", "2", "Tank在消耗范围内将会：1=冰冻，2=可活动但不允许超出消耗范围", FCVAR_NOTIFY, true, 1.0, true, 2.0);
 	g_hTankConsumeDamagePercent = CreateConVar("ai_TankConsumeDamagePercent", "50", "Tank在消耗过程中只会受到这个百分比的伤害", FCVAR_NOTIFY, true, 0.0, true, 100.0);
 	// 2022-4-7新增
-	g_hTankForceAttackDistance = CreateConVar("ai_TankForceAttackDistance", "300", "Tank在离最近生还这个距离时即使可以消耗也不会当着生还的面回避生还（强制压制）", FCVAR_NOTIFY, true, 0.0);
+	g_hTankForceAttackDistance = CreateConVar("ai_TankForceAttackDistance", "350", "Tank在离最近生还这个距离时即使可以消耗也不会当着生还的面回避生还（强制压制）", FCVAR_NOTIFY, true, 0.0);
 	g_hTankAttackIncapped = CreateConVar("ai_TankIncappedCount", "1", "强制压制时，需要拍倒这个数量的生还者才允许继续检测是否可以消耗", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeHealthLimit = CreateConVar("ai_TankConsumeHealthLimit", "1200", "Tank在少于这么多血量时不会消耗", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeValidRaidus = CreateConVar("ai_TankConsumeValidRaidus", "1800", "Tank在当前消耗位上，如果当前消耗位不能直视生还，则以这个半径重新找位", FCVAR_NOTIFY, true, 0.0);
 	g_hTankConsumeDistance = CreateConVar("ai_TankConsumeDistance", "1200", "Tank消耗找位的位置必须离生还者大于这个距离", FCVAR_NOTIFY, true, 0.0);
+	//2022-4-22新增一点好玩的
+	g_hRandomRock = CreateConVar("ai_TankRandomRock", "0", "是否开启坦克石头模型修改", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hRockModelScale = CreateConVar("ai_TankRockScale", "10.0", "坦克随机石头的模型缩放大小", FCVAR_NOTIFY, true, 0.0);
+	g_hRockModles = CreateConVar("ai_TankRockModels", "models/w_models/weapons/w_eq_painpills.mdl");
 	// 其他 Cvar
 	g_hTankAttackRange = FindConVar("tank_attack_range");
 	g_hVsBossFlowBuffer = FindConVar("versus_boss_buffer");
@@ -162,6 +166,8 @@ public void OnPluginStart()
 	g_hTankConsumeValidRaidus.AddChangeHook(ConVarChanged_Cvars);
 	g_hTankConsumeDistance.AddChangeHook(ConVarChanged_Cvars);
 	g_hSiLimit.AddChangeHook(ConVarChanged_Cvars);
+	g_hRandomRock.AddChangeHook(ConVarChanged_Cvars);
+	g_hRockModelScale.AddChangeHook(ConVarChanged_Cvars);
 	// GetConVar
 	GetCvars();
 	// 数组初始化
@@ -256,6 +262,48 @@ void GetCvars()
 	g_iTankConsumeValidRaidus = g_hTankConsumeValidRaidus.IntValue;
 	g_iTankConsumeDistance = g_hTankConsumeDistance.IntValue;
 	g_iSiLimit = g_hSiLimit.IntValue;
+	g_bRandomRock = g_hRandomRock.BoolValue;
+	g_fRockModelScale = g_hRockModelScale.FloatValue;
+}
+
+// *********************
+//		  随机石头
+// *********************
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (g_bRandomRock && strcmp(classname, "tank_rock") == 0)
+	{
+		RequestFrame(NextFrame_RockThrow, EntIndexToEntRef(entity));
+	}
+}
+
+void NextFrame_RockThrow(int entityref)
+{
+	if (entityref != 0 && EntRefToEntIndex(entityref) != INVALID_ENT_REFERENCE)
+	{
+		int entity = EntRefToEntIndex(entityref);
+		int tankclient = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
+		if (IsAiTank(tankclient))
+		{
+			CreateTimer(0.1, Timer_SetRockModel, entity, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+		}
+	}
+}
+
+public Action Timer_SetRockModel(Handle timer, int entity)
+{
+	if (IsValidEntity(entity))
+	{
+		char model[64] = '\0';
+		g_hRockModles.GetString(model, sizeof(model));
+		SetEntityModel(entity, model);
+		SetEntPropFloat(entity, Prop_Send,"m_flModelScale", g_fRockModelScale); 
+		return Plugin_Stop;
+	}
+	else
+	{
+		return Plugin_Stop;
+	}
 }
 
 // **************
@@ -662,7 +710,72 @@ public Action OnPlayerRunCmd(int tank, int &buttons, int &impulse, float vel[3],
 			buttons &= ~IN_DUCK;
 		}
 	}
+	if (g_bRandomRock && IsSurvivor(tank) && IsPlayerAlive(tank))
+	{
+		if (buttons & IN_USE && GetPlayerWeaponSlot(tank, 4) == -1)
+		{
+			float eyepos[3] = {0.0}, eyeangles[3] = {0.0};
+			GetClientEyePosition(tank, eyepos);
+			GetClientEyeAngles(tank, eyeangles);
+			Handle hTrace = TR_TraceRayFilterEx(eyepos, eyeangles, MASK_SOLID, RayType_Infinite, Trace_FilterNoPlayers, tank);
+			if (TR_DidHit(hTrace))
+			{
+				char classname[16] = '\0';
+				float endpos[3] = {0.0};
+				TR_GetEndPosition(endpos, hTrace);
+				#if (DEBUG_EYELINE)
+					ShowLaser(3, eyepos, endpos);
+				#endif
+				int entity = TR_GetEntityIndex(hTrace);
+				if (IsValidEntity(entity) && IsValidEdict(entity))
+				{
+					GetEdictClassname(entity, classname, sizeof(classname));
+					if (strcmp(classname, "tank_rock") == 0)
+					{
+						// 射线撞到了石头，并且距离小于 150，销毁石头
+						if (GetVectorDistance(eyepos, endpos) <= 150.0)
+						{
+							RequestFrame(NextFrame_RockDetonate, entity);
+							BypassAndExecuteCommand(tank, "give", "pain_pills");
+							EmitSoundToClient(tank, "level/gnomeftw.wav");
+							CPrintToChatAll("{O}%N {LG}接住了坦克的石头并获得了一瓶止痛药", tank);
+						}
+					}
+				}
+			}
+		}
+	}
 	return Plugin_Continue;
+}
+
+void NextFrame_RockDetonate(int rock)
+{
+	Handle hRockDetonate = INVALID_HANDLE;
+	if (hRockDetonate == INVALID_HANDLE)
+	{
+		Handle hGamedata = LoadGameConfigFile("left4dhooks.l4d2");
+		if(hGamedata == INVALID_HANDLE)
+		{
+			SetFailState("无法读取 Gamedata 文件 left4dhooks.l4d2.txt");
+		}
+		StartPrepSDKCall(SDKCall_Entity);
+		PrepSDKCall_SetFromConf(hGamedata, SDKConf_Signature, "CTankRock::Detonate");
+		hRockDetonate = EndPrepSDKCall();
+		delete hGamedata;
+		if (hRockDetonate == INVALID_HANDLE)
+		{
+			return;
+		}
+	}
+	SDKCall(hRockDetonate, rock);
+}
+
+public void BypassAndExecuteCommand(int client, char[] strCommand, char[] strParam1)
+{
+	int flags = GetCommandFlags(strCommand);
+	SetCommandFlags(strCommand, flags & ~ FCVAR_CHEAT);
+	FakeClientCommand(client, "%s %s", strCommand, strParam1);
+	SetCommandFlags(strCommand, flags);
 }
 
 // 重置坦克行动状态
@@ -714,14 +827,14 @@ void CheckCanTankConsume(int tank, int survivordist, int iInfectedCount)
 		else
 		{
 			bool bHasSight = view_as<bool>(GetEntProp(tank, Prop_Send, "m_hasVisibleThreats"));
-			if (!bHasSight && !g_bCanTankConsume[tank] && g_bCanTankAttack[tank] && survivordist > g_iTankSecondAttackDistance[tank][0] && g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum && GetClientHealth(tank) > g_iTankConsumeHealthLimit)
+			if (!g_bCanTankConsume[tank] && g_bCanTankAttack[tank] && survivordist > g_iTankSecondAttackDistance[tank][0] && g_iTankConsumeLimitNum[tank] <= g_iTankConsumeNum && GetClientHealth(tank) > g_iTankConsumeHealthLimit)
 			{
 				PrintToConsoleAll("[Ai-Tank]：正常消耗找位且不可直视生还，行 718，当前最近生还距离：%d，克强制压制距离：%d", survivordist, g_iTankSecondAttackDistance[tank][0]);
 				DoConsume(tank, fTankPos);
 				g_bVomitCanConsume[tank] = false;
 			}
-			// 最近生还者距离克小于限制距离
-			if (survivordist <= g_iTankSecondAttackDistance[tank][0])
+			// 最近生还者距离克小于限制距离且可视
+			if (bHasSight && survivordist <= g_iTankSecondAttackDistance[tank][0])
 			{
 				// PrintToConsoleAll("[Ai-Tank]：当前最近生还者离克最近距离：%d，限制距离：%d", survivordist, g_iTankSecondAttackDistance[tank][0]);
 				// 如果克拍倒了大于限制人数的人，消耗次数小于限制，血量高于限制，则消耗，创建时钟检测最近生还与克的距离
@@ -731,7 +844,7 @@ void CheckCanTankConsume(int tank, int survivordist, int iInfectedCount)
 					{
 						if (!g_bDistanceHandle[tank])
 						{
-							PrintToConsoleAll("[Ai-Tank]：当前克拍倒：%d 人，大于限制：%d 人，创建时钟追踪是否有生还继续压制", g_iTankIncappedCount[tank][0], g_iTankIncappedCount);
+							PrintToConsoleAll("[Ai-Tank]：当前克拍倒：%d 人，大于限制：%d 人，创建时钟追踪是否有生还继续压制", g_iTankIncappedCount[tank][0], g_iTankAttackIncapped);
 							g_hDistanceTimer[tank] = CreateTimer(1.0, Timer_DistanceTrack, tank, TIMER_REPEAT);
 							g_bDistanceHandle[tank] = true;
 						}
@@ -763,7 +876,7 @@ void CheckCanTankConsume(int tank, int survivordist, int iInfectedCount)
 					// PrintToConsoleAll("不符合消耗条件，当前拍倒人数：%d，限制：%d，血量：%d", g_iTankIncappedCount[tank][0], g_iTankIncappedCount, GetClientHealth(tank));
 					if (g_bTankActionReset[tank])
 					{
-						PrintToConsoleAll("[Ai-Tank]：当前克拍倒的人数：%d，小于限制人数：%d，强制压制", g_iTankIncappedCount[tank][0], g_iTankIncappedCount);
+						PrintToConsoleAll("[Ai-Tank]：当前克拍倒的人数：%d，小于限制人数：%d，强制压制", g_iTankIncappedCount[tank][0], g_iTankAttackIncapped);
 						TankActionReset(tank);
 						g_bTankActionReset[tank] = false;
 					}
