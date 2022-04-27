@@ -45,15 +45,15 @@ public void OnPluginStart()
 {
 	// CreateConVar
 	g_hHunterFastPounceDistance = CreateConVar("ai_HunterFastPounceDistance", "2000", "在距离目标多近Hunter开始快速突袭", FCVAR_NOTIFY, true, 0.0);
-	g_hPounceVerticalAngle = CreateConVar("ai_HunterPounceVerticalAngle", "6", "Hunter突袭的垂直角度限制", FCVAR_NOTIFY, true, 0.0);
-	g_hPounceAngleMean = CreateConVar("ai_HunterPounceAngleMean", "10", "Hunter突袭的平均角度（由随机数发生器产生）", FCVAR_NOTIFY, true, 0.0);
+	g_hPounceVerticalAngle = CreateConVar("ai_HunterPounceVerticalAngle", "6", "Hunter突袭的垂直角度限制", FCVAR_NOTIFY, true, 0.0, true, 90.0);
+	g_hPounceAngleMean = CreateConVar("ai_HunterPounceAngleMean", "10", "Hunter突袭的平均角度（由随机数发生器产生）", FCVAR_NOTIFY, true, 0.0, true, 90.0);
 	g_hPounceAngleStd = CreateConVar("ai_HunterPounceAngleStd", "20", "Hunter突袭角度与平均角度的偏差（由随机数发生器产生）", FCVAR_NOTIFY, true, 0.0);
 	g_hStraightPounceDistance = CreateConVar("ai_HunterStraightPounceDistance", "200.0", "Hunter在离生还者多近时允许直扑", FCVAR_NOTIFY, true, 0.0);
-	g_hHunterAimOffset = CreateConVar("ai_HunterAimOffset", "360", "目标与Hunter处在这一角度范围内，Hunter将不会直扑", FCVAR_NOTIFY, true, 0.0);
+	g_hHunterAimOffset = CreateConVar("ai_HunterAimOffset", "360", "目标与Hunter处在这一角度范围内，Hunter将不会直扑", FCVAR_NOTIFY, true, 0.0, true, 360.0);
 	g_hWallPounceDistance = CreateConVar("ai_HunterWallDetectDistance", "-1", "在这个范围内，Hunter突袭时将会优先检测是否有墙体", FCVAR_NOTIFY);
-	g_hHunterTarget = CreateConVar("ai_HunterTarget", "2", "Hunter目标选择：1=自然目标选择，2=最近目标，3=手持非霰弹枪的生还者", FCVAR_NOTIFY, true, 1.0, true, 2.0);
+	g_hHunterTarget = CreateConVar("ai_HunterTarget", "2", "Hunter目标选择：1=自然目标选择，2=最近目标，3=手持非霰弹枪的生还者", FCVAR_NOTIFY, true, 1.0, true, 3.0);
 	g_hMeleeAvoid = CreateConVar("ai_HunterMeleeAvoid", "1", "Hunter是否回避手持近战的玩家", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hShotGunCheckRange = CreateConVar("ai_HunterShotGunCheckRange", "150.0", "目标选择为3时，Hunter在大于这个距离时允许进行目标枪械检测", FCVAR_NOTIFY, true, 0.0);
+	g_hShotGunCheckRange = CreateConVar("ai_HunterShotGunCheckRange", "250.0", "目标选择为3时，Hunter在大于这个距离时允许进行目标枪械检测", FCVAR_NOTIFY, true, 0.0);
 	// HookEvents
 	HookEvent("player_spawn", evt_PlayerSpawn);
 	HookEvent("ability_use", evt_AbilityUse);
@@ -179,9 +179,9 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				case 2:
 				{
 					int nearesttarget = GetClosestSurvivor(fSelfPos);
-					if (IsSurvivor(nearesttarget) && IsPlayerAlive(nearesttarget) && !IsPinned(nearesttarget) && !IsIncapped(nearesttarget))
+					if (IsSurvivor(nearesttarget))
 					{
-						curTarget = GetClosestSurvivor(fSelfPos);
+						curTarget = nearesttarget;
 						return Plugin_Changed;
 					}
 				}
@@ -190,11 +190,12 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 					if (fDistance > g_fShotGunCheckRange)
 					{
 						// 团队中所有人（未被控，未倒地，未死亡）都拿着霰弹枪，随机选择最近目标，如果目标有效则改变目标，如果目标无效则重新执行上面的选择有效目标
+						// 时间复杂度有些高，为 O(n)^3
 						if (TeamShotgunCheck() == g_iMobileSurvivor)
 						{
 							g_iMobileSurvivor = 0;
 							int nearesttarget = GetClosestSurvivor(fSelfPos);
-							if (IsSurvivor(curTarget) && IsPlayerAlive(curTarget) && !IsPinned(curTarget) && !IsIncapped(curTarget))
+							if (IsSurvivor(curTarget))
 							{
 								curTarget = nearesttarget;
 								return Plugin_Changed;
@@ -215,8 +216,12 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 								if ((strcmp(sWeaponName, "weapon_shotgun_spas") == 0) || (strcmp(sWeaponName, "weapon_autoshotgun") == 0) || (strcmp(sWeaponName, "weapon_pumpshotgun") == 0) || (strcmp(sWeaponName, "weapon_shotgun_chrome") == 0))
 								{
 									g_iShotgunPlayer = curTarget;
-									curTarget = GetClosestSurvivor(fSelfPos, g_iShotgunPlayer);
-									return Plugin_Changed;
+									int newtarget = GetClosestSurvivor(fSelfPos, g_iShotgunPlayer);
+									if (IsSurvivor(newtarget))
+									{
+										curTarget = newtarget;
+										return Plugin_Changed;
+									}
 								}
 							}
 						}
@@ -233,7 +238,7 @@ int TeamShotgunCheck()
 	int iTeamShotgunCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && !IsPinned(client))
+		if (IsSurvivor(client) && IsPlayerAlive(client) && !IsPinned(client) && !IsIncapped(client))
 		{
 			g_iMobileSurvivor += 1;
 			int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
@@ -540,7 +545,7 @@ float GetPlayerAimOffset(int attacker, int target)
 
 int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 {
-	float surPos[3];	int closetSur = GetRandomSurvivor();
+	float surPos[3];	int closetSur = GetRandomMobileSurvivor();
 	if (closetSur == 0)
 	{
 		return 0;
@@ -549,7 +554,7 @@ int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 	int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
 	for (int client = 1; client < MaxClients; client++)
 	{
-		if (IsSurvivor(client) && IsPlayerAlive(client) && client != excludeSur)
+		if (IsSurvivor(client) && IsPlayerAlive(client) && !IsPinned(client) && !IsIncapped(client) && client != excludeSur)
 		{
 			GetClientAbsOrigin(client, surPos);
 			int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
@@ -566,6 +571,28 @@ int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 		}
 	}
 	return closetSur;
+}
+
+// 随机获取一个有效（未倒地，未死亡，未被控）的生还者，成功返回生还者 id，失败返回 0
+int GetRandomMobileSurvivor()
+{
+	int survivors[16] = {0}, index = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsPinned(client) && !IsIncapped(client))
+		{
+			survivors[index] = client;
+			index += 1;
+		}
+	}
+	if (index > 0)
+	{
+		return survivors[GetRandomInt(0, index - 1)];
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 void ComputeAimAngles(int client, int target, float angles[3], AimType type = AimEye)
