@@ -140,50 +140,44 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 						}
 					}
 				}
+				// 增加在空中被推的判断
+				if (iFlags == FL_JUMPING && !g_bHasBeenShoved[jockey] && (GetGameTime() - g_fShovedTime[jockey]) > g_fStaggerTime)
+				{
+					buttons &= ~IN_JUMP;
+					// 距离大于等于 150.0 才允许防止连跳过头，否则可能控不到人卡在空中
+					if (GetVectorDistance(fJockeyPos, fTargetPos) >= 150.0)
+					{
+						float fAnglesPost[3], fAngles[3];
+						GetVectorDistance(fSpeed, fAngles);
+						fAnglesPost = fAngles;
+						fAngles[0] = fAngles[2] = 0.0;
+						GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
+						NormalizeVector(fAngles, fAngles);
+						// 保存当前位置
+						static float fDirection[2][3];
+						fDirection[0] = fJockeyPos;
+						fDirection[1] = fTargetPos;
+						fJockeyPos[2] = fTargetPos[2] = 0.0;
+						MakeVectorFromPoints(fJockeyPos, fTargetPos, fJockeyPos);
+						NormalizeVector(fJockeyPos, fJockeyPos);
+						// 计算距离
+						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fJockeyPos))) < g_fJockeyAirAngles)
+						{
+							return Plugin_Continue;
+						}
+						// 重新设置速度方向
+						float fNewVelocity[3];
+						MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+						NormalizeVector(fNewVelocity, fNewVelocity);
+						ScaleVector(fNewVelocity, fCurrentSpeed);
+						TeleportEntity(jockey, NULL_VECTOR, fAnglesPost, fNewVelocity);
+					}
+				}
 				// 不在地上，禁止按下跳跃键和攻击键
 				else
 				{
 					buttons &= ~IN_JUMP;
 					buttons &= ~IN_ATTACK;
-				}
-			}
-		}
-		// 增加在空中被推的判断
-		if (iFlags == FL_JUMPING && !g_bHasBeenShoved[jockey] && (GetGameTime() - g_fShovedTime[jockey]) > g_fStaggerTime)
-		{
-			buttons &= ~IN_JUMP;
-			float fTargetPos[3] = {0.0};
-			int newtarget = NearestSurvivor(jockey);
-			if (IsSurvivor(newtarget))
-			{
-				GetClientAbsOrigin(newtarget, fTargetPos);
-				// 距离大于等于 150.0 才允许防止连跳过头，否则可能控不到人卡在空中
-				if (GetVectorDistance(fJockeyPos, fTargetPos) >= 150.0)
-				{
-					float fAnglesPost[3], fAngles[3];
-					GetVectorDistance(fSpeed, fAngles);
-					fAnglesPost = fAngles;
-					fAngles[0] = fAngles[2] = 0.0;
-					GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
-					NormalizeVector(fAngles, fAngles);
-					// 保存当前位置
-					static float fDirection[2][3];
-					fDirection[0] = fJockeyPos;
-					fDirection[1] = fTargetPos;
-					fJockeyPos[2] = fTargetPos[2] = 0.0;
-					MakeVectorFromPoints(fJockeyPos, fTargetPos, fJockeyPos);
-					NormalizeVector(fJockeyPos, fJockeyPos);
-					// 计算距离
-					if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fJockeyPos))) < g_fJockeyAirAngles)
-					{
-						return Plugin_Continue;
-					}
-					// 重新设置速度方向
-					float fNewVelocity[3];
-					MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
-					NormalizeVector(fNewVelocity, fNewVelocity);
-					ScaleVector(fNewVelocity, fCurrentSpeed);
-					TeleportEntity(jockey, NULL_VECTOR, fAnglesPost, fNewVelocity);
 				}
 			}
 		}
@@ -343,27 +337,6 @@ float NearestSurvivorDistance(int client)
 	}
 	SortFloats(fDistance, iCount, Sort_Ascending);
 	return fDistance[0];
-}
-
-int NearestSurvivor(int attacker)
-{
-	int iTarget = -1;
-	float minDistance = 100000.0, selfPos[3] = {0.0}, targetPos[3] = {0.0};
-	GetClientAbsOrigin(attacker, selfPos);
-	for (int client = 1; client <= MaxClients; ++client)
-	{
-		if (IsSurvivor(client) && IsPlayerAlive(client) && !IsPinned(client) && !IsIncapped(client))
-		{
-			GetClientAbsOrigin(client, targetPos);
-			float fDistance = GetVectorDistance(selfPos, targetPos);
-			if (fDistance < minDistance)
-			{
-				minDistance = fDistance;
-				iTarget = client;
-			}
-		}
-	}
-	return iTarget;
 }
 
 bool IsTargetWatchingAttacker(int attacker, int offset)
