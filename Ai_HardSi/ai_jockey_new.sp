@@ -18,7 +18,7 @@ public Plugin myinfo =
 	name 			= "Ai_Jockey增强",
 	author 			= "Breezy，High Cookie，Standalone，Newteee，cravenge，Harry，Sorallll，PaimonQwQ，夜羽真白",
 	description 	= "觉得Ai猴子太弱了？ Try this！",
-	version 		= "2022-4-27",
+	version 		= "2022/5/2",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -157,9 +157,9 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 			if (IsSurvivor(newtarget))
 			{
 				GetClientAbsOrigin(newtarget, fTargetPos);
-				if (GetVectorDistance(fJockeyPos, fTargetPos) < 100.0)
+				// 距离大于等于 150.0 才允许防止连跳过头，否则可能控不到人卡在空中
+				if (GetVectorDistance(fJockeyPos, fTargetPos) >= 150.0)
 				{
-					// 防止连跳过头
 					float fAnglesPost[3], fAngles[3];
 					GetVectorDistance(fSpeed, fAngles);
 					fAnglesPost = fAngles;

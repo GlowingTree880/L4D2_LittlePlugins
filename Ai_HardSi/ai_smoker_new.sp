@@ -25,7 +25,7 @@ public Plugin myinfo =
 	name 			= "Ai_Smoker增强",
 	author 			= "Breezy，High Cookie，Standalone，Newteee，cravenge，Harry，Sorallll，PaimonQwQ，夜羽真白",
 	description 	= "觉得Ai舌头太弱了？ Try this！",
-	version 		= "1.0.1.0",
+	version 		= "2022/5/2",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -98,10 +98,10 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 	if (IsAiSmoker(smoker))
 	{
 		int iTarget = GetClientAimTarget(smoker, true);
-		float fSmokerPos[3], fTargetPos[3], fTargetAngles[3];
+		float fSmokerPos[3] = {0.0}, fTargetPos[3] = {0.0}, fTargetAngles[3] = {0.0};
 		GetClientAbsOrigin(smoker, fSmokerPos);
 		bool bHasSight = view_as<bool>(GetEntProp(smoker, Prop_Send, "m_hasVisibleThreats"));
-		if (iTarget > 0)
+		if (IsSurvivor(iTarget))
 		{
 			GetClientAbsOrigin(iTarget, fTargetPos);
 			float fDistance = GetVectorDistance(fSmokerPos, fTargetPos);
@@ -128,19 +128,15 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 					}
 				}
 			}
-			if (bHasSight)
+			// 没有开视角锁定，则可以锁定视角在生还身上
+			if (bHasSight && !g_bVisionInverse)
 			{
-				if (!g_bVisionInverse)
-				{
-					// 如果没有开视角转向，则可以锁死视角
-					return Plugin_Changed;
-				}
 				ComputeAimAngles(smoker, iTarget, fTargetAngles, AimChest);
 				fTargetAngles[2] = 0.0;
 				TeleportEntity(smoker, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
 			}
 			// 由于舌头需要拉人，所以此时需要判断可见性
-			if (IsSurvivor(iTarget) && !IsIncapped(iTarget) && bHasSight)
+			if (IsSurvivor(iTarget) && bHasSight && !IsIncapped(iTarget) && !IsPinned(iTarget))
 			{
 				if (fDistance < SMOKER_MELEE_RANGE)
 				{
@@ -156,19 +152,9 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 				}
 			}
 		}
-		else
-		{
-			if (!g_hVisionInverse)
-			{
-				int iNewTarget = GetClosestSurvivor(fSmokerPos);
-				ComputeAimAngles(smoker, iNewTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(smoker, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
-			}
-		}
 		// 拉到人了
 		int iVictim = L4D_GetVictimSmoker(smoker);
-		if (iVictim > 0)
+		if (IsSurvivor(iVictim))
 		{
 			g_iMellePlayer = -1;
 			if (g_bVisionInverse)
@@ -188,12 +174,16 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	if (IsAiSmoker(specialInfected))
 	{
 		// 不拉被控和倒地的人
-		if (curTarget > 0)
+		if (IsSurvivor(curTarget))
 		{
 			if (IsPinned(curTarget) || IsIncapped(curTarget))
 			{
-				curTarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, curTarget);
-				return Plugin_Changed;
+				int newtarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, curTarget);
+				if (IsSurvivor(newtarget))
+				{
+					curTarget = newtarget;
+					return Plugin_Changed;
+				}
 			}
 		}
 		if (g_bMeleeAvoid)
@@ -202,10 +192,14 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 			int iTeamMeleeCount = TeamMeleeCheck();
 			if (iTeamMeleeCount == g_iValidSurvivor)
 			{
-				curTarget = SmokerTargetChoose(g_iTargetChoose, specialInfected);
 				g_iValidSurvivor = 0;
 				iTeamMeleeCount = 0;
-				return Plugin_Changed;
+				int newtarget = SmokerTargetChoose(g_iTargetChoose, specialInfected);
+				if (IsSurvivor(newtarget))
+				{
+					curTarget = newtarget;
+					return Plugin_Changed;
+				}
 			}
 			// 团队中并不是所有生还者都拿着近战，重新将g_iValidSurvivor设置为0
 			else
@@ -214,19 +208,23 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				iTeamMeleeCount = 0;
 			}
 			// 如果有目标，则继续判断目标是否拿着近战
-			if (curTarget)
+			if (IsSurvivor(curTarget))
 			{
 				// 检测目标是否手持近战
 				int iActiveWeapon = GetEntPropEnt(curTarget, Prop_Send, "m_hActiveWeapon");
 				if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 				{
-					char sWeaponName[64];
+					char sWeaponName[32];
 					GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
 					if (strcmp(sWeaponName[7], "melee") == 0 || strcmp(sWeaponName, "weapon_chainsaw") == 0)
 					{
 						g_iMellePlayer = curTarget;
-						curTarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, g_iMellePlayer);
-						return Plugin_Changed;
+						int newtarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, g_iMellePlayer);
+						if (IsSurvivor(newtarget))
+						{
+							curTarget = newtarget;
+							return Plugin_Changed;
+						}
 					}
 				}
 			}
@@ -265,6 +263,7 @@ void VisionInverse(DataPack pack)
 			TeleportEntity(attacker, NULL_VECTOR, fNegetiveLookAt, NULL_VECTOR);
 		}
 	}
+	delete pack;
 }
 
 bool IsPinned(int client)
@@ -297,11 +296,9 @@ int TeamMeleeCheck()
 	int iTeamMeleeCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && IsPinned(client))
+		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && IsPinned(client))
 		{
 			g_iValidSurvivor += 1;
-			char sName[64];
-			GetClientName(client, sName, sizeof(sName));
 			int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 			if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 			{
@@ -327,18 +324,21 @@ int SmokerTargetChoose(int iMethod, int iSmoker, int iSpecificTarget = -1)
 	{
 		case 1:
 		{
-			iTarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			int newtarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			if (IsSurvivor(newtarget))
+			{
+				iTarget = newtarget;
+			}
 		}
 		case 2:
 		{
 			for (int client = 1; client <= MaxClients; ++client)
 			{
-				if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && client != iSpecificTarget)
+				if (IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == TEAM_SURVIVOR && !IsIncapped(client) && !IsPinned(client) && client != iSpecificTarget)
 				{
-					char sWeaponName[64];
+					char sWeaponName[32] = '\0';
 					char iWeapon = GetPlayerWeaponSlot(client, 0);
-					// 有效武器
-					if (iWeapon)
+					if (IsValidEntity(iWeapon) && IsValidEdict(iWeapon))
 					{
 						GetEdictClassname(iWeapon, sWeaponName, sizeof(sWeaponName));
 						if (strcmp(sWeaponName, "weapon_pumpshotgun") == 0 || strcmp(sWeaponName, "weapon_shotgun_chrome") == 0 || strcmp(sWeaponName, "weapon_autoshotgun") == 0 || strcmp(sWeaponName, "weapon_shotgun_spas") == 0)
@@ -350,24 +350,28 @@ int SmokerTargetChoose(int iMethod, int iSmoker, int iSpecificTarget = -1)
 				}
 			}
 			// 检测完毕所有玩家，如果所有玩家主武器不是喷子，选择最近玩家
-			iTarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			int newtarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			if (IsSurvivor(newtarget))
+			{
+				iTarget = newtarget;
+			}
 		}
 		case 3:
 		{
 			float fTeamDistance = 0.0, fPlayerDistance = 0.0;
 			for (int client = 1; client <= MaxClients; client++)
 			{
-				if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && client != iSpecificTarget)
+				if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client) && client != iSpecificTarget)
 				{
 					// 玩家落后的情况
 					if (IsClientLeftBehind(client))
 					{
-						float fTargetPos[3];
-						GetClientAbsOrigin(client, fTargetPos);
-						fTargetPos[0] -= 100;
-						TeleportEntity(iSmoker, fTargetPos, NULL_VECTOR, NULL_VECTOR);
+						float targetpos[3] = {0.0};
+						L4D_GetRandomPZSpawnPosition(iSmoker, ZC_SMOKER, 5, targetpos);
+						TeleportEntity(iSmoker, targetpos, NULL_VECTOR, NULL_VECTOR);
 						iTarget = client;
 						bIsBehind[client] = true;
+						return iTarget;
 					}
 					else
 					{
@@ -380,11 +384,11 @@ int SmokerTargetChoose(int iMethod, int iSmoker, int iSpecificTarget = -1)
 					{
 						if (fTeamDistance + g_fLeftDistance < fPlayerDistance)
 						{
-							float fTargetPos[3];
-							GetClientAbsOrigin(client, fTargetPos);
-							fTargetPos[0] -= 20;
-							TeleportEntity(iSmoker, fTargetPos, NULL_VECTOR, NULL_VECTOR);
+							float targetpos[3] = {0.0};
+							L4D_GetRandomPZSpawnPosition(iSmoker, ZC_SMOKER, 5, targetpos);
+							TeleportEntity(iSmoker, targetpos, NULL_VECTOR, NULL_VECTOR);
 							iTarget = client;
+							return iTarget;
 						}
 						else
 						{
@@ -396,44 +400,48 @@ int SmokerTargetChoose(int iMethod, int iSmoker, int iSpecificTarget = -1)
 				bIsBehind[client] = false;
 			}
 			// 检测完毕所有玩家，如果玩家既无落后又无超前，选择最近玩家
-			iTarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			int newtarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			if (IsSurvivor(newtarget))
+			{
+				iTarget = newtarget;
+			}
 		}
 		case 4:
 		{
-			int iReloadTarget;
 			for (int client = 1; client <= MaxClients; client++)
 			{
-				if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && client != iSpecificTarget)
+				if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client) && client != iSpecificTarget)
 				{
-					iReloadTarget = IsInReload(client);
-					if (iReloadTarget != -1)
+					if (IsInReload(client))
 					{
-						iTarget = iReloadTarget;
+						iTarget = client;
 						return iTarget;
 					}
 				}
 			}
 			// 检测完毕所有玩家，如果没人正在换弹，选择最近玩家
-			iTarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			int newtarget = GetClosestSurvivor(fSelfPos, iSpecificTarget);
+			if (IsSurvivor(newtarget))
+			{
+				iTarget = newtarget;
+			}
 		}
 	}
 	return iTarget;
 }
 
-// 检测生还是否在换弹，如果是，返回生还ID
-int IsInReload(int client)
+// 检测生还是否在换弹
+bool IsInReload(int client)
 {
-	int iReloadClient = -1, iInReload;
-	int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-	if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
+	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	if (IsValidEntity(weapon) && IsValidEdict(weapon) && HasEntProp(weapon, Prop_Data, "m_bInReload"))
 	{
-		iInReload = GetEntProp(iActiveWeapon, Prop_Data, "m_bInReload");
+		if (GetEntProp(weapon, Prop_Data, "m_bInReload") == 1)
+		{
+			return true;
+		}
 	}
-	if (iInReload == 1)
-	{
-		iReloadClient = client;
-	}
-	return iReloadClient;
+	return false;
 }
 
 // 计算团队距离
@@ -443,16 +451,13 @@ float CalculateTeamDistance(int excludeClient)
 	int counter = 0;
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsSurvivor(i) && IsPlayerAlive(i) && i != excludeClient && !bIsBehind[i])
+		if (IsClientConnected(i) && IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == TEAM_SURVIVOR && !IsIncapped(i) && !IsPinned(i) && i != excludeClient && !bIsBehind[i])
 		{
-			if (!IsIncapped(i))
+			float fPlayerFlow = L4D2Direct_GetFlowDistance(i) / g_fMapFlowDistance;
+			if (fPlayerFlow > 0.0 && fPlayerFlow < 1.0)
 			{
-				float fPlayerFlow = L4D2Direct_GetFlowDistance(i) / g_fMapFlowDistance;
-				if (fPlayerFlow > 0.0 && fPlayerFlow < 1.0)
-				{
-					fTeamDistance += fPlayerFlow;
-					counter++;
-				}
+				fTeamDistance += fPlayerFlow;
+				counter++;
 			}
 		}
 	}
@@ -509,31 +514,49 @@ bool IsIncapped(int client)
     return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
 
+int GetRandomMobileSurvivor()
+{
+	int survivors[16] = {0}, index = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client))
+		{
+			survivors[index] = client;
+			index += 1;
+		}
+	}
+	if (index > 0)
+	{
+		return survivors[GetRandomInt(0, index - 1)];
+	}
+	return 0;
+}
+
 // 选择最近玩家
 int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 {
-	float surPos[3];	int closetSur = GetRandomSurvivor();
-	if (closetSur == 0)
+	float surPos[3] = {0.0};
+	int closetSur = GetRandomMobileSurvivor();
+	if (IsSurvivor(closetSur))
 	{
-		return 0;
-	}
-	GetClientAbsOrigin(closetSur, surPos);
-	int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-	for (int client = 1; client < MaxClients; client++)
-	{
-		if (IsSurvivor(client) && IsPlayerAlive(client) && client != excludeSur)
+		GetClientAbsOrigin(closetSur, surPos);
+		int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
+		for (int client = 1; client < MaxClients; client++)
 		{
-			GetClientAbsOrigin(client, surPos);
-			int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-			if (iClosetAbsDisplacement < 0)
+			if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client) && client != excludeSur)
 			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
-			}
-			else if (iAbsDisplacement < iClosetAbsDisplacement)
-			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
+				GetClientAbsOrigin(client, surPos);
+				int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
+				if (iClosetAbsDisplacement < 0)
+				{
+					iClosetAbsDisplacement = iAbsDisplacement;
+					closetSur = client;
+				}
+				else if (iAbsDisplacement < iClosetAbsDisplacement)
+				{
+					iClosetAbsDisplacement = iAbsDisplacement;
+					closetSur = client;
+				}
 			}
 		}
 	}

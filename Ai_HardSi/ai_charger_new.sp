@@ -18,7 +18,7 @@ public Plugin myinfo =
 	name 			= "Ai-Charger增强",
 	author 			= "Breezy，High Cookie，Standalone，Newteee，cravenge，Harry，Sorallll，PaimonQwQ，夜羽真白",
 	description 	= "觉得Ai-Charger不够强？ Try this！",
-	version 		= "2022-4-16",
+	version 		= "2022/5/2",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -40,10 +40,10 @@ public void OnPluginStart()
 {
 	// CreateConVar
 	g_hChargerBhop = CreateConVar("ai_ChargerBhop", "1", "是否开启Charger连跳", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_hChargerBhopSpeed = CreateConVar("ai_ChargerBhopSpeed", "80.0", "Charger连跳的速度", FCVAR_NOTIFY, true, 0.0);
+	g_hChargerBhopSpeed = CreateConVar("ai_ChargerBhopSpeed", "90.0", "Charger连跳的速度", FCVAR_NOTIFY, true, 0.0);
 	g_hChargerTarget = CreateConVar("ai_ChargerTarget", "3", "Charger目标选择：1=自然目标选择，2=优先撞人多处，3=优先取最近目标", FCVAR_NOTIFY, true, 1.0, true, 2.0);
 	g_hStartChargeDistance = CreateConVar("ai_ChargerStartChargeDistance", "300", "Charger只能在与目标小于这一距离时冲锋", FCVAR_NOTIFY, true, 0.0);
-	g_hChargerAimOffset = CreateConVar("ai_ChargerAimOffset", "15", "目标的瞄准角度与Charger处于这一角度内，Charger将不会冲锋", FCVAR_NOTIFY, true, 0.0);
+	g_hChargerAimOffset = CreateConVar("ai_ChargerAimOffset", "30", "目标的瞄准角度与Charger处于这一角度内，Charger将不会冲锋", FCVAR_NOTIFY, true, 0.0);
 	g_hHealthStartCharge = CreateConVar("ai_ChargerStartChargeHealth", "350", "Charger的生命值低于这一个值才会冲锋", FCVAR_NOTIFY, true, 0.0);
 	g_hChargerAirAngles = CreateConVar("ai_ChargerAirAngles", "60.0", "Charger在空中的速度向量与到生还者的方向向量夹角大于这个值停止连跳", FCVAR_NOTIFY, true, 0.0);
 	// HookEvents
@@ -83,31 +83,9 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 	{
 		float fChargerPos[3];
 		GetClientAbsOrigin(charger, fChargerPos);
-		static float fLeftGroundMaxSpeed[MAXPLAYERS + 1];
 		// 获取状态
-		int iFlags = GetEntityFlags(charger);
-		if (iFlags & FL_ONGROUND)
-		{
-		
-		}
-		else if (fLeftGroundMaxSpeed[charger] == -1.0)
-		{
-			fLeftGroundMaxSpeed[charger] = GetEntPropFloat(charger, Prop_Data, "m_flMaxspeed");
-		}
-		int iTarget = GetClientAimTarget(charger, true);
-		float fDistance = NearestSurvivorDistance(charger);
-		// 距离小于 150 且右键攻击到人，如果可以冲锋，则直接冲锋
-		if ((buttons & IN_ATTACK2) && g_bShouldCharge[charger] && fDistance < 150.0 && ChargerCanCharge(charger))
-		{
-			vel[0] = vel[1] = 0.0;
-			if (IsSurvivor(iTarget) && IsVisible(charger, iTarget) && !IsIncapped(iTarget) && !IsPinned(iTarget))
-			{
-				buttons |= IN_ATTACK;
-				buttons |= IN_ATTACK2;
-				return Plugin_Changed;
-			}
-		}
-		float fSpeed[3], fCurrentSpeed;
+		int iFlags = GetEntityFlags(charger), iTarget = GetClientAimTarget(charger, true);
+		float fSpeed[3] = {0.0}, fCurrentSpeed = 0.0, fDistance = NearestSurvivorDistance(charger);
 		GetEntPropVector(charger, Prop_Data, "m_vecVelocity", fSpeed);
 		fCurrentSpeed = SquareRoot(Pow(fSpeed[0], 2.0) + Pow(fSpeed[1], 2.0));
 		bool bHasSight = view_as<bool>(GetEntProp(charger, Prop_Send, "m_hasVisibleThreats"));
@@ -115,81 +93,64 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		{
 			vel[0] = vel[1] = vel[2] = 0.0;
 		}
-		else if (bHasSight && float(g_iStartChargeDistance) < fDistance < 1000.0 && fCurrentSpeed > 175.0)
+		// 可视，且目标正在看着自身（目标可能正在攻击自身），距离小于 150 且右键攻击到人，如果血量低于限制，则直接冲锋
+		// 或者可视，目标没有看着自身，距离小于 150，则直接冲锋
+		if ((bHasSight && IsSurvivor(iTarget) && IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && (buttons & IN_ATTACK2) && g_bShouldCharge[charger] && (0.0 < fDistance < 150.0) && ChargerCanCharge(charger)) 
+			|| bHasSight && IsSurvivor(iTarget) && !IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && (0.0 < fDistance < 150.0) && ChargerCanCharge(charger))
 		{
-			if (IsSurvivor(iTarget))
-			{
-				// 其他操作
-				float fBuffer[3], fTargetPos[3];
-				GetClientAbsOrigin(iTarget, fTargetPos);
-				fBuffer = UpdatePosition(charger, iTarget, g_fChargerBhopSpeed);
-				if (g_bChargerBhop)
-				{
-					if (iFlags & FL_ONGROUND)
-					{
-						buttons |= IN_JUMP;
-						buttons |= IN_DUCK;
-						if ((buttons & IN_FORWARD) || (buttons & IN_BACK) || (buttons & IN_MOVELEFT) || (buttons & IN_MOVERIGHT))
-						{
-							ClientPush(charger, fBuffer);
-						}
-					}
-					else if (iFlags == FL_JUMPING)
-					{
-						float fSelfPos[3], fTargetDistance, fAngles[3];
-						GetClientAbsOrigin(charger, fSelfPos);
-						fTargetDistance = GetVectorDistance(fTargetPos, fSelfPos);
-						if (fTargetDistance < 100.0)
-						{
-							float fAnglesPost[3];
-							GetVectorAngles(fSpeed, fAngles);
-							fAnglesPost = fAngles;
-							fAngles[0] = fAngles[2] = 0.0;
-							GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
-							NormalizeVector(fAngles, fAngles);
-							// 保存当前位置
-							static float fDirection[2][3];
-							fDirection[0] = fSelfPos;
-							fDirection[1] = fTargetPos;
-							fSelfPos[2] = fTargetPos[2] = 0.0;
-							MakeVectorFromPoints(fSelfPos, fTargetPos, fSelfPos);
-							NormalizeVector(fSelfPos, fSelfPos);
-							// 计算距离
-							if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fSelfPos))) < g_fChargerAirAngles)
-							{
-								return Plugin_Continue;
-							}
-							// 重新设置速度方向
-							float fNewVelocity[3];
-							MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
-							NormalizeVector(fNewVelocity, fNewVelocity);
-							ScaleVector(fNewVelocity, fCurrentSpeed);
-							TeleportEntity(charger, NULL_VECTOR, fAnglesPost, fNewVelocity);
-						}
-					}
-				}
-				if (GetEntityMoveType(charger) & MOVETYPE_LADDER)
-				{
-					buttons &= ~IN_JUMP;
-					buttons &= ~IN_DUCK;
-				}
-			}
+			vel[0] = vel[1] = 0.0;
+			buttons |= IN_ATTACK;
+			buttons |= IN_ATTACK2;
+			return Plugin_Changed;
 		}
-		else if (float(g_iStartChargeDistance) - 10.0 < fDistance < float(g_iStartChargeDistance) + 100.0 && fCurrentSpeed > 260.0)
+		if (bHasSight && IsSurvivor(iTarget) && float(g_iStartChargeDistance) < fDistance < 1000.0 && fCurrentSpeed > 175.0)
 		{
-			if (iFlags & FL_ONGROUND)
+			// 连跳操作
+			float fBuffer[3] = {0.0}, fTargetPos[3] = {0.0};
+			GetClientAbsOrigin(iTarget, fTargetPos);
+			fBuffer = UpdatePosition(charger, iTarget, g_fChargerBhopSpeed);
+			if (g_bChargerBhop)
 			{
-				if (fLeftGroundMaxSpeed[charger] != -1.0)
+				if (iFlags & FL_ONGROUND)
 				{
-					float fCurVelVec[3];
-					GetEntPropVector(charger, Prop_Data, "m_vecAbsVelocity", fCurVelVec);
-					if (GetVectorLength(fCurVelVec) > fLeftGroundMaxSpeed[charger])
+					buttons |= IN_JUMP;
+					buttons |= IN_DUCK;
+					if ((buttons & IN_FORWARD) || (buttons & IN_BACK) || (buttons & IN_MOVELEFT) || (buttons & IN_MOVERIGHT))
 					{
-						NormalizeVector(fCurVelVec, fCurVelVec);
-						ScaleVector(fCurVelVec, fLeftGroundMaxSpeed[charger]);
-						TeleportEntity(charger, NULL_VECTOR, NULL_VECTOR, fCurVelVec);
+						ClientPush(charger, fBuffer);
 					}
-					fLeftGroundMaxSpeed[charger] = -1.0;
+				}
+				else if (iFlags == FL_JUMPING)
+				{
+					float fTargetDistance = 0.0, fAngles[3] = {0.0};
+					fTargetDistance = GetVectorDistance(fChargerPos, fTargetPos);
+					if (fTargetDistance < 250.0)
+					{
+						float fAnglesPost[3];
+						GetVectorAngles(fSpeed, fAngles);
+						fAnglesPost = fAngles;
+						fAngles[0] = fAngles[2] = 0.0;
+						GetAngleVectors(fAngles, fAngles, NULL_VECTOR, NULL_VECTOR);
+						NormalizeVector(fAngles, fAngles);
+						// 保存当前位置
+						static float fDirection[2][3];
+						fDirection[0] = fChargerPos;
+						fDirection[1] = fTargetPos;
+						fChargerPos[2] = fTargetPos[2] = 0.0;
+						MakeVectorFromPoints(fChargerPos, fTargetPos, fChargerPos);
+						NormalizeVector(fChargerPos, fChargerPos);
+						// 计算距离
+						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fChargerPos))) < g_fChargerAirAngles)
+						{
+							return Plugin_Continue;
+						}
+						// 重新设置速度方向
+						float fNewVelocity[3];
+						MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+						NormalizeVector(fNewVelocity, fNewVelocity);
+						ScaleVector(fNewVelocity, fCurrentSpeed);
+						TeleportEntity(charger, NULL_VECTOR, fAnglesPost, fNewVelocity);
+					}
 				}
 			}
 		}
@@ -213,6 +174,11 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 			}
 			return Plugin_Continue;
 		}
+		if (GetEntityMoveType(charger) & MOVETYPE_LADDER)
+		{
+			buttons &= ~IN_JUMP;
+			buttons &= ~IN_DUCK;
+		}
 	}
 	return Plugin_Continue;
 }
@@ -228,38 +194,37 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 		{
 			case 2:
 			{
-				curTarget = GetCrowdPlace();
-				return Plugin_Changed;
+				int crowded = GetCrowdPlace();
+				if (crowded != -1 && IsSurvivor(crowded))
+				{
+					curTarget = crowded;
+					return Plugin_Changed;
+				}
 			}
 			case 3:
 			{
-				if (curTarget > 0)
+				// 所有人都拿着近战，随机选取最近目标
+				if (iTeamMeleeCount == g_iValidSurvivor)
 				{
-					// 所有人都拿着近战，随机选取最近目标
-					if (iTeamMeleeCount == g_iValidSurvivor)
+					int newtarget = GetClosestSurvivor(fSelfPos);
+					if (IsSurvivor(newtarget))
 					{
-						curTarget = GetClosestSurvivor(fSelfPos);
+						curTarget = newtarget;
 						return Plugin_Changed;
 					}
-					else
+				}
+				else
+				{
+					if (NearestSurvivorDistance(specialInfected) > 0.50 * float(g_iStartChargeDistance))
 					{
-						if (NearestSurvivorDistance(specialInfected) > 0.50 * float(g_iStartChargeDistance))
+						if (ClientMeleeCheck(curTarget))
 						{
-							if (ClientMeleeCheck(curTarget))
+							int newtarget = GetClosestSurvivor(fSelfPos, curTarget);
+							if (IsSurvivor(newtarget))
 							{
-								curTarget = GetClosestSurvivor(fSelfPos, curTarget);
+								curTarget = newtarget;
 								return Plugin_Changed;
 							}
-							else
-							{
-								curTarget = GetClosestSurvivor(fSelfPos);
-								return Plugin_Changed;
-							}
-						}
-						else
-						{
-							curTarget = GetClosestSurvivor(fSelfPos);
-							return Plugin_Changed;
 						}
 					}
 				}
@@ -280,16 +245,8 @@ bool ClientMeleeCheck(int client)
 		{
 			return true;
 		}
-		else
-		{
-			return false;
-		}
 	}
-	// 不是有效的武器
-	else
-	{
-		return false;
-	}
+	return false;
 }
 
 int TeamMeleeCheck()
@@ -297,15 +254,13 @@ int TeamMeleeCheck()
 	int iTeamMeleeCount = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsSurvivor(client) && !IsIncapped(client) && IsPlayerAlive(client) && !IsPinned(client))
+		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client))
 		{
 			g_iValidSurvivor += 1;
-			char sName[64];
-			GetClientName(client, sName, sizeof(sName));
 			int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 			if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 			{
-				char sWeaponName[64];
+				char sWeaponName[32] = '\0';
 				GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
 				if (strcmp(sWeaponName[7], "melee") == 0 || strcmp(sWeaponName, "weapon_chainsaw") == 0)
 				{
@@ -479,12 +434,12 @@ bool IsAiCharger(int client)
 float NearestSurvivorDistance(int client)
 {
 	static int i, iCount;
-	static float vPos[3], vTargetPos[3], fDistance[MAXPLAYERS + 1];
+	static float vPos[3], vTargetPos[3], fDistance[MAXPLAYERS + 1] = {0.0};
 	iCount = 0;
 	GetClientAbsOrigin(client, vPos);
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (i != client && IsClientInGame(i) && GetClientTeam(i) == TEAM_SURVIVOR && IsPlayerAlive(i))
+		if (i != client && IsClientInGame(i) && GetClientTeam(i) == TEAM_SURVIVOR && IsPlayerAlive(i) && !IsIncapped(i) && !IsPinned(i))
 		{
 			GetClientAbsOrigin(i, vTargetPos);
 			fDistance[iCount++] = GetVectorDistance(vPos, vTargetPos);
@@ -504,9 +459,12 @@ bool ChargerCanCharge(int client)
 	{
 		return false;
 	}
-	static int iAbility;
-	iAbility = GetEntPropEnt(client, Prop_Send, "m_customAbility");
-	return iAbility != -1 && !GetEntProp(iAbility, Prop_Send, "m_isCharging") && GetEntPropFloat(iAbility, Prop_Send, "m_timestamp") < GetGameTime();
+	int iAbility = GetEntPropEnt(client, Prop_Send, "m_customAbility");
+	if (iAbility != -1 && GetEntProp(iAbility, Prop_Send, "m_isCharging") != 1 && GetEntPropFloat(iAbility, Prop_Send, "m_timestamp") < GetGameTime())
+	{
+		return true;
+	}
+	return false;
 }
 
 bool IsSurvivor(int client)
@@ -524,54 +482,6 @@ bool IsSurvivor(int client)
 bool IsIncapped(int client)
 {
     return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
-}
-
-bool IsVisible(int client, int target)
-{
-	bool bCanSee = false;
-	float selfpos[3], angles[3];
-	GetClientEyePosition(client, selfpos);
-	ComputeAimAngles(client, target, angles);
-	Handle hTrace = TR_TraceRayFilterEx(selfpos, angles, MASK_SOLID, RayType_Infinite, traceFilter, client);
-	if (TR_DidHit(hTrace))
-	{
-		int hit = TR_GetEntityIndex(hTrace);
-		if (hit == target)
-		{
-			bCanSee = true;
-		}
-	}
-	delete hTrace;
-	return bCanSee;
-}
-
-void ComputeAimAngles(int client, int target, float angles[3], AimType type = AimEye)
-{
-	float selfpos[3], targetpos[3], lookat[3];
-	GetClientEyePosition(client, selfpos);
-	switch (type)
-	{
-		case AimEye:
-		{
-			GetClientEyePosition(target, targetpos);
-		}
-		case AimBody:
-		{
-			GetClientAbsOrigin(target, targetpos);
-		}
-		case AimChest:
-		{
-			GetClientAbsOrigin(target, targetpos);
-			targetpos[2] += 45.0;
-		}
-	}
-	MakeVectorFromPoints(selfpos, targetpos, lookat);
-	GetVectorAngles(lookat, angles);
-}
-
-bool traceFilter(int entity, int mask, int self)
-{
-	return entity != self;
 }
 
 bool IsPinned(int client)
@@ -620,36 +530,58 @@ int GetSurvivorDistance(const float refpos[3], int SpecificSur = -1)
 	}
 	else
 	{
-		TargetSur = GetClosestSurvivor(RefSurPos);
+		int target = GetClosestSurvivor(RefSurPos);
+		if (IsSurvivor(target))
+		{
+			TargetSur = target;
+		}
 	}
 	GetEntPropVector(TargetSur, Prop_Send, "m_vecOrigin", TargetSurPos);
 	return RoundToNearest(GetVectorDistance(RefSurPos, TargetSurPos));
 }
 
+int GetRandomMobileSurvivor()
+{
+	int survivors[16] = {0}, index = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == TEAM_SURVIVOR && IsPlayerAlive(client) && !IsIncapped(client) && !IsPinned(client))
+		{
+			survivors[index] = client;
+			index += 1;
+		}
+	}
+	if (index > 0)
+	{
+		return survivors[GetRandomInt(0, index - 1)];
+	}
+	return 0;
+}
+
 int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
 {
-	float surPos[3];	int closetSur = GetRandomSurvivor();
-	if (closetSur == 0)
+	float surPos[3] = {0.0};
+	int closetSur = GetRandomMobileSurvivor();
+	if (IsSurvivor(closetSur))
 	{
-		return 0;
-	}
-	GetClientAbsOrigin(closetSur, surPos);
-	int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-	for (int client = 1; client < MaxClients; client++)
-	{
-		if (IsSurvivor(client) && IsPlayerAlive(client) && client != excludeSur)
+		GetClientAbsOrigin(closetSur, surPos);
+		int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
+		for (int client = 1; client < MaxClients; client++)
 		{
-			GetClientAbsOrigin(client, surPos);
-			int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-			if (iClosetAbsDisplacement < 0)
+			if (IsSurvivor(client) && IsPlayerAlive(client) && client != excludeSur && !IsIncapped(client) && !IsPinned(client))
 			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
-			}
-			else if (iAbsDisplacement < iClosetAbsDisplacement)
-			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
+				GetClientAbsOrigin(client, surPos);
+				int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
+				if (iClosetAbsDisplacement < 0)
+				{
+					iClosetAbsDisplacement = iAbsDisplacement;
+					closetSur = client;
+				}
+				else if (iAbsDisplacement < iClosetAbsDisplacement)
+				{
+					iClosetAbsDisplacement = iAbsDisplacement;
+					closetSur = client;
+				}
 			}
 		}
 	}

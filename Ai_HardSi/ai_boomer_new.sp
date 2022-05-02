@@ -34,6 +34,7 @@ Handle g_hVomitSurvivor;
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
 #define ZC_BOOMER 2
+#define FL_JUMPING 65922
 
 public void OnPluginStart()
 {
@@ -87,15 +88,13 @@ public Action OnPlayerRunCmd(int boomer, int &buttons, int &impulse, float vel[3
 {
 	if (IsAiBoomer(boomer))
 	{
-		static float fSpeed[3], fCurrentSpeed, fDistance;
+		float fSpeed[3] = {0.0}, fCurrentSpeed = 0.0, fDistance = 0.0, fBoomerPos[3] = {0.0};
 		GetEntPropVector(boomer, Prop_Data, "m_vecVelocity", fSpeed);
 		fCurrentSpeed = SquareRoot(Pow(fSpeed[0], 2.0) + Pow(fSpeed[1], 2.0));
 		fDistance = NearestSurvivorDistance(boomer);
 		// 获取状态，目标
-		int iFlags = GetEntityFlags(boomer);
-		int iTarget = GetClientAimTarget(boomer, true);
+		int iFlags = GetEntityFlags(boomer), iTarget = GetClientAimTarget(boomer, true);
 		bool bHasSight = view_as<bool>(GetEntProp(boomer, Prop_Send, "m_hasVisibleThreats"));
-		float fBoomerPos[3], fTargetAngles[3];
 		GetClientAbsOrigin(boomer, fBoomerPos);
 		// 靠近生还者，立即喷吐
 		if (iFlags & FL_ONGROUND && bHasSight && fDistance <= g_fVomitRange && bCanVomit[boomer])
@@ -105,17 +104,10 @@ public Action OnPlayerRunCmd(int boomer, int &buttons, int &impulse, float vel[3
 		}
 		else if (bHasSight && 0.5 * g_fVomitRange < fDistance < 10000.0 && fCurrentSpeed > 160.0)
 		{
-			if (iTarget > 0)
+			if (IsSurvivor(iTarget))
 			{
-				if (bHasSight)
-				{
-					// 锁定视野
-					ComputeAimAngles(boomer, iTarget, fTargetAngles, AimChest);
-					fTargetAngles[2] = 0.0;
-					TeleportEntity(boomer, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
-				}
 				// 连跳操作
-				float fBuffer[3], fTargetPos[3];
+				float fBuffer[3] = {0.0}, fTargetPos[3] = {0.0};
 				GetClientAbsOrigin(iTarget, fTargetPos);
 				fBuffer = UpdatePosition(boomer, iTarget, g_fBoomerBhopSpeed);
 				if (g_bBoomerBhop)
@@ -129,7 +121,7 @@ public Action OnPlayerRunCmd(int boomer, int &buttons, int &impulse, float vel[3
 							ClientPush(boomer, fBuffer);
 						}
 					}
-					else if (iFlags == 65922)
+					else if (iFlags == FL_JUMPING)
 					{
 						float iTargetDistance = GetVectorDistance(fTargetPos, fBoomerPos);
 						if (iTargetDistance < 100.0)
@@ -155,17 +147,12 @@ public Action OnPlayerRunCmd(int boomer, int &buttons, int &impulse, float vel[3
 							// 重新设置速度方向
 							float fNewVelocity[3];
 							MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+							NormalizeVector(fNewVelocity, fNewVelocity);
+							ScaleVector(fNewVelocity, fCurrentSpeed);
 							TeleportEntity(boomer, NULL_VECTOR, fAnglesPost, fNewVelocity);
 						}
 					}
 				}
-			}
-			else
-			{
-				int iNewTarget = GetClosestSurvivor(fBoomerPos);
-				ComputeAimAngles(boomer, iNewTarget, fTargetAngles, AimChest);
-				fTargetAngles[2] = 0.0;
-				TeleportEntity(boomer, NULL_VECTOR, fTargetAngles, NULL_VECTOR);
 			}
 		}
 		if (GetEntityMoveType(boomer) & MOVETYPE_LADDER)
@@ -423,34 +410,4 @@ void ComputeAimAngles(int client, int target, float angles[3], AimType type = Ai
 	}
 	MakeVectorFromPoints(selfpos, targetpos, lookat);
 	GetVectorAngles(lookat, angles);
-}
-
-int GetClosestSurvivor(float refpos[3], int excludeSur = -1)
-{
-	float surPos[3];	int closetSur = GetRandomSurvivor();
-	if (closetSur == 0)
-	{
-		return 0;
-	}
-	GetClientAbsOrigin(closetSur, surPos);
-	int iClosetAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-	for (int client = 1; client < MaxClients; client++)
-	{
-		if (IsSurvivor(client) && IsPlayerAlive(client) && client != excludeSur)
-		{
-			GetClientAbsOrigin(client, surPos);
-			int iAbsDisplacement = RoundToNearest(GetVectorDistance(refpos, surPos));
-			if (iClosetAbsDisplacement < 0)
-			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
-			}
-			else if (iAbsDisplacement < iClosetAbsDisplacement)
-			{
-				iClosetAbsDisplacement = iAbsDisplacement;
-				closetSur = client;
-			}
-		}
-	}
-	return closetSur;
 }
