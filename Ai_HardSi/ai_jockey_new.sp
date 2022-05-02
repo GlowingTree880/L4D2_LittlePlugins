@@ -149,7 +149,6 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 				// 增加在空中被推的判断
 				if (iFlags == FL_JUMPING && !g_bHasBeenShoved[jockey] && (GetGameTime() - g_fShovedTime[jockey]) > g_fStaggerTime)
 				{
-					buttons &= ~IN_JUMP;
 					// 距离大于等于 150.0 才允许防止连跳过头，否则可能控不到人卡在空中
 					if (GetVectorDistance(fJockeyPos, fTargetPos) >= 150.0)
 					{
