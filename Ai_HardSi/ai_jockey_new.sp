@@ -140,6 +140,12 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 						}
 					}
 				}
+				// 不在地上，禁止按下跳跃键和攻击键
+				else
+				{
+					buttons &= ~IN_JUMP;
+					buttons &= ~IN_ATTACK;
+				}
 				// 增加在空中被推的判断
 				if (iFlags == FL_JUMPING && !g_bHasBeenShoved[jockey] && (GetGameTime() - g_fShovedTime[jockey]) > g_fStaggerTime)
 				{
@@ -172,12 +178,6 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 						ScaleVector(fNewVelocity, fCurrentSpeed);
 						TeleportEntity(jockey, NULL_VECTOR, fAnglesPost, fNewVelocity);
 					}
-				}
-				// 不在地上，禁止按下跳跃键和攻击键
-				else
-				{
-					buttons &= ~IN_JUMP;
-					buttons &= ~IN_ATTACK;
 				}
 			}
 		}
