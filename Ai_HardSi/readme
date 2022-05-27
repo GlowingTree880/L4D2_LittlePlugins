@@ -27,6 +27,9 @@ Ai_Tank：
   ai_TankConsumeDamagePercent：10 坦克在前往消耗位的过程中只会受到这一个百分比的伤害
   ai_TankDebugMod：0 是否开启调试输出信息（找位显示等）
   
+Ai_Tank_2.0
+  2022/5/27日重写，优化了原先 Ai_Tank 增强的结构，使用结构体数组而非若干个单独数组控制功能，混合函数与射线找位，找位更加快速有效（以后将持续维护这一版本）
+  
 Ai_Boomer：
   ai_BoomerBhop：1 是否开启胖子连跳
   ai_BoomerBhopSpeed：80.0 胖子连跳的速度
