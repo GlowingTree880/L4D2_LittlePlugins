@@ -25,7 +25,7 @@
 #define TREE_DETECT_TIME 1.5								// 绕树检测间隔
 #define RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
 #define FL_JUMPING 65922
-#define DEBUG_ALL 1
+#define DEBUG_ALL 0
 
 public Plugin myinfo = 
 {
