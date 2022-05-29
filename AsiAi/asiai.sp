@@ -66,7 +66,7 @@ int g_iState[MAXPLAYERS + 1][8];
 // Floats
 float g_fPlayBackRate, g_fDelay[MAXPLAYERS + 1][8], g_fSiAttackTime, g_fMoveGrad[MAXPLAYERS + 1][3], g_fMoveSpeed[MAXPLAYERS + 1], g_fPos[MAXPLAYERS + 1][3];
 // Bools
-bool g_bAiEnable[MAXPLAYERS + 1], g_bTankDelay[MAXPLAYERS + 1] = false;
+bool g_bAiEnable[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
@@ -135,14 +135,16 @@ public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (IsInfectedBot(client) && IsPlayerAlive(client) && GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_TANK)
 	{
-		g_bTankDelay[client] = false;
 		SDKHook(client, SDKHook_PostThinkPost, UpdateThink);
 	}
 }
 
 public void L4D_TankClaw_DoSwing_Pre(int tank, int claw)
 {
-	SetConVarString(FindConVar("z_tank_throw_force"), "500");
+	if (IsInfectedBot(tank) && IsPlayerAlive(tank) && GetEntProp(tank, Prop_Send, "m_zombieClass") == ZC_TANK)
+	{
+		SetConVarString(FindConVar("z_tank_throw_force"), "500");
+	}
 }
 
 // 修正玩家速度
@@ -459,24 +461,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 		{
 			DelayStart(client, 3);
 			DelayStart(client, 4);
-			g_bTankDelay[client] = false;
 			SetConVarString(FindConVar("z_tank_throw_force"), "1000");
-		}
-		// 0.25 + 2.5s 后，坦克可能继续锁定视角在扔石头位置，则继续锁定 5s 在最近生还身上
-		if (DelayExpired(client, 3, TANKROCKAIMTIME) && !g_bTankDelay[client])
-		{
-			DelayStart(client, 5);
-			g_bTankDelay[client] = true;
-		}
-		if (!DelayExpired(client, 5, TANKAFTERTHROW))
-		{
-			float aimangles[3] = {0.0};
-			int nearesttarget = GetNearestSurvivor(client);
-			if (IsValidSurvivor(nearesttarget))
-			{
-				ComputeAimAngles(client, nearesttarget, aimangles, AimChest);
-				TeleportEntity(client, NULL_VECTOR, aimangles, NULL_VECTOR);
-			}
 		}
 		// 按了右键之后 0.25s 并在 0.25 + 2.5s内，锁定视野
 		if (DelayExpired(client, 4, TANKROCKAIMDELAY) && !DelayExpired(client, 3, TANKROCKAIMTIME))
@@ -873,7 +858,7 @@ float NearestSurvivorDistance(int client, int SpecificSur = -1)
 				TargetSur = newtarget;
 			}
 		}
-		if (HasEntProp(TargetSur, Prop_Send, "m_vecOrigin"))
+		if (IsValidSurvivor(TargetSur) && HasEntProp(TargetSur, Prop_Send, "m_vecOrigin"))
 		{
 			GetEntPropVector(TargetSur, Prop_Send, "m_vecOrigin", TargetSurPos);
 			return GetVectorDistance(selfpos, TargetSurPos);
