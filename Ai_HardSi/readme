@@ -30,6 +30,7 @@ Ai_Tank：
 Ai_Tank_2.0
   2022/5/27日重写，优化了原先 Ai_Tank 增强的结构，使用结构体数组而非若干个单独数组控制功能，混合函数与射线找位，找位更加快速有效（以后将持续维护这一版本）
   注意：Ai_Tank 与 Ai_Tank2.0均需要在 Infected_Control 特感刷新控制插件后面加载！因为需要读取此插件给出的刷新特感数量 Cvar：l4d_infected_limit，先加载坦克增强插件会报 Invalid Convar Handle 错误。
+  实际使用的时候，请把 28 行 #define DEBUG_ALL 1 改为 0 否则消耗找位的时候会出现找位射线！
   
 Ai_Boomer：
   ai_BoomerBhop：1 是否开启胖子连跳
