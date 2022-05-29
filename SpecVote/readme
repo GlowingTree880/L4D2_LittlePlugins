@@ -1,0 +1,7 @@
+这是一个：允许任意或指定团队成员可发起投票，投票非旁观者团队成员到旁观者团队的插件
+
+Cvars：
+SpecVote_Team：4 1=旁观者团队，2=生还者团队，3=感染者团队，4=所有团队
+SpecVote_DisplayToSpec：1 旁观者是否允许参与投票
+SpecVote_PassPercent：50 需要达到这么多比率的通过票数投票才会通过
+SpecVote_BanJoinSurvivorTime：10 被投票至旁观的玩家将会在这个时间（单位：分钟）内不得加入生还与特感阵营
