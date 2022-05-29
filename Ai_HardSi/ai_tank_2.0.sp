@@ -283,7 +283,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			}
 		}
 		// 视角锁定，不允许消耗时并当前时间戳减去扔石头时的时间戳大于 ROCK_AIM_TIME 锁定视角
-		if (!eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && !Dont_HitWall_Or_Fall(client, vecspeed))
+		if (!eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && Dont_HitWall_Or_Fall(client, vecspeed))
 		{
 			float self_eye_pos[3] = {0.0}, targetpos[3] = {0.0}, look_at[3] = {0.0};
 			if (IsValidSurvivor(nearest_target))
@@ -875,7 +875,7 @@ void ConsumePos_NearestTargetDist_Check(int client, int targetdist, bool has_sig
 // 判断射线找到的消耗位是否可以看见玩家，如果不能看到玩家，令其找新的函数与射线消耗位
 void RayPos_Visible_Check(int client)
 {
-	if (eTankStructure[client].bInConsumePlace && (eTankStructure[client].fFunctionConsumePos[0] != 0.0 || eTankStructure[client].fRayConsumePos[0] != 0.0) && !PosIsVisibleToPlayer(client, eTankStructure[client].fRayConsumePos))
+	if (eTankStructure[client].bInConsumePlace && (eTankStructure[client].fFunctionConsumePos[0] != 0.0 || eTankStructure[client].fRayConsumePos[0] != 0.0) && !Pos_IsVisibleTo_Player(client, eTankStructure[client].fRayConsumePos))
 	{
 		ConsumePosInit(client);
 		eTankStructure[client].bIsReachingFunctionPos = eTankStructure[client].bIsReachingRayPos = eTankStructure[client].bInConsumePlace = false;
@@ -957,7 +957,7 @@ void Ray_FindConsumePos(int client, int target)
 			TR_GetEndPosition(down_ray_endpos);
 			down_ray_endpos[2] += ROCK_THROW_HEIGHT;
 			ShowLaser(4, down_ray_pos, down_ray_endpos);
-			if (PosIsVisibleToPlayer(client, down_ray_endpos) && IsOnValidMesh(down_ray_endpos) && !IsPos_StuckTank(down_ray_endpos, client) && Is_Pos_Ahead(down_ray_endpos) && GetVectorDistance(down_ray_endpos, targetpos) >= g_hConsumeDist.FloatValue)
+			if (Pos_IsVisibleTo_Player(client, down_ray_endpos) && IsOnValidMesh(down_ray_endpos) && !IsPos_StuckTank(down_ray_endpos, client) && Is_Pos_Ahead(down_ray_endpos) && GetVectorDistance(down_ray_endpos, targetpos) >= g_hConsumeDist.FloatValue)
 			{
 				CopyVectors(down_ray_endpos, eTankStructure[client].fRayConsumePos);
 			}

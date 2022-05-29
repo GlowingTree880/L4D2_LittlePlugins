@@ -7,14 +7,16 @@ enum PlayerTeam
 
 enum ZombieClass
 {
-	ZC_SMOKER = 1,
+	ZC_NONE = 0,
+	ZC_SMOKER,
 	ZC_BOOMER,
 	ZC_HUNTER,
 	ZC_SPITTER,
 	ZC_JOCKEY,
 	ZC_CHARGER,
 	ZC_WITCH,
-	ZC_TANK
+	ZC_TANK,
+	ZC_NOTINFECTED
 };
 
 // 判断是否有效玩家 id，有效返回 true，无效返回 false
@@ -120,17 +122,22 @@ stock bool IsClientPinned(int client)
 			survivor_ispinned = true;
 		}
 	}		
-	return survivor_ispinned;
+	return bIsPinned;
 }
 
-// 随机获取一个未死亡，未被控，未倒地的生还者，如有则返回生还者 id，无则返回 0
-stock int GetRandomMobileSurvivor()
+// 随机获取一个未死亡，未被控，未倒地的生还者或只是活着的生还者，如有则返回生还者 id，无则返回 0
+stock int GetRandomSurvivor(bool is_mobile = false)
 {
 	int[] survivor_array = new int[GetConVarInt(FindConVar("survivor_limit"))];
 	int survivor_index = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && !IsClientPinned(client) && !IsClientIncapped(client))
+		if (is_mobile && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && !IsClientPinned(client) && !IsClientIncapped(client))
+		{
+			survivor_array[survivor_index] = client;
+			survivor_index += 1;
+		}
+		else if (!is_mobile && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR))
 		{
 			survivor_array[survivor_index] = client;
 			survivor_index += 1;
@@ -152,7 +159,7 @@ stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 	if (IsValidClient(client))
 	{
 		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
-		int closet_survivor = GetRandomMobileSurvivor();
+		int closet_survivor = GetRandomSurvivor(true);
 		if (IsValidSurvivor(closet_survivor))
 		{
 			GetClientAbsOrigin(client, self_pos);
@@ -183,7 +190,10 @@ stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 			return 0;
 		}
 	}
-	return 0;
+	else
+	{
+		return 0;
+	}
 }
 
 // 获取某玩家到最近或指定生还者的距离，如果存在有效最近或指定生还者则返回距离，无则返回 -1
@@ -218,94 +228,176 @@ stock int GetClosetSurvivorDistance(int client, int specific_survivor = -1)
 	}
 }
 
-// 获取生还者数量，可指定是否包含 bot 和死亡的玩家
-stock int GetSurvivorCount(bool include_bot, bool include_death)
+// 获取指定团队的成员数量，可指定是否包含 bot 与死亡的成员，成功返回成员数量，失败返回 0
+stock int GetTeamMemberCount(int team, bool include_bot = true, bool include_death = false)
 {
 	int count = 0;
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsValidSurvivor(client) && include_bot && include_death)
+		switch (team)
 		{
-			count += 1;
-		}
-		else if (IsValidSurvivor(client) && !include_bot && !include_death)
-		{
-			if (!IsFakeClient(client) && IsPlayerAlive(client))
+			case view_as<int>TEAM_SPECTATOR:
 			{
-				count += 1;
+				if (IsValidClient(client) && GetClientTeam(client) == view_as<int>TEAM_SPECTATOR)
+				{
+					count += 1;
+				}
 			}
-		}
-		else if (IsValidSurvivor(client) && !include_bot && include_death)
-		{
-			if (!IsFakeClient(client))
+			case view_as<int>TEAM_SURVIVOR:
 			{
-				count += 1;
+				if (include_bot && include_death)
+				{
+					if (IsValidSurvivor(client))
+					{
+						count += 1;
+					}
+				}
+				else if (include_bot && !include_death)
+				{
+					if ((IsValidSurvivor(client)) && IsPlayerAlive(client))
+					{
+						count += 1;
+					}
+				}
+				else if (!include_bot && include_death)
+				{
+					if ((IsValidSurvivor(client)) && !IsFakeClient(client))
+					{
+						count += 1;
+					}
+				}
+				else if (!include_bot && !include_death)
+				{
+					if ((IsValidSurvivor(client)) && !IsFakeClient(client) && IsPlayerAlive(client))
+					{
+						count += 1;
+					}
+				}
 			}
-		}
-		else if (IsValidSurvivor(client) && include_bot && !include_death)
-		{
-			if (IsPlayerAlive(client))
+			case view_as<int>TEAM_INFECTED:
 			{
-				count += 1;
+				if (include_bot && include_death)
+				{
+					if (IsValidInfected(client))
+					{
+						count += 1;
+					}
+				}
+				else if (include_bot && !include_death)
+				{
+					if ((IsValidInfected(client)) && IsPlayerAlive(client))
+					{
+						count += 1;
+					}
+				}
+				else if (!include_bot && include_death)
+				{
+					if ((IsValidInfected(client)) && !IsFakeClient(client))
+					{
+						count += 1;
+					}
+				}
+				else if (!include_bot && !include_death)
+				{
+					if ((IsValidInfected(client)) && !IsFakeClient(client) && IsPlayerAlive(client))
+					{
+						count += 1;
+					}
+				}
 			}
 		}
 	}
 	return count;
 }
 
-// 向量复制
-stock void CopyVectors(float origin[3], float result[3])
+// 判断当前客户端是否是 Tank，是返回 true，否返回 false
+stock bool IsTank(int client)
 {
-	result[0] = origin[0];
-	result[1] = origin[1];
-	result[2] = origin[2];
+	if (GetInfectedClass(client) == view_as<int>(ZC_TANK))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
-// 检测某个坐标是否能被任意生还者看到，如果有一个生还者能看见这个位置，返回 true，所有生还者都不可见这个位置，返回 false
-bool PosIsVisibleToPlayer(int self, float refpos[3])
+// 判断目前场上是否有 Tank，有返回 true，无返回 false
+stock bool IsTankInSpot()
 {
-	bool bVisible = false;
-	float target_pos[3] = {0.0};
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(client))
+		if (IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_INFECTED) 
+		&& GetEntProp(client, Prop_Send, "m_isGhost") != 1 && GetEntProp(client, Prop_Send, "m_zombieClass") == view_as<int>(ZC_TANK) && GetEntProp(client, Prop_Send, "m_isIncapacitated") != 1)
 		{
-			GetClientEyePosition(client, target_pos);
-			Handle hTrace = TR_TraceRayFilterEx(refpos, target_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, self);
-			if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == client)
-			{
-				delete hTrace;
-				bVisible = true;
-			}
-			delete hTrace;
+			return true;
 		}
 	}
-	return bVisible;
+	return false;
 }
 
-// 检测某个玩家是否能看到生还者，能看见返回 true，不能看见则返回 false
-bool Player_IsVisible_To(int client, int target)
+// 判断玩家的武器是否处于正在换弹的状态，是返回 true，否或无效武器返回 false
+stock bool IsWeaponInReload(int client)
 {
-	bool bVisible = false;
-	float self_pos[3] = {0.0}, target_pos[3] = {0.0}, look_at[3] = {0.0}, vec_angles[3] = {0.0};
-	GetClientEyePosition(client, self_pos);
-	GetClientEyePosition(target, target_pos);
-	MakeVectorFromPoints(self_pos, target_pos, look_at);
-	GetVectorAngles(look_at, vec_angles);
-	Handle hTrace = TR_TraceRayFilterEx(self_pos, vec_angles, MASK_SOLID, RayType_Infinite, TR_RayFilter, client);
-	if (TR_DidHit(hTrace))
+	if (IsValidClient(client))
 	{
-		int ray_hit_ent = TR_GetEntityIndex(hTrace);
-		if (ray_hit_ent == target)
+		int active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if (IsValidEntity(active_weapon) && IsValidEdict(active_weapon))
 		{
-			bVisible = true;
+			if (HasEntProp(active_weapon, Prop_Send, "m_bInReload"))
+			{
+				return view_as<bool>(GetEntProp(active_weapon, Prop_Send, "m_bInReload"));
+			}
 		}
 	}
-	delete hTrace;
-	return bVisible;
+	return false;
 }
 
-static bool TR_RayFilter(int entity, int mask, int self)
+// 判断所有生还者中正在使用的某种武器的数量，成功返回指定武器数量，失败返回 0
+stock int GetSurvivorWeaponCount(bool include_mobile = false, char[] weapon_name)
 {
-	return entity != self;
+	int weapon_count = 0;
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (include_mobile && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && !IsClientIncapped(client) && !IsClientPinned(client))
+		{
+			int active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+			if (IsValidEntity(active_weapon) && IsValidEdict(active_weapon))
+			{
+				char class_name[64] = '\0';
+				GetEdictClassname(active_weapon, class_name, sizeof(class_name));
+				if (strcmp(class_name, weapon_name) == 0)
+				{
+					weapon_count += 1;
+				}
+			}
+		}
+		else if (!include_mobile && IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR))
+		{
+			int active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+			if (IsValidEntity(active_weapon) && IsValidEdict(active_weapon))
+			{
+				char class_name[64] = '\0';
+				GetEdictClassname(active_weapon, class_name, sizeof(class_name));
+				if (strcmp(class_name, weapon_name) == 0)
+				{
+					weapon_count += 1;
+				}
+			}
+		}
+	}
+	return weapon_count;
+}
+
+// 返回当前客户端实际速度大小，有效返回速度大小，无效返回 -1
+stock int GetClientCurrentSpeed(int client)
+{
+	float current_velocity[3] = {0.0}, current_speed = 0.0;
+	if (IsValidClient(client) && HasEntProp(client, Prop_Data, "m_vecVelocity"))
+	{
+		GetEntPropVector(client, Prop_Data, "m_vecVelocity", current_velocity);
+		return RoundToNearest(SquareRoot(Pow(current_velocity[0], 2.0) + Pow(current_velocity[1], 2.0));
+	}
+	return -1;	
 }
