@@ -694,7 +694,8 @@ bool Check_TankCanConsume(int client, int m_sicount, int target, int vomitsurviv
 		GetClientAbsOrigin(client, selfpos);
 		GetClientAbsOrigin(target, targetpos);
 		// 在场特感小于特感刷新数量减去 g_hConsumeInfSub 值且自身位置大于等于生还地图进度，允许消耗，最后是或关系（倒地人数大于等于限制或距离大于限制则可以继续消耗找位）
-		if (IsPlayerAlive(client) && GetClientHealth(client) > g_hConsumeHealth.IntValue && (m_sicount <= g_hSiLimit.IntValue - g_hConsumeInfSub.IntValue) && vomitsurvivor < g_hVomitAttackNum.IntValue && Is_Pos_Ahead(selfpos) && (eTankStructure[client].iIncappedCount >= g_hConsumeIncap.IntValue || GetVectorDistance(selfpos, targetpos) > g_hForceAttackDist.FloatValue))
+		// 由于 OnPlayerRunCmd 下面已经判断坦克路程是否在生还前面，否则不允许压制，此处无需判断
+		if (IsPlayerAlive(client) && GetClientHealth(client) > g_hConsumeHealth.IntValue && (m_sicount <= g_hSiLimit.IntValue - g_hConsumeInfSub.IntValue) && vomitsurvivor < g_hVomitAttackNum.IntValue && (eTankStructure[client].iIncappedCount >= g_hConsumeIncap.IntValue || GetVectorDistance(selfpos, targetpos) > g_hForceAttackDist.FloatValue))
 		{
 			bCanConsume = true;
 			// 记录生还者当前地图完成度
@@ -709,7 +710,7 @@ bool Check_TankCanConsume(int client, int m_sicount, int target, int vomitsurviv
 		{
 			CreateTimer(1.0, Timer_TankAction_Reset, client, TIMER_FLAG_NO_MAPCHANGE);
 			#if (DEBUG_ALL)
-				PrintToConsoleAll("[Ai-Tank]：【当前坦克血量：%d 或 距离：%.2f 或 被喷：%d 或 当前特感：%d  或 在生还前面：%b】 -> 不满足要求，强制压制", GetClientHealth(client), GetVectorDistance(selfpos, targetpos), vomitsurvivor, m_sicount, Is_Pos_Ahead(selfpos));
+				PrintToConsoleAll("[Ai-Tank]：【当前坦克血量：%d 或 距离：%.2f 或 被喷：%d 或 当前特感：%d】 -> 不满足要求，强制压制", GetClientHealth(client), GetVectorDistance(selfpos, targetpos), vomitsurvivor, m_sicount);
 			#endif
 		}
 	}
@@ -956,7 +957,9 @@ void Ray_FindConsumePos(int client, int target)
 		{
 			TR_GetEndPosition(down_ray_endpos);
 			down_ray_endpos[2] += ROCK_THROW_HEIGHT;
-			ShowLaser(4, down_ray_pos, down_ray_endpos);
+			#if (DEBUG_ALL)
+				ShowLaser(4, down_ray_pos, down_ray_endpos);
+			#endif
 			if (Pos_IsVisibleTo_Player(client, down_ray_endpos) && IsOnValidMesh(down_ray_endpos) && !IsPos_StuckTank(down_ray_endpos, client) && Is_Pos_Ahead(down_ray_endpos) && GetVectorDistance(down_ray_endpos, targetpos) >= g_hConsumeDist.FloatValue)
 			{
 				CopyVectors(down_ray_endpos, eTankStructure[client].fRayConsumePos);
