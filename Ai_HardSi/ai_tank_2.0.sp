@@ -20,7 +20,7 @@
 #define ROCK_THROW_HEIGHT 110.0								// 坦克石头出手高度
 #define ROCK_AIM_TIME 2.0									// 坦克扔石头瞄准的时间
 #define FUNCTION_FINDPOS_TRY 5								// 函数找位一次最大找位次数
-#define LAG_DETECT_TIME 5.0									// 坦克位置检测间隔
+#define LAG_DETECT_TIME 2.0									// 坦克位置检测间隔
 #define LAG_DETECT_RAIDUS 100								// 坦克位置检测范围
 #define TREE_DETECT_TIME 1.5								// 绕树检测间隔
 #define RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
@@ -62,7 +62,7 @@ enum struct struct_TankConsume
 	// 结构体变量初始化
 	void struct_Init()
 	{
-		this.bCanInitPos = this.bCanConsume = this.bIsReachingFunctionPos = this.bIsReachingRayPos = this.bInConsumePlace = this.bHasRecordProgress = false;
+		this.bCanInitPos = this.bCanConsume = this.bIsReachingFunctionPos = this.bIsReachingRayPos = this.bInConsumePlace = this.bHasRecordProgress = this.bHasCreatePosTimer = false;
 		this.iTreeTarget = this.iConsumeSurPercent = this.iConsumeNum = this.iIncappedCount = 0;
 		this.fTreeTime = this.fFailedJumpedTime = this.fRockThrowTime = 0.0;
 	}
@@ -110,7 +110,7 @@ public void OnPluginStart()
 	g_hConsumeInfSub = CreateConVar("ai_TankConsumeInfSub", "1", "当前特感少于等于特感上限减去这个值的时，坦克可以消耗", CVAR_FLAG, true, 0.0);
 	g_hRayRaidus = CreateConVar("ai_TankConsumeRayRaidus", "1800", "射线找消耗位的范围，从坦克当前位置开始计算", CVAR_FLAG, true, 0.0);
 	g_hConsumeDist = CreateConVar("ai_TankConsumeDistance", "1200", "射线找到的消耗位需要离生还者这么远", CVAR_FLAG, true, 0.0);
-	g_hFindNewPosDist = CreateConVar("ai_TankFindNewConsumePosDistance", "600", "最近的生还者离坦克这么远坦克会重新找消耗位", CVAR_FLAG, true, 0.0);
+	g_hFindNewPosDist = CreateConVar("ai_TankFindNewConsumePosDistance", "750", "最近的生还者离坦克这么远坦克会重新找消耗位", CVAR_FLAG, true, 0.0);
 	g_hForceAttackDist = CreateConVar("ai_TankForceAttackDist", "350", "生还者距离坦克这么近坦克会强制攻击", CVAR_FLAG, true, 0.0);
 	g_hForceAttackProgress = CreateConVar("ai_TankForceAttackProgress", "10", "开始消耗时记录生还者路程，当超过路程加这个值时不允许消耗", CVAR_FLAG, true, 0.0);
 	g_hConsumePosRaidus = CreateConVar("ai_TankConsumePosRaidus", "100", "坦克走出了消耗位中心坐标以这个值为半径画圆的范围，会强制重新进入", CVAR_FLAG, true, 0.0);
@@ -415,6 +415,13 @@ public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 		// 坦克刷新后，先清空其他类型的数据，过 1 秒，再清空由于运行 OnPlayerRunCmd 中找到的消耗位，让坦克继续找位，目标有效，则停止时钟，坦克刚刚创建出来后 1s 可能还会无目标，使用循环时钟
 		eTankStructure[client].struct_Init();
 		CreateTimer(1.0, Timer_SpawnCheckConsume, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+		// 创建坦克位置检测时钟，如果坦克在有目标前就卡住，则不会检测，所以在刷出来的时候就需要创建
+		if (!eTankStructure[client].bHasCreatePosTimer)
+		{
+			delete hPosCheckTimer[client];
+			hPosCheckTimer[client] = CreateTimer(LAG_DETECT_TIME, Timer_CheckLag, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+			eTankStructure[client].bHasCreatePosTimer = true;
+		}
 	}
 }
 public Action Timer_SpawnCheckConsume(Handle timer, int client)
@@ -427,12 +434,6 @@ public Action Timer_SpawnCheckConsume(Handle timer, int client)
 			ConsumePosInit(client);
 			eTankStructure[client].bCanInitPos = true;
 			eTankStructure[client].bIsReachingFunctionPos = eTankStructure[client].bIsReachingRayPos = false;
-			if (!eTankStructure[client].bHasCreatePosTimer)
-			{
-				delete hPosCheckTimer[client];
-				hPosCheckTimer[client] = CreateTimer(LAG_DETECT_TIME, Timer_CheckLag, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-				eTankStructure[client].bHasCreatePosTimer = true;
-			}
 			#if (DEBUG_ALL)
 				PrintToConsoleAll("[Ai-Tank]：刷新坦克，客户端索引：%d，当前坦克目标：%d（%N），第一次创建时钟查看是否可以消耗", client, target, target);
 			#endif
@@ -511,11 +512,14 @@ public Action Timer_CheckLag(Handle timer, int client)
 	{
 		float selfpos[3] = {0.0};
 		GetClientAbsOrigin(client, selfpos);
-		if (selfpos[0] != eTankStructure[client].fNowPos[0] || !Is_InConsumeRaidus(selfpos, eTankStructure[client].fNowPos, LAG_DETECT_RAIDUS))
+		if (!Is_InConsumeRaidus(selfpos, eTankStructure[client].fNowPos, LAG_DETECT_RAIDUS))
 		{
 			CopyVectors(selfpos, eTankStructure[client].fNowPos);
+			#if (DEBUG_ALL)
+				PrintToConsoleAll("[Ai-Tank]：当前位置：%.2f %.2f，记录位置：%.2f %.2f，没有卡住，复制向量", selfpos[0], selfpos[1], eTankStructure[client].fNowPos[0], eTankStructure[client].fNowPos[1]);
+			#endif
 		}
-		else if (GetEntProp(client, Prop_Send, "m_zombieState") == 0 && eTankStructure[client].bCanConsume)
+		else if (GetEntProp(client, Prop_Send, "m_zombieState") == 0 && eTankStructure[client].bCanConsume && !Is_InConsumeRaidus(selfpos, eTankStructure[client].fNowPos, LAG_DETECT_RAIDUS))
 		{
 			// 若在消耗的途中卡住，则重新找消耗位置
 			eTankStructure[client].bInConsumePlace = eTankStructure[client].bIsReachingFunctionPos = eTankStructure[client].bIsReachingRayPos = false;
@@ -528,11 +532,11 @@ public Action Timer_CheckLag(Handle timer, int client)
 		{
 			// 若在攻击的途中卡住，则命令强制攻击最近的生还者
 			int newtarget = GetClosetMobileSurvivor(client);
-			if (IsValidSurvivor(client))
+			if (IsValidSurvivor(newtarget))
 			{
 				Logic_RunScript(COMMANDABOT_ATTACK, GetClientUserId(client), GetClientUserId(newtarget));
 				#if (DEBUG_ALL)
-					PrintToConsoleAll("[Ai-Tank]：当前坦克在攻击目标的过程中卡住，选择新的攻击目标强制攻击");
+					PrintToConsoleAll("[Ai-Tank]：当前坦克在攻击目标的过程中卡住，选择新的攻击目标：%N，强制攻击", newtarget);
 				#endif
 			}
 		}

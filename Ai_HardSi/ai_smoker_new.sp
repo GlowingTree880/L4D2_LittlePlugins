@@ -32,7 +32,7 @@ public Plugin myinfo =
 // ConVars
 ConVar g_hTongueRange, g_hTargetChoose, g_hMeleeAvoid, g_hVisionInverse, g_hLeftDistance, g_hDistancePercent, g_hSmokerBhop, g_hSmokerBhopSpeed;
 // Ints
-int g_iTongueRange, g_iTargetChoose, g_iMellePlayer = -1, g_iValidSurvivor = 0;
+int g_iTongueRange, g_iTargetChoose, g_iValidSurvivor = 0;
 // Bools
 bool g_bMeleeAvoid, g_bVisionInverse, bIsBehind[MAXPLAYERS + 1], g_bSmokerBhop;
 // Floats
@@ -50,7 +50,6 @@ public void OnPluginStart()
 	g_hTongueRange = FindConVar("tongue_range");
 	// HookEvent
 	HookEvent("round_start", evtRoundStart);
-	HookEvent("player_death", evt_PlayerDeath);
 	// AddChangeHooks
 	g_hSmokerBhop.AddChangeHook(ConVarChanged_Cvars);
 	g_hSmokerBhopSpeed.AddChangeHook(ConVarChanged_Cvars);
@@ -156,7 +155,6 @@ public Action OnPlayerRunCmd(int smoker, int &buttons, int &impulse, float vel[3
 		int iVictim = L4D_GetVictimSmoker(smoker);
 		if (IsSurvivor(iVictim))
 		{
-			g_iMellePlayer = -1;
 			if (g_bVisionInverse)
 			{
 				DataPack pack = new DataPack();
@@ -218,12 +216,21 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 					GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
 					if (strcmp(sWeaponName[7], "melee") == 0 || strcmp(sWeaponName, "weapon_chainsaw") == 0)
 					{
-						g_iMellePlayer = curTarget;
-						int newtarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, g_iMellePlayer);
-						if (IsSurvivor(newtarget))
+						int newtarget = SmokerTargetChoose(g_iTargetChoose, specialInfected, curTarget);
+						for (int i = 1; i <= MaxClients; i++)
 						{
-							curTarget = newtarget;
-							return Plugin_Changed;
+							if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && i != curTarget)
+							{
+								float self_eye_pos[3] = {0.0}, eye_pos[3] = {0.0};
+								GetClientEyePosition(specialInfected, self_eye_pos);
+								GetClientEyePosition(i, eye_pos);
+								Handle hTrace = TR_TraceRayFilterEx(self_eye_pos, eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, specialInfected);
+								if (!TR_DidHit(hTrace) && GetVectorDistance(self_eye_pos, eye_pos) < 600.0 && IsSurvivor(newtarget))
+								{
+									curTarget = newtarget;
+									return Plugin_Changed;
+								}
+							}
 						}
 					}
 				}
@@ -231,6 +238,10 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 		}
 	}
 	return Plugin_Continue;
+}
+bool TR_RayFilter(int entity, int mask, int self)
+{
+	return entity != self;
 }
 
 bool IsAiSmoker(int client)
@@ -278,16 +289,6 @@ bool IsPinned(int client)
 		if(GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0) bIsPinned = true;
 	}		
 	return bIsPinned;
-}
-
-// 舌头死亡
-public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsAiSmoker(client))
-	{
-		g_iMellePlayer = -1;
-	}
 }
 
 // 团队近战检测

@@ -93,10 +93,9 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 		{
 			vel[0] = vel[1] = vel[2] = 0.0;
 		}
-		// 可视，且目标正在看着自身（目标可能正在攻击自身），距离小于 150 且右键攻击到人，如果血量低于限制，则直接冲锋
-		// 或者可视，目标没有看着自身，距离小于 150，则直接冲锋
-		if ((bHasSight && IsSurvivor(iTarget) && IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && (buttons & IN_ATTACK2) && g_bShouldCharge[charger] && (0.0 < fDistance < 150.0) && ChargerCanCharge(charger)) 
-			|| bHasSight && IsSurvivor(iTarget) && !IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && (0.0 < fDistance < 150.0) && ChargerCanCharge(charger))
+		// 可以冲锋且可视的条件下距离小于 150，目标没有正在看着自身，则需要血量小于限制并且按下右键的情况下才可冲锋，如果目标正在看着自身，则只需要判断距离
+		if (ChargerCanCharge(charger) && bHasSight && (!IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && g_bShouldCharge[charger] && fDistance < 150.0) || 
+			(IsTargetWatchingAttacker(charger, g_iChargerAimOffset) && fDistance < 150.0))
 		{
 			vel[0] = vel[1] = 0.0;
 			buttons |= IN_ATTACK;
@@ -122,9 +121,8 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 				}
 				else if (iFlags == FL_JUMPING)
 				{
-					float fTargetDistance = 0.0, fAngles[3] = {0.0};
-					fTargetDistance = GetVectorDistance(fChargerPos, fTargetPos);
-					if (fTargetDistance < 250.0)
+					float fAngles[3] = {0.0};
+					if (fDistance < 250.0)
 					{
 						float fAnglesPost[3];
 						GetVectorAngles(fSpeed, fAngles);
@@ -140,25 +138,26 @@ public Action OnPlayerRunCmd(int charger, int &buttons, int &impulse, float vel[
 						MakeVectorFromPoints(fChargerPos, fTargetPos, fChargerPos);
 						NormalizeVector(fChargerPos, fChargerPos);
 						// 计算距离
-						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fChargerPos))) < g_fChargerAirAngles)
+						if (RadToDeg(ArcCosine(GetVectorDotProduct(fAngles, fChargerPos))) >= g_fChargerAirAngles)
 						{
-							return Plugin_Continue;
+							// 重新设置速度方向
+							float fNewVelocity[3];
+							MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
+							NormalizeVector(fNewVelocity, fNewVelocity);
+							ScaleVector(fNewVelocity, fCurrentSpeed);
+							TeleportEntity(charger, NULL_VECTOR, fAnglesPost, fNewVelocity);
 						}
-						// 重新设置速度方向
-						float fNewVelocity[3];
-						MakeVectorFromPoints(fDirection[0], fDirection[1], fNewVelocity);
-						NormalizeVector(fNewVelocity, fNewVelocity);
-						ScaleVector(fNewVelocity, fCurrentSpeed);
-						TeleportEntity(charger, NULL_VECTOR, fAnglesPost, fNewVelocity);
 					}
 				}
 			}
 		}
 		if (IsSurvivor(iTarget))
 		{
+			float targetpos[3] = {0.0};
+			GetClientAbsOrigin(iTarget, targetpos);
 			int iSurvivorDistance = GetSurvivorDistance(fChargerPos, iTarget);
-			int iChargerHealth = GetEntProp(charger, Prop_Send, "m_iHealth");
-			if (iChargerHealth > g_iHealthStartCharge || iSurvivorDistance > g_iStartChargeDistance)
+			int iChargerHealth = GetClientHealth(charger);
+			if (iChargerHealth > g_iHealthStartCharge || iSurvivorDistance > g_iStartChargeDistance || FloatAbs(fChargerPos[2] - targetpos[2]) > 72.0)
 			{
 				if (!g_bShouldCharge[charger] && ChargerCanCharge(charger))
 				{
@@ -187,8 +186,9 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 {
 	if (IsAiCharger(specialInfected))
 	{
-		float fSelfPos[3];
+		float fSelfPos[3], self_eye_pos[3] = {0.0};
 		GetClientAbsOrigin(specialInfected, fSelfPos);
+		GetClientEyePosition(specialInfected, self_eye_pos);
 		int iTeamMeleeCount = TeamMeleeCheck();
 		switch (g_iChargerTarget)
 		{
@@ -215,15 +215,25 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				}
 				else
 				{
+					// 当前目标拿着近战且不是整个团队都拿着近战，当前 Charger 看不见其他玩家且距离没有小于 600，不改变目标
 					if (NearestSurvivorDistance(specialInfected) > 0.50 * float(g_iStartChargeDistance))
 					{
 						if (ClientMeleeCheck(curTarget))
 						{
 							int newtarget = GetClosestSurvivor(fSelfPos, curTarget);
-							if (IsSurvivor(newtarget))
+							for (int i = 1; i <= MaxClients; i++)
 							{
-								curTarget = newtarget;
-								return Plugin_Changed;
+								if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && i != curTarget)
+								{
+									float eye_pos[3] = {0.0};
+									GetClientEyePosition(i, eye_pos);
+									Handle hTrace = TR_TraceRayFilterEx(self_eye_pos, eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, specialInfected);
+									if (!TR_DidHit(hTrace) && GetVectorDistance(self_eye_pos, eye_pos) < 600.0 && IsSurvivor(newtarget))
+									{
+										curTarget = newtarget;
+										return Plugin_Changed;
+									}
+								}
 							}
 						}
 					}
@@ -233,17 +243,24 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	}
 	return Plugin_Continue;
 }
+bool TR_RayFilter(int entity, int mask, int self)
+{
+	return entity != self;
+}
 
 bool ClientMeleeCheck(int client)
 {
-	int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-	if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
+	if (IsValidClient(client) && IsPlayerAlive(client) && GetClientTeam(client) == TEAM_SURVIVOR)
 	{
-		char sWeaponName[64];
-		GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
-		if (strcmp(sWeaponName[7], "melee") == 0 || strcmp(sWeaponName, "weapon_chainsaw") == 0)
+		int iActiveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if (IsValidEntity(iActiveWeapon) && IsValidEdict(iActiveWeapon))
 		{
-			return true;
+			char sWeaponName[64];
+			GetEdictClassname(iActiveWeapon, sWeaponName, sizeof(sWeaponName));
+			if (strcmp(sWeaponName[7], "melee") == 0 || strcmp(sWeaponName, "weapon_chainsaw") == 0)
+			{
+				return true;
+			}
 		}
 	}
 	return false;
