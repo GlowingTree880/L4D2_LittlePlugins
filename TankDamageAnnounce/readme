@@ -1,0 +1,8 @@
+以 Zonemod l4d_tank_damage_announce 为基础编写，显示生还者对坦克伤害以及吃拳、石、铁的数据和承受伤害数据。与 Zonemod 坦克伤害显示插件相同，只适用于单次刷一个 Tank 的情况，否则先刷出的坦克的伤害数据无法显示，只能显示最后刷出的坦克的伤害数据
+可能存在的 Bug：坦克存活时间统计不准确
+
+Cvars：
+l4d_tankdamage_enabled：1 是否开启坦克伤害统计
+l4d_tankdamage_enable_healthset：1 是否在坦克刷新时将坦克的生命值设置为 z_tank_health 数值
+
+正在尝试将插件修改为兼容多坦克的情况
