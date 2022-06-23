@@ -58,6 +58,14 @@ Ai_Charger：
   ai_ChargerStartChargeHealth：350 牛的生命值高于这个值将不会冲锋
   ai_ChargerAirAngles：60.0 牛连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
   
+Ai_Charger_2.0：
+  2022/6/23日重写，优化原先牛存在的大概率原地挥拳与远距离开始冲锋的问题
+  并提高了牛的灵活性：
+  ①在冲锋范围内存在被舌/猴/ht控的生还者，且自身血量大于 ai_ChargerMeleeDamage 血量限制，则优先对被控生还者挥拳，如有其他生还者接近则对接近目标冲锋
+  ②目标生还者没有正在看着牛时，优先对目标生还者挥拳，此时如有其他生还者接近则对接近目标冲锋，如目标生还者转身看牛则冲锋
+  ③近战检测范围为 ai_ChargerChargeDistance 值，且需血量大于 ai_ChargerMeleeDamage 限制且在近战检测范围外才会切换目标，否则对手持近战的目标挥拳
+  可能会出现报错问题，欢迎提出 issue
+  
 Ai_Jockey：
   ai_JockeyBhopSpeed：80.0 猴子连跳的速度
   ai_JockeyStartHopDistance：800.0 猴子在与目标处在这一个范围内时将会进行连跳
