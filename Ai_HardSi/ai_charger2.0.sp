@@ -75,10 +75,10 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		// 建立在距离小于冲锋限制距离，有视野且生还者有效的情况下
 		if (closet_survivor_distance < g_hChargeDist.IntValue)
 		{
-			if (has_sight && IsValidSurvivor(target) && !IsClientIncapped(target) && !IsClientPinned(target))
+			if (has_sight && IsValidSurvivor(target) && !IsClientIncapped(target) && !IsClientPinned(target) && !IsInChargeDuration(client))
 			{
 				// 目标没有正在看着自身（被控不算看着自身），自身可以冲锋且血量大于限制血量，阻止冲锋，对目标挥拳
-				if (GetClientHealth(client) >= g_hChargerMeleeDamage.IntValue && !Is_Target_Watching_Attacker(client, target, g_hAimOffset.IntValue) && !IsInChargeDuration(client))
+				if (GetClientHealth(client) >= g_hChargerMeleeDamage.IntValue && !Is_Target_Watching_Attacker(client, target, g_hAimOffset.IntValue))
 				{
 					BlockCharge(client);
 					// 查找冲锋范围内是否有其他正在看着自身的玩家
@@ -99,13 +99,14 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					}
 				}
 				// 目标可能正在看着自身，自身可以冲锋，目标没有拿着近战，且不在倒地或起身状态时则直接冲锋，目标拿着近战，则转到 OnChooseVictim 处理，转移新目标或继续挥拳
-				if (!Client_MeleeCheck(target) && !IsInChargeDuration(client) && !Is_InGetUp_Or_Incapped(target))
+				if (!Client_MeleeCheck(target) && !Is_InGetUp_Or_Incapped(target))
 				{
+					SetCharge(client);
 					buttons |= IN_ATTACK2;
 					buttons |= IN_ATTACK;
 					return Plugin_Changed;
 				}
-				else if (Is_InGetUp_Or_Incapped(target) && !IsInChargeDuration(client))
+				else if (Is_InGetUp_Or_Incapped(target))
 				{
 					BlockCharge(client);
 					buttons |= IN_ATTACK2;
@@ -133,13 +134,6 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							return Plugin_Changed;
 						}
 					}
-				}
-				// 自身血量小于冲锋限制血量，且被控的人不在起身或者倒地时，对着被控的人冲锋
-				else if (!Is_InGetUp_Or_Incapped(target))
-				{
-					buttons |= IN_ATTACK2;
-					buttons |= IN_ATTACK;
-					return Plugin_Changed;
 				}
 				// 被控的人在起身或者倒地状态，阻止冲锋
 				else if (Is_InGetUp_Or_Incapped(target))
@@ -188,7 +182,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
 		GetClientEyePosition(specialInfected, self_pos);
 		// 获取在冲锋范围内的目标
-		FindRangedClients(specialInfected, g_hChargeDist.FloatValue * 1.5);
+		FindRangedClients(specialInfected, 2.0 * g_hChargeDist.FloatValue);
 		if (IsValidSurvivor(curTarget) && IsPlayerAlive(curTarget))
 		{
 			GetClientEyePosition(curTarget, target_pos);
