@@ -81,6 +81,11 @@ stock const int IncappAnimations[SC_SIZE_SPACE][ID_PINNED_GETUPANIM_SIZE_SPACE] 
 
 stock static StringMap mSurvivorModelsTrie = null;
 
+#define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
+#define COMMANDABOT_ATTACK "CommandABot({cmd = 0, bot = GetPlayerFromUserID(%i), target = GetPlayerFromUserID(%i)})"
+#define COMMANDABOT_MOVE   "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
+#define COMMANDABOT_RESET  "CommandABot({cmd = 3, bot = GetPlayerFromUserID(%i)})"
+
 // *************************
 // 			生还者
 // *************************
@@ -411,6 +416,38 @@ stock bool Player_IsVisible_To(int client, int target)
 stock bool TR_RayFilter(int entity, int mask, int self)
 {
 	return entity != self;
+}
+// 运行脚本命令
+stock void Logic_RunScript(const char[] code, any ...)
+{
+	int scriptent = FindEntityByTargetname(-1, PLUGIN_SCRIPTLOGIC);
+	if (!scriptent || !IsValidEntity(scriptent))
+	{
+		scriptent = CreateEntityByName("logic_script");
+		DispatchKeyValue(scriptent, "targetname", PLUGIN_SCRIPTLOGIC);
+		DispatchSpawn(scriptent);
+	}
+	char buffer[512] = '\0';
+	VFormat(buffer, sizeof(buffer), code, 2);
+	SetVariantString(buffer);
+	AcceptEntityInput(scriptent, "RunScriptCode");
+}
+// 找到脚本实体
+stock int FindEntityByTargetname(int index, const char[] name)
+{
+	for (int entity = index; entity < GetMaxEntities(); entity++)
+	{
+		if (IsValidEntity(entity))
+		{
+			char entname[128] = '\0';
+			GetEntPropString(entity, Prop_Data, "m_iName", entname, sizeof(entname));
+			if (strcmp(name, entname) == 0)
+			{
+				return entity;
+			}
+		}
+	}
+	return -1;
 }
 
 // *************************

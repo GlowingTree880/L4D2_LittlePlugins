@@ -10,10 +10,6 @@
 #include "treeutil\treeutil.sp"
 
 #define CVAR_FLAG FCVAR_NOTIFY
-#define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
-#define COMMANDABOT_ATTACK "CommandABot({cmd = 0, bot = GetPlayerFromUserID(%i), target = GetPlayerFromUserID(%i)})"
-#define COMMANDABOT_MOVE "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
-#define COMMANDABOT_RESET "CommandABot({cmd = 3, bot = GetPlayerFromUserID(%i)})"
 #define NAV_MESH_HEIGHT 20.0								// 有效 Nav 位置高度
 #define WALL_DETECT_DIST 64.0								// 前方墙体检测距离
 #define FALL_DETECT_HEIGHT 120.0							// 向下坠落高度
@@ -150,7 +146,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	if (IsAiTank(client))
 	{
 		bool bHasSight = false, bIsSurvivorFailed = true;
-		int vomit_survivor = 0, target = GetClientAimTarget(client, true), flags = GetEntityFlags(client), nearest_target = GetClosetMobileSurvivor(client), nearest_targetdist = GetClosetSurvivorDistance(client);	sicount = GetSiCount_ExcludeTank(bIsSurvivorFailed, vomit_survivor);
+		int vomit_survivor = 0, target = GetClientAimTarget(client, true), flags = GetEntityFlags(client), nearest_target = GetClosetMobileSurvivor(client), nearest_targetdist = GetClosetSurvivorDistance(client), current_seq = GetEntProp(client, Prop_Send, "m_nSequence");	sicount = GetSiCount_ExcludeTank(bIsSurvivorFailed, vomit_survivor);
 		float selfpos[3] = {0.0}, eyeangles[3] = {0.0}, velbuffer[3] = {0.0}, vecspeed[3] = {0.0}, curspeed = 0.0;
 		GetClientAbsOrigin(client, selfpos);
 		GetClientEyeAngles(client, eyeangles);
@@ -175,7 +171,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				}
 			}
 			// 连跳距离及防止跳过头控制，要改连跳距离改这里，默认坦克拳头长度 * 0.8 - 2500 距离允许连跳
-			if (!eTankStructure[client].bCanConsume && g_hAttackRange.IntValue * 0.8 <= targetdist <= 2500 && curspeed > 190.0)
+			if (!eTankStructure[client].bCanConsume && bHasSight && g_hAttackRange.IntValue * 0.8 <= targetdist <= 2500 && curspeed > 190.0)
 			{
 				if (g_hAllowBhop.BoolValue && (flags & FL_ONGROUND))
 				{
@@ -277,13 +273,18 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					Find_And_Goto_ConsumePos(client, nearest_target);
 					RayPos_Visible_Check(client);
 					ConsumePos_NearestTargetDist_Check(client, nearest_targetdist, bHasSight);
-					In_ConsumePos_ThrowRock(client, selfpos, buttons);
+					In_ConsumePos_ThrowRock(client, selfpos, current_seq, buttons);
 					Survivor_Progress_Check(client);
 				}
 			}
 		}
+		// 扔石头时，记录扔石头的时间戳
+		if (current_seq == 49 || current_seq == 50 || current_seq == 51)
+		{
+			eTankStructure[client].fRockThrowTime = GetGameTime();
+		}
 		// 视角锁定，不允许消耗时并当前时间戳减去扔石头时的时间戳大于 ROCK_AIM_TIME 锁定视角
-		if (!eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && Dont_HitWall_Or_Fall(client, vecspeed))
+		if (bHasSight && !eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && Dont_HitWall_Or_Fall(client, vecspeed))
 		{
 			float self_eye_pos[3] = {0.0}, targetpos[3] = {0.0}, look_at[3] = {0.0};
 			if (IsValidSurvivor(nearest_target))
@@ -891,7 +892,7 @@ void RayPos_Visible_Check(int client)
 }
 
 // 当前坦克走到消耗位范围中时，令其扔石头
-Action In_ConsumePos_ThrowRock(int client, float selfpos[3], int &buttons)
+Action In_ConsumePos_ThrowRock(int client, float selfpos[3], int sequence, int &buttons)
 {
 	if (Is_InConsumeRaidus(selfpos, eTankStructure[client].fFunctionConsumePos, g_hConsumePosRaidus.IntValue) || Is_InConsumeRaidus(selfpos, eTankStructure[client].fRayConsumePos, g_hConsumePosRaidus.IntValue))
 	{
@@ -900,8 +901,7 @@ Action In_ConsumePos_ThrowRock(int client, float selfpos[3], int &buttons)
 		g_hRockInterval.SetInt(g_hConsumeRockInterval.IntValue);
 		g_hRockMinInterval.SetInt(g_hConsumeRockInterval.IntValue);
 		// 获取当前动画序列，如果当前动画序列等于任意一个投掷动画，则存入时间戳
-		int current_seq = GetEntProp(client, Prop_Send, "m_nSequence");
-		if (current_seq == 49 || current_seq == 50 || current_seq == 51)
+		if (sequence == 49 || sequence == 50 || sequence == 51)
 		{
 			eTankStructure[client].fRockThrowTime = GetGameTime();
 		}
@@ -1049,37 +1049,4 @@ int Calculate_Flow(Address pNavArea)
 		now_nav_promixity = 1.0;
 	}
 	return RoundToNearest(now_nav_promixity * 100.0);
-}
-
-// 运行脚本命令
-void Logic_RunScript(const char[] code, any ...)
-{
-	int scriptent = FindEntityByTargetname(-1, PLUGIN_SCRIPTLOGIC);
-	if (!scriptent || !IsValidEntity(scriptent))
-	{
-		scriptent = CreateEntityByName("logic_script");
-		DispatchKeyValue(scriptent, "targetname", PLUGIN_SCRIPTLOGIC);
-		DispatchSpawn(scriptent);
-	}
-	char buffer[512] = '\0';
-	VFormat(buffer, sizeof(buffer), code, 2);
-	SetVariantString(buffer);
-	AcceptEntityInput(scriptent, "RunScriptCode");
-}
-
-int FindEntityByTargetname(int index, const char[] name)
-{
-	for (int entity = index; entity < GetMaxEntities(); entity++)
-	{
-		if (IsValidEntity(entity))
-		{
-			char entname[128] = '\0';
-			GetEntPropString(entity, Prop_Data, "m_iName", entname, sizeof(entname));
-			if (strcmp(name, entname) == 0)
-			{
-				return entity;
-			}
-		}
-	}
-	return -1;
 }
