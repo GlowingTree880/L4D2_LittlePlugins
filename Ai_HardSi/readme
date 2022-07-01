@@ -38,6 +38,9 @@ Ai_Boomer：
   ai_BoomerBhopSpeed：80.0 胖子连跳的速度
   ai_BoomerAirAngles：60.0 胖子连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
   
+Ai_Boomer_2.0
+  2022/7/1日重写，优化原先 Boomer 目标选择，增加视角转移功能，当生还者处于 z_vomit_range + 100.0 的区域内时，Boomer喷吐到某一生还者将会寻找范围内其他生还者转移视角进行喷吐
+  
 Ai_Hunter：
   ai_HunterFastPounceDistance：2000 在距离目标多近时，ht会进行快速突袭
   ai_HunterPounceVerticalAngle：6 ht突袭垂直角度限制
