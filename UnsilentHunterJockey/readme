@@ -1,0 +1,5 @@
+这是一个：令 Hunter（处于非正在控人或飞扑状态）与 Jockey（处于非正在控人状态）下固定时间发出警示音的插件，整合于 Zonemod l4d2_unsilent_jockey 与 Nextmod l4d2_unsilent_hunters
+
+Cvars：
+  Unsilent_HunterSoundInterval：2.0 Hunter 多少秒放一次声
+  Unsilent_JockeySoundInterval：2.0 Jockey 多少秒放一次声
