@@ -47,7 +47,8 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 		{
 			if (g_iZhenduiClient > 0)
 			{
-				if (IsValidPlayer(g_iZhenduiClient))
+				// 玩家有效，且或者，特感生成时才下 sdkhook，否则特感针对死亡目标会造成无目标
+				if (IsValidPlayer(g_iZhenduiClient) && IsPlayerAlive(g_iZhenduiClient))
 				{
 					SDKHook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
 				}
