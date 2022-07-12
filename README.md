@@ -46,6 +46,8 @@
 <br>（任意或指定团队成员可发起投票，将当前不在旁观者团队内的玩家移动至旁观者团队，防止出现演员）
 * **TankDamageAnnounce：** When the last spawned tank dies, print survivor's damage to this tank and survivor's injuries amount
 <br>（当最后一个刷新的 Tank 死亡时，打印生还者对该 Tank 的伤害及吃拳/石/铁的数量及生还者受到该 Tank 的伤害情况）
+* **UnsilentHunterJockey：** After hunter or jockey spawning and they are not pinning someone, then make them emit an alert sound at regular intervals
+<br>（当 Hunter 与 Jockey 刷新后并在 Hunter 未在飞扑与它们未在控人时，令他们固定间隔发出警示音）
 
   * 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件文件并修复反编译后的文件内容得到<br>（The above plugins's code which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
   * 关于反编译行为的合理性与 Sourcemod GPL version 3 许可证及编写的插件/拓展与许可证间的关系可查阅：<br>[SourceModLicense](https://www.sourcemod.net/license.php)<br>[Quoted from Azelphur](https://forums.alliedmods.net/showpost.php?p=1648709&postcount=80)<br>[Quoted from Silvers](https://forums.alliedmods.net/showpost.php?p=2709004&postcount=394)<br>[Quoted from Sazpaimon](https://forums.alliedmods.net/showpost.php?p=1587691&postcount=10)
