@@ -43,6 +43,7 @@ public void OnPluginStart()
 	g_hChargeInterval = FindConVar("z_charge_interval");
 	// HookEvents
 	HookEvent("player_spawn", evt_PlayerSpawn);
+	HookEvent("ability_use", evt_AbilityUse);
 }
 
 // 事件
@@ -53,6 +54,17 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	{
 		// 牛生成时，将冲锋时间戳记为 0.0 - 冲锋 CD 的时间，否则由于刚开始小于冲锋 CD 会导致无法对没看着自身的目标挥拳而是直接冲锋
 		charge_interval[client] = 0.0 - g_hChargeInterval.FloatValue;
+	}
+}
+// 冲锋时，记录冲锋时间戳为当前时间 + 冲锋持续时间
+public void evt_AbilityUse(Event event, const char[] name, bool dontBroadcast)
+{
+	char ability[16] = '\0';
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	event.GetString("ability", ability, sizeof(ability));
+	if (strcmp(ability, "ability_charge") == 0)
+	{
+		charge_interval[client] = GetGameTime() + g_hChargeDuration.FloatValue;
 	}
 }
 // 主要
@@ -67,10 +79,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		GetEntPropVector(client, Prop_Data, "m_vecVelocity", vec_speed);
 		cur_speed = SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0));
 		survivor_num = GetSurvivorCount(true, false);
-		// 冲锋时，将 vel 三方向置 0.0，并记录冲锋时间戳
+		// 冲锋时，将 vel 三方向置 0.0
 		if (buttons & IN_ATTACK)
 		{
-			charge_interval[client] = GetGameTime();
 			vel[0] = vel[1] = vel[2] = 0.0;
 		}
 		// 建立在距离小于冲锋限制距离，有视野且生还者有效的情况下
