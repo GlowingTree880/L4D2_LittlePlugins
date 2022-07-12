@@ -59,9 +59,13 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 
 public void SDK_UpdateThink(int client)
 {
-	if (IsInfectedBot(client) && IsPlayerAlive(client))
+	if (IsInfectedBot(client) && IsPlayerAlive(client) && IsValidPlayer(g_iZhenduiClient) && IsPlayerAlive(g_iZhenduiClient))
 	{
 		Logic_RunScript(COMMANDABOT_ATTACK, GetClientUserId(client), GetClientUserId(g_iZhenduiClient));
+	}
+	else
+	{
+		SDKUnhook(client, SDKHook_PostThinkPost, SDK_UpdateThink);
 	}
 }
 
