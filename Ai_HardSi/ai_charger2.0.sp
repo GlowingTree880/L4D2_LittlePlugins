@@ -16,16 +16,16 @@ public Plugin myinfo =
 	name 			= "Ai Charger 增强 2.0 版本",
 	author 			= "夜羽真白",
 	description 	= "Ai Charger 2.0",
-	version 		= "2.0.0.0",
+	version 		= "2.0.0.0 / 2022/7/14",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
 // ConVars
-ConVar g_hAllowBhop, g_hBhopSpeed, g_hChargeDist, g_hAimOffset, g_hChargerTarget, g_hAllowMeleeAvoid, g_hChargerMeleeDamage, g_hChargeDuration, g_hChargeInterval;
+ConVar g_hAllowBhop, g_hBhopSpeed, g_hChargeDist, g_hExtraTargetDist, g_hAimOffset, g_hChargerTarget, g_hAllowMeleeAvoid, g_hChargerMeleeDamage, g_hChargeInterval;
 // Float
-float charge_interval[MAXPLAYERS + 1] = 0.0;
+float charge_interval[MAXPLAYERS + 1];
 // Bools
-bool can_attack_pinned[MAXPLAYERS + 1] = false;
+bool can_attack_pinned[MAXPLAYERS + 1] = false, is_charging[MAXPLAYERS + 1] = false;
 // Ints
 int survivor_num = 0, ranged_client[MAXPLAYERS + 1][MAXPLAYERS + 1], ranged_index[MAXPLAYERS + 1] = {0};
 
@@ -34,16 +34,15 @@ public void OnPluginStart()
 	// CreateConVars
 	g_hAllowBhop = CreateConVar("ai_ChargerBhop", "1", "是否开启 Charger 连跳", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hBhopSpeed = CreateConVar("ai_ChagrerBhopSpeed", "90.0", "Charger 连跳速度", CVAR_FLAG, true, 0.0);
-	g_hChargeDist = CreateConVar("ai_ChargerChargeDistance", "150.0", "Charger 只能在与目标小于这一距离时冲锋", CVAR_FLAG, true, 0.0);
+	g_hChargeDist = CreateConVar("ai_ChargerChargeDistance", "250.0", "Charger 只能在与目标小于这一距离时冲锋", CVAR_FLAG, true, 0.0);
+	g_hExtraTargetDist = CreateConVar("ai_ChargerExtraTargetDistance", "0,350", "Charger 会在这一范围内寻找其他有效的目标（中间用逗号隔开，不要有空格）", CVAR_FLAG);
 	g_hAimOffset = CreateConVar("ai_ChargerAimOffset", "30.0", "目标的瞄准水平与 Charger 处在这一范围内，Charger 不会冲锋", CVAR_FLAG, true, 0.0);
 	g_hAllowMeleeAvoid = CreateConVar("ai_ChargerMeleeAvoid", "1", "是否开启 Charger 近战回避", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hChargerMeleeDamage = CreateConVar("ai_ChargerMeleeDamage", "350", "Charger 血量小于这个值，将不会直接冲锋拿着近战的生还者", CVAR_FLAG, true, 0.0);
 	g_hChargerTarget = CreateConVar("ai_ChargerTarget", "1", "Charger目标选择：1=自然目标选择，2=优先取最近目标，3=优先撞人多处", CVAR_FLAG, true, 1.0, true, 2.0);
-	g_hChargeDuration = FindConVar("z_charge_duration");
 	g_hChargeInterval = FindConVar("z_charge_interval");
 	// HookEvents
 	HookEvent("player_spawn", evt_PlayerSpawn);
-	HookEvent("ability_use", evt_AbilityUse);
 }
 
 // 事件
@@ -54,23 +53,13 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	{
 		// 牛生成时，将冲锋时间戳记为 0.0 - 冲锋 CD 的时间，否则由于刚开始小于冲锋 CD 会导致无法对没看着自身的目标挥拳而是直接冲锋
 		charge_interval[client] = 0.0 - g_hChargeInterval.FloatValue;
-	}
-}
-// 冲锋时，记录冲锋时间戳为当前时间 + 冲锋持续时间
-public void evt_AbilityUse(Event event, const char[] name, bool dontBroadcast)
-{
-	char ability[16] = '\0';
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	event.GetString("ability", ability, sizeof(ability));
-	if (strcmp(ability, "ability_charge") == 0)
-	{
-		charge_interval[client] = GetGameTime() + g_hChargeDuration.FloatValue;
+		is_charging[client] = false;
 	}
 }
 // 主要
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
-	if (IsCharger(client))
+	if (IsCharger(client) && IsPlayerAlive(client))
 	{
 		bool has_sight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
 		int target = GetClientAimTarget(client, true), flags = GetEntityFlags(client), closet_survivor_distance = GetClosetSurvivorDistance(client), ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
@@ -79,6 +68,16 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		GetEntPropVector(client, Prop_Data, "m_vecVelocity", vec_speed);
 		cur_speed = SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0));
 		survivor_num = GetSurvivorCount(true, false);
+		// charge_interval 记录每次冲锋结束的时间戳
+		if (IsValidEntity(ability) && !is_charging[client] && GetEntProp(ability, Prop_Send, "m_isCharging") == 1)
+		{
+			is_charging[client] = true;
+		}
+		else if (IsValidEntity(ability) && is_charging[client] && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
+		{
+			charge_interval[client] = GetGameTime();
+			is_charging[client] = false;
+		}
 		// 冲锋时，将 vel 三方向置 0.0
 		if (buttons & IN_ATTACK)
 		{
@@ -92,14 +91,12 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				// 目标没有正在看着自身（被控不算看着自身），自身可以冲锋且血量大于限制血量，阻止冲锋，对目标挥拳
 				if (GetClientHealth(client) >= g_hChargerMeleeDamage.IntValue && !Is_Target_Watching_Attacker(client, target, g_hAimOffset.IntValue))
 				{
-					if ((buttons &= ~IN_ATTACK) && GetGameTime() - charge_interval[client] > g_hChargeDuration.FloatValue)
-					{
-						BlockCharge(client);
-					}
+					buttons &= ~IN_ATTACK;
+					BlockCharge(client);
 					// 查找冲锋范围内是否有其他正在看着自身的玩家
 					for (int i = 0; i < ranged_index[client]; i++)
 					{
-						if (ranged_client[client][i] != target && !IsClientPinned(ranged_client[client][i]) && Is_Target_Watching_Attacker(client, ranged_client[client][i], g_hAimOffset.IntValue) && !Is_InGetUp_Or_Incapped(ranged_client[client][i]) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
+						if (ranged_client[client][i] != target && !IsClientPinned(ranged_client[client][i]) && Is_Target_Watching_Attacker(client, ranged_client[client][i], g_hAimOffset.IntValue) && !Is_InGetUp_Or_Incapped(ranged_client[client][i]) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1 && (flags & FL_ONGROUND))
 						{
 							SetCharge(client);
 							float new_target_pos[3] = {0.0};
@@ -113,16 +110,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 						}
 					}
 				}
-				// 目标可能正在看着自身，自身可以冲锋，目标没有拿着近战，且不在倒地或起身状态时则直接冲锋，目标拿着近战，则转到 OnChooseVictim 处理，转移新目标或继续挥拳
-				if (!Client_MeleeCheck(target) && !Is_InGetUp_Or_Incapped(target))
+				// 目标正在看着自身，自身可以冲锋，目标没有拿着近战，且不在倒地或起身状态时则直接冲锋，目标拿着近战，则转到 OnChooseVictim 处理，转移新目标或继续挥拳
+				else if (Is_Target_Watching_Attacker(client, target, g_hAimOffset.IntValue) && !Client_MeleeCheck(target) && !Is_InGetUp_Or_Incapped(target) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1 && (flags & FL_ONGROUND))
 				{
 					SetCharge(client);
 					buttons |= IN_ATTACK2;
 					buttons |= IN_ATTACK;
 					return Plugin_Changed;
 				}
-				else if (Is_InGetUp_Or_Incapped(target) && (buttons &= ~IN_ATTACK) && GetGameTime() - charge_interval[client] > g_hChargeDuration.FloatValue)
+				else if (Is_InGetUp_Or_Incapped(target))
 				{
+					buttons &= ~IN_ATTACK;
 					BlockCharge(client);
 					buttons |= IN_ATTACK2;
 				}
@@ -132,14 +130,12 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			{
 				if (GetClientHealth(client) > g_hChargerMeleeDamage.IntValue)
 				{
-					if ((buttons &= ~IN_ATTACK) && GetGameTime() - charge_interval[client] > g_hChargeDuration.FloatValue)
-					{
-						BlockCharge(client);
-					}
+					buttons &= ~IN_ATTACK;
+					BlockCharge(client);
 					for (int i = 0; i < ranged_index[client]; i++)
 					{
 						// 循环时，由于 ranged_index 增加时，数组中一定为有效生还者，故无需判断是否是有效生还者
-						if (!IsClientPinned(ranged_client[client][i]) && Is_Target_Watching_Attacker(client, ranged_client[client][i], g_hAimOffset.IntValue) && !Is_InGetUp_Or_Incapped(ranged_client[client][i]) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
+						if (!IsClientPinned(ranged_client[client][i]) && Is_Target_Watching_Attacker(client, ranged_client[client][i], g_hAimOffset.IntValue) && !Is_InGetUp_Or_Incapped(ranged_client[client][i]) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1 && (flags & FL_ONGROUND))
 						{
 							SetCharge(client);
 							float new_target_pos[3] = {0.0};
@@ -154,15 +150,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					}
 				}
 				// 被控的人在起身或者倒地状态，阻止冲锋
-				else if (Is_InGetUp_Or_Incapped(target) && (buttons &= ~IN_ATTACK) && GetGameTime() - charge_interval[client] > g_hChargeDuration.FloatValue)
+				else if (Is_InGetUp_Or_Incapped(target))
 				{
+					buttons &= ~IN_ATTACK;
 					BlockCharge(client);
 					buttons |= IN_ATTACK2;
 				}
 			}
 		}
-		else if (!IsInChargeDuration(client) && (buttons &= ~IN_ATTACK) && GetGameTime() - charge_interval[client] > g_hChargeDuration.FloatValue)
+		else if (!IsInChargeDuration(client) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
 		{
+			buttons &= ~IN_ATTACK;
 			BlockCharge(client);
 			buttons |= IN_ATTACK2;
 		}
@@ -197,10 +195,23 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	int new_target = 0;
 	if (IsCharger(specialInfected))
 	{
-		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
+		float self_pos[3] = {0.0}, target_pos[3] = {0.0}, min_dist = 0.0, max_dist = 0.0;
 		GetClientEyePosition(specialInfected, self_pos);
-		// 获取在冲锋范围内的目标
-		FindRangedClients(specialInfected, 2.0 * g_hChargeDist.FloatValue);
+		// 获取在冲锋范围内的目标，从 Cvar 中获取最下与最大范围
+		char cvar_dist[16] = '\0';
+		g_hExtraTargetDist.GetString(cvar_dist, sizeof(cvar_dist));
+		if (strcmp(cvar_dist, NULL_STRING) != 0)
+		{
+			char result_dist[2][16];
+			ExplodeString(cvar_dist, ",", result_dist, 2, 16);
+			min_dist = StringToFloat(result_dist[0]);
+			max_dist = StringToFloat(result_dist[1]);
+		}
+		else
+		{
+			max_dist = 350.0;
+		}
+		FindRangedClients(specialInfected, min_dist, max_dist);
 		if (IsValidSurvivor(curTarget) && IsPlayerAlive(curTarget))
 		{
 			GetClientEyePosition(curTarget, target_pos);
@@ -211,10 +222,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				{
 					can_attack_pinned[specialInfected] = true;
 					curTarget = ranged_client[specialInfected][i];
-					if (GetGameTime() - charge_interval[specialInfected] > g_hChargeDuration.FloatValue)
-					{
-						BlockCharge(specialInfected);
-					}
+					BlockCharge(specialInfected);
 					return Plugin_Changed;
 				}
 				can_attack_pinned[specialInfected] = false;
@@ -235,10 +243,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				// 不满足近战回避距离限制或血量要求的牛，阻止其冲锋，令其对手持近战的目标挥拳
 				else if (g_hAllowMeleeAvoid.BoolValue && Client_MeleeCheck(curTarget) && !IsInChargeDuration(specialInfected) && (GetVectorDistance(self_pos, target_pos) < g_hChargeDist.FloatValue || GetClientHealth(specialInfected) >= g_hChargerMeleeDamage.IntValue))
 				{
-					if (GetGameTime() - charge_interval[specialInfected] > g_hChargeDuration.FloatValue)
-					{
-						BlockCharge(curTarget);
-					}
+					BlockCharge(curTarget);
 				}
 				// 目标选择
 				switch (g_hChargerTarget.IntValue)
@@ -405,14 +410,14 @@ void BlockCharge(int client)
 	int ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
 	if (IsValidEntity(ability) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
 	{
-		SetEntPropFloat(ability, Prop_Send, "m_timestamp", GetGameTime() + 0.5);
+		SetEntPropFloat(ability, Prop_Send, "m_timestamp", GetGameTime() + g_hChargeInterval.FloatValue);
 	}
 }
 // 让牛冲锋
 void SetCharge(int client)
 {
 	int ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
-	if (IsValidEntity(ability) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1 && GetEntPropFloat(ability, Prop_Send, "m_timestamp") < GetGameTime() + 1.0)
+	if (IsValidEntity(ability) && GetEntProp(ability, Prop_Send, "m_isCharging") != 1)
 	{
 		SetEntPropFloat(ability, Prop_Send, "m_timestamp", GetGameTime() - 0.5);
 	}
@@ -420,20 +425,21 @@ void SetCharge(int client)
 // 是否在冲锋间隔
 bool IsInChargeDuration(int client)
 {
-	return view_as<bool>((GetGameTime() - charge_interval[client]) < g_hChargeInterval.FloatValue);
+	return view_as<bool>((GetGameTime() - (g_hChargeInterval.FloatValue + charge_interval[client])) < 0.0);
 }
 // 查找范围内可视的有效的（未倒地，未死亡，未被控）的玩家
-int FindRangedClients(int client, float range)
+int FindRangedClients(int client, float min_range, float max_range)
 {
 	int index = 0;
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(i) && !IsClientIncapped(i))
 		{
-			float self_eye_pos[3] = {0.0}, target_eye_pos[3] = {0.0};
+			float self_eye_pos[3] = {0.0}, target_eye_pos[3] = {0.0}, dist = 0.0;
 			GetClientEyePosition(client, self_eye_pos);
 			GetClientEyePosition(i, target_eye_pos);
-			if (GetVectorDistance(self_eye_pos, target_eye_pos) <= range)
+			dist = GetVectorDistance(self_eye_pos, target_eye_pos);
+			if (dist >= min_range && dist <= max_range)
 			{
 				Handle hTrace = TR_TraceRayFilterEx(self_eye_pos, target_eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
 				if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
