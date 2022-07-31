@@ -1,0 +1,63 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"CTerrorPlayer::Event_Killed"
+			{
+				"windows"
+				{
+					"signature"	"CTerrorPlayer::Event_Killed"			
+				}
+				"linux"
+				{
+					"signature"	"CTerrorPlayer::Event_Killed"
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			"Patch_Byte"
+			{
+				"windows"		"139" // 0x8B
+				"linux"			"133" // 0x85
+			}
+			"Patch_Count"
+			{
+				"windows"		"32"
+				"linux"			"1"
+			}
+			"Patch_Offset"
+			{
+				"windows"		"8578"
+				"linux"			"7424"
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::Event_Killed"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer12Event_KilledERK15CTakeDamageInfo"
+				"windows"	"\x53\x8B\x2A\x83\x2A\x2A\x83\x2A\x2A\x83\x2A\x2A\x55\x8B\x2A\x2A\x89\x2A\x2A\x2A\x8B\x2A\x81\x2A\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33\x2A\x89\x2A\x2A\x8B\x2A\x2A\x56\x8B\x2A\x8B\x2A\x89\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x2A\x2A\x2A\x2A\x57\xFF\x2A\x8B\x2A\x8B"
+				/* 53 8B ? 83 ? ? 83 ? ? 83 ? ? 55 8B ? ? 89 ? ? ? 8B ? 81 ? ? ? ? ? A1 ? ? ? ? 33 ? 89 ? ? 8B ? ? 56 8B ? 8B ? 89 ? ? ? ? ? 8B ? ? ? ? ? 57 FF ? 8B ? 8B */
+				/* Search: "holiday_gift". XRef. */
+			}
+
+			/*
+			 *  CHolidayGift::Create(Vector origin, QAngle width, QAngle angles, Vector velocity, CBaseCombatCharacter *)
+			 */
+			"CHolidayGift::Create"
+			{
+				"library"	"server"
+				"linux"		"@_ZN12CHolidayGift6CreateERK6VectorRK6QAngleS5_S2_P20CBaseCombatCharacter"
+				"windows"	"\x53\x8B\x2A\x83\x2A\x2A\x83\x2A\x2A\x83\x2A\x2A\x55\x8B\x2A\x2A\x89\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x8B\x2A\x2A\x8B\x2A\x2A\x83\x2A\x2A\x56\x57"
+				/* 53 8B ? 83 ? ? 83 ? ? 83 ? ? 55 8B ? ? 89 ? ? ? 8B ? 8B ? ? 8B ? ? 8B ? ? 83 ? ? 56 57 */
+				/* Search: "holiday_gift" */
+			}
+		}
+	}
+}
