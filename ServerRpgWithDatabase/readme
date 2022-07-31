@@ -1,0 +1,73 @@
+这是一个：配合使用 MySQL 数据库保存记录玩家连接信息，击杀特感信息，积分等级信息的 RPG 插件
+  Cvars：
+    Database_RecordConnection        1        是否使用本插件提示玩家加入退出信息
+    Database_RecordLog               1        是否使用本插件记录数据库及玩家连接信息至日志文件中
+    Database_RecordMessage           1        是否使用本插件记录玩家聊天信息
+    Database_RecordSteamID           1        记录玩家聊天信息时是否记录玩家的 SteamID 与 IP 地址
+    rank_ranklimit                   1        !rankmenu 全服排行榜可显示多少条排名（0-20）
+    rpg_allow_custom_tags            1        是否允许玩家使用 !tags + 称号名 自定义玩家称号
+    rpg_allow_drop_gift              1        玩家击杀特感是否允许掉落礼物盒
+    rpg_allow_kill_restore_health    0        玩家击杀特感是否允许回复血量
+    rpg_custags_ignore_minlevel      1        玩家自定义称号后，一旦允许使用自定义称号的最低等级改变，是否允许玩家无视此最低等级使用自定义称号
+    rpg_custom_tags_length           10       玩家自定义称号的最大字符长度（英文字符占1字节算1个长度，中文字符占3字节算一个长度，自定义称号将保存于数据库）
+    rpg_custom_tags_min_level        50       允许玩家自定义称号的最低等级
+    rpg_gift_bpoints_chance          50       玩家打开礼物盒可以获得 B 数的概率
+    rpg_gift_drop_chance             50       杀死特感后掉落礼物盒的概率
+    rpg_gift_exps_chance             50       玩家打开礼物盒可以获得经验的概率
+    rpg_gift_max_bpoints             20       玩家打开礼物盒可以获得的最大 B 数值
+    rpg_gift_max_exp                 100      玩家打开礼物盒可以获得的经验值
+    rpg_gift_min_bpoints             1        玩家打开礼物盒可以获得的最小 B 数值
+    rpg_gift_min_exp                 10       玩家打开礼物盒可以获得的最小经验值
+  
+  使用方法：
+  注：查询玩家全服排名使用 row_number() over() 函数，为 MySQL 8.0 版本引入的窗口函数，低版本可更新或更改查询语句
+  1.于：left4dead2\addons\sourcemod\configs\databases.cfg 中添加数据库信息，并更改 tree_server_rpg.sp 第 12 行处的 #define DBNAME "treeserver" 为修改后的配置名称
+        示例：
+          "Databases"
+          {
+            "driver_default"		"mysql"
+            // When specifying "host", you may use an IP address, a hostname, or a socket file path
+            "treeserver"
+            {
+              "driver"			"mysql"
+              "host"				"数据库服务器 IP 地址"
+              "database"		"treeserver"
+              "user"				"登录数据库的用户账户"
+              "pass"				"登录数据库的密码"
+              //"timeout"		"0"
+              "port"			  "3306"
+            }
+            "default"
+            {
+              "driver"			"default"
+              "host"				"localhost"
+              "database"		"sourcemod"
+              "user"				"root"
+              "pass"				""
+              //"timeout"		"0"
+              //"port"			"0"
+            }
+          }
+   2.在服务器中添加相应的数据库
+        示例：
+          （CREATE DATABASE IF NOT EXISTS '数据库名';）
+          添加完成后可使用（SHOW DATABASES;）查询数据库信息
+          ----------
+          Database
+          information_schema
+          mysql
+          performance_schema
+          sys
+          treeserver
+          ----------
+   3.将 l4d2_gift_rewards.txt 放入 left4dead2\addons\sourcemod\gamedata 中，插件放入 plugins 文件夹中
+        签名文件来源：[L4D2] Gift Rewards by Silvers：https://forums.alliedmods.net/showthread.php?t=320067
+   4.重启服务器，无需进行任何建表操作，插件在每次启动时将会自动检测是否有
+        bpoints_level_skill_table
+        player_campaign_table
+        player_information_table
+        player_tags_table
+     4 张需要的表，缺失任何一张表将会自动创建，到此已可以正常使用插件
+     
+   其他注意事项：1.在游戏中途重载此插件后，请不要使用 !buy 查看个人信息，每次查看个人信息时，爆头次数/爆头率/每分钟获取 B 数值/每分钟获取经验值将会实时计算并上传到数据库中，插件重载后会将这些值置为 0 上传，导致信息清零
+               2.插件会在每次团灭/过图/救援离开时/打 !vote 指令时上传所有玩家的信息，使用 Confogl 更换模式或使用 sm plugins unload_all 卸载全部查件，将不会触发 OnPluginEnd() 函数，如在游戏中途更换模式或卸载全部插件会导致本局信息无法上传，可在 Confoglcompmod 调用 sm plugins unload_all 指令卸载全部插件前先卸载此插件，上传玩家信息   
