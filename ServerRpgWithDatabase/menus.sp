@@ -526,7 +526,7 @@ void CheckPlayerLevel(int client)
 			return;
 		}
 		FormatEx(sql_statement, sizeof(sql_statement), DQL_DEFAULT_TAGS, TABLENAME_BPOINTS_AND_SKILL, TABLENAME_PLAYER_TAGS, steamID);
-		DQL_QueryData(client, PLAYER_TAGS, DQL_DEFAULT_TAGS);
+		DQL_QueryData(client, PLAYER_TAGS, sql_statement);
 	}
 }
 
@@ -606,13 +606,13 @@ public Action Draw_SkillMenu(int client)
 	{
 		case 0:
 		{
-			SkillMenu.DrawItem(" 出门近战(0/1)需100点B数", ITEMDRAW_DISABLED);
+			SkillMenu.DrawItem(" 出门近战(0/1)需100点B数", ITEMDRAW_DEFAULT);
 			FormatEx(info, sizeof(info), "    ※出门不会获得近战武器");
 			SkillMenu.DrawText(info);
 		}
 		case 1:
 		{
-			SkillMenu.DrawItem(" 出门近战(1/1)", ITEMDRAW_DISABLED);
+			SkillMenu.DrawItem(" 出门近战(1/1)", ITEMDRAW_DEFAULT);
 			if (player_data[client].Player_Melee == 0)
 			{
 				FormatEx(info, sizeof(info), "    ※未选择出门获得的近战武器");
@@ -626,7 +626,7 @@ public Action Draw_SkillMenu(int client)
 	}
 	if (player_data[client].Player_First_Skill == 1)
 	{
-		SkillMenu.DrawItem("出门近战选择", ITEMDRAW_DISABLED);
+		SkillMenu.DrawItem("出门近战选择", ITEMDRAW_DEFAULT);
 		FormatEx(info, sizeof(info), "    ※选择出门获得的近战武器");
 		SkillMenu.DrawText(info);
 	}
@@ -634,24 +634,24 @@ public Action Draw_SkillMenu(int client)
 	{
 		case 0:
 		{
-			SkillMenu.DrawItem("杀特回血(0/2)需100点B数", ITEMDRAW_DISABLED);
+			SkillMenu.DrawItem("杀特回血(0/2)需100点B数", ITEMDRAW_DEFAULT);
 			FormatEx(info, sizeof(info), "    ※击杀特感无法回复血量");
 			SkillMenu.DrawText(info);
 		}
 		case 1:
 		{
-			SkillMenu.DrawItem("杀特回血(1/2)需200B点数", ITEMDRAW_DISABLED);
+			SkillMenu.DrawItem("杀特回血(1/2)需200B点数", ITEMDRAW_DEFAULT);
 			FormatEx(info, sizeof(info), "    ※每击杀一只特感回复1点血量");
 			SkillMenu.DrawText(info);
 		}
 		case 2:
 		{
-			SkillMenu.DrawItem("杀特回血(2/2)", ITEMDRAW_DISABLED);
+			SkillMenu.DrawItem("杀特回血(2/2)", ITEMDRAW_DEFAULT);
 			FormatEx(info, sizeof(info), "    ※每击杀一只特感回复2点血量");
 			SkillMenu.DrawText(info);
 		}
 	}
-	SkillMenu.DrawItem("重置技能(返还所有B数)", ITEMDRAW_DISABLED);
+	SkillMenu.DrawItem("重置技能(返还所有B数)", ITEMDRAW_DEFAULT);
 	SkillMenu.DrawText(" \n");
 	SkillMenu.DrawItem("返回", ITEMDRAW_CONTROL);
 	SkillMenu.DrawItem("退出", ITEMDRAW_CONTROL);
@@ -693,8 +693,8 @@ public Action Draw_OtherMenu(int client)
 	OtherMenu.DrawText(info);
 	FormatEx(info, sizeof(info), "经验：%d / %d", player_data[client].Player_Exp, CalculateLevelExp(player_data[client].Player_Level + 1));
 	OtherMenu.DrawText(info);
-	OtherMenu.DrawItem("等级转B数 \n   ※等级下降一级，增加(等级-20)B数", ITEMDRAW_DISABLED);
-	OtherMenu.DrawItem("B数转等级 \n   ※等级增加一级，扣除(等级+1)B数", ITEMDRAW_DISABLED);
+	OtherMenu.DrawItem("等级转B数 \n   ※等级下降一级，增加(等级-20)B数", ITEMDRAW_DEFAULT);
+	OtherMenu.DrawItem("B数转等级 \n   ※等级增加一级，扣除(等级+1)B数", ITEMDRAW_DEFAULT);
 	OtherMenu.DrawText(" \n");
 	OtherMenu.DrawItem("返回", ITEMDRAW_CONTROL);
 	OtherMenu.DrawItem("离开", ITEMDRAW_CONTROL);
@@ -968,24 +968,28 @@ public int SkillMenuHandler(Menu menu, MenuAction action, int client, int item)
 {
 	if (action == MenuAction_Select)
 	{
-		if (item == 1 && player_data[client].Player_First_Skill < 1)
+		if (item == 1)
 		{
-			if (player_data[client].Player_BPoints - 100 > 0)
+			if (player_data[client].Player_First_Skill < 1)
 			{
-				player_data[client].Player_BPoints -= 100;
-				player_data[client].Player_First_Skill += 1;
-				EmitSoundToClient(client, BUTTON_SOUND, _);
+				// 玩家当前 B 数 - 100 之后是否大于 0，大于则可以学习技能
+				if (player_data[client].Player_BPoints - 100 > 0)
+				{
+					player_data[client].Player_BPoints -= 100;
+					player_data[client].Player_First_Skill += 1;
+					EmitSoundToClient(client, BUTTON_SOUND, _);
+				}
+				else
+				{
+					EmitSoundToClient(client, ERROR_SOUND, _);
+					CPrintToChat(client, INFO_CANT_LEARN_SKILL, player_data[client].Player_BPoints, "出门近战技能");
+				}
 			}
-			else
+			else if (player_data[client].Player_First_Skill == 1)
 			{
-				EmitSoundToClient(client, ERROR_SOUND, _);
-				CPrintToChat(client, INFO_CANT_LEARN_SKILL, player_data[client].Player_BPoints, "出门近战技能");
+				EmitSoundToClient(client, INFO_SOUND, _);
+				CPrintToChat(client, INFO_MAX_SKILL, "出门近战技能");
 			}
-		}
-		else if (item == 1 && player_data[client].Player_First_Skill == 1)
-		{
-			EmitSoundToClient(client, INFO_SOUND, _);
-			CPrintToChat(client, INFO_MAX_SKILL, "出门近战技能");
 		}
 		// 玩家一技能大于 0 说明可以使用出门近战，进入近战选择
 		else if (item == 2 && player_data[client].Player_First_Skill > 0)
@@ -995,7 +999,7 @@ public int SkillMenuHandler(Menu menu, MenuAction action, int client, int item)
 			return 0;
 		}
 		// 玩家一技能小于 0，或选择的是第三选项且一技能大于 0，此时出现近战选择第二选项，说明进入二技能选择
-		else if ((item == 2 && player_data[client].Player_First_Skill < 1) || (item == 3 && player_data[client].Player_First_Skill == 1))
+		else if ((item == 2 && player_data[client].Player_First_Skill < 1) || (item == 3 && player_data[client].Player_First_Skill > 0))
 		{
 			if (player_data[client].Player_Second_Skill < 1 && player_data[client].Player_BPoints - 100 > 0)
 			{
@@ -1009,19 +1013,19 @@ public int SkillMenuHandler(Menu menu, MenuAction action, int client, int item)
 				player_data[client].Player_Second_Skill += 1;
 				EmitSoundToClient(client, BUTTON_SOUND, _);
 			}
+			else if (player_data[client].Player_Second_Skill == 2)
+			{
+				EmitSoundToClient(client, INFO_SOUND, _);
+				CPrintToChat(client, INFO_MAX_SKILL, "杀特回血技能");
+			}
 			else
 			{
 				EmitSoundToClient(client, ERROR_SOUND, _);
 				CPrintToChat(client, INFO_CANT_LEARN_SKILL, player_data[client].Player_BPoints, "杀特回血技能");
 			}
 		}
-		else if ((item == 2 && player_data[client].Player_First_Skill < 1 && player_data[client].Player_Second_Skill == 2) || (item == 3 && player_data[client].Player_First_Skill == 1 && player_data[client].Player_Second_Skill == 2))
-		{
-			EmitSoundToClient(client, INFO_SOUND, _);
-			CPrintToChat(client, INFO_MAX_SKILL, "杀特回血技能");
-		}
 		// 玩家一技能小于 0，或选择的是第四选项且一技能大于 0，此时出现近战选择第二选项，说明进入重置技能
-		else if ((item == 3 && player_data[client].Player_First_Skill < 1) || (item == 4 && player_data[client].Player_First_Skill == 1))
+		else if ((item == 3 && player_data[client].Player_First_Skill < 1) || (item == 4 && player_data[client].Player_First_Skill > 0))
 		{
 			int total_bpoints = 0;
 			if (player_data[client].Player_First_Skill == 1)
@@ -1041,13 +1045,13 @@ public int SkillMenuHandler(Menu menu, MenuAction action, int client, int item)
 				CPrintToChat(client, INFO_RESET_SKILL);
 			}
 		}
-		else if ((item == 4 && player_data[client].Player_First_Skill < 1) || (item == 5 && player_data[client].Player_First_Skill == 1))
+		else if ((item == 4 && player_data[client].Player_First_Skill < 1) || (item == 5 && player_data[client].Player_First_Skill > 0))
 		{
 			Draw_MainMenu(client);
 			EmitSoundToClient(client, BUTTON_SOUND, _);
 			return 0;
 		}
-		else if ((player_data[client].Player_First_Skill < 1 && (item == 5 || item > 5)) || (player_data[client].Player_First_Skill == 1 && (item == 6 || item > 6)))
+		else if ((player_data[client].Player_First_Skill < 1 && (item == 5 || item > 5)) || (player_data[client].Player_First_Skill > 0 && (item == 6 || item > 6)))
 		{
 			delete menu;
 			return 0;
