@@ -5,7 +5,7 @@
 #define MENU_PAGE_ITEM 7
 #define MAX_HEALTH 100
 
-#define GAMEDATA "l4d2_gift_rewards"
+#define GAMEDATA "tree_server_rpg"
 
 #define INFO_SURVIVOR_BUY_ONLY "{O}[B数商店]：{LG}本指令仅限生还者购买物品"
 #define INFO_DB_NULL "{O}[B数商店]：{LG}未连接到数据库，无法读取商店所需信息"
@@ -335,8 +335,8 @@ public Action Say_CallBack(int client, char[] command, int args)
 		// 称号显示，玩家拥有自定义称号
 		if (g_hAllowCustomTags.BoolValue && strcmp(player_data[client].Player_Custom_Designation, "NO_DESIGNATION") != 0)
 		{
-			// 玩家等级大于最低等级或小于最低等级时，设置允许，则可以使用自定义称号
-			if (player_data[client].Player_Level > g_hCustomTagsMinLevel.IntValue || (player_data[client].Player_Level < g_hCustomTagsMinLevel.IntValue && g_hAllowIgnoreLevel.BoolValue))
+			// 玩家等级大于等于最低等级 或 小于最低等级时，设置允许，则可以使用自定义称号
+			if (player_data[client].Player_Level >= g_hCustomTagsMinLevel.IntValue || (player_data[client].Player_Level < g_hCustomTagsMinLevel.IntValue && g_hAllowIgnoreLevel.BoolValue))
 			{
 				FormatEx(new_text, sizeof(new_text), "{LG}<%s>{O}%N：{G}%s", player_data[client].Player_Custom_Designation, client, chat_text);
 			}

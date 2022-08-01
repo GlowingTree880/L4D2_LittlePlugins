@@ -399,7 +399,7 @@ public Action Timer_DrawRankMenu(Handle timer, DataPack pack)
 		pack.Reset();
 		int client = pack.ReadCell();
 		RANK_TYPE type = pack.ReadCell();
-		Draw_SubRankMenu(client, view_as<RANK_TYPE>(type));
+		Draw_SubRankMenu(client, type);
 		delete pack;
 	}
 	return Plugin_Continue;
@@ -458,17 +458,18 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 			delete pack;
 			DataPack client_pack = new DataPack();
 			char player_name[MAX_NAME_LENGTH] = {'\0'};
+			client_pack.WriteCell(results.RowCount);
 			switch (type)
 			{
 				case RANK_TOTAL_PLAYTIME, RANK_MAX_PLAYTIME:
 				{
 					while (results.FetchRow())
 					{
-						client_pack.WriteCell(results.RowCount);
 						results.FetchString(0, player_name, sizeof(player_name));
+						GetClientFixedName(player_name, sizeof(player_name));
 						client_pack.WriteString(player_name);
 						int play_time = results.FetchInt(1);
-						client_pack.WriteString(FormatDuration(play_time));
+						client_pack.WriteString(FormatDuration(play_time, true));
 					}
 					Rank_Packs[client] = client_pack;
 				}
@@ -476,8 +477,8 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 				{
 					while (results.FetchRow())
 					{
-						client_pack.WriteCell(results.RowCount);
 						results.FetchString(0, player_name, sizeof(player_name));
+						GetClientFixedName(player_name, sizeof(player_name));
 						client_pack.WriteString(player_name);
 						int level_bpoints_exp = results.FetchInt(1);
 						client_pack.WriteCell(level_bpoints_exp);
@@ -488,8 +489,8 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 				{
 					while (results.FetchRow())
 					{
-						client_pack.WriteCell(results.RowCount);
 						results.FetchString(0, player_name, sizeof(player_name));
+						GetClientFixedName(player_name, sizeof(player_name));
 						client_pack.WriteString(player_name);
 						int player_ff_count = results.FetchInt(1);
 						client_pack.WriteCell(player_ff_count);
@@ -502,8 +503,8 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 				{
 					while (results.FetchRow())
 					{
-						client_pack.WriteCell(results.RowCount);
 						results.FetchString(0, player_name, sizeof(player_name));
+						GetClientFixedName(player_name, sizeof(player_name));
 						client_pack.WriteString(player_name);
 						int total_killed = results.FetchInt(1);
 						client_pack.WriteCell(total_killed);
@@ -518,8 +519,8 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 				{
 					while (results.FetchRow())
 					{
-						client_pack.WriteCell(results.RowCount);
 						results.FetchString(0, player_name, sizeof(player_name));
+						GetClientFixedName(player_name, sizeof(player_name));
 						client_pack.WriteString(player_name);
 						float minute_bpoints_exp = results.FetchFloat(1);
 						client_pack.WriteFloat(minute_bpoints_exp);
@@ -536,5 +537,21 @@ void DQL_PlayerRankCallBack(Database db, DBResultSet results, const char[] error
 	else
 	{
 		PrintToServer(DB_MANAGE_ERROR, DBNAME, error);
+	}
+}
+void GetClientFixedName(char[] name, int length)
+{
+	if (name[0] == '[')
+	{
+		char temp[MAX_NAME_LENGTH] = {'\0'};
+		strcopy(temp, sizeof(temp), name);
+		temp[sizeof(temp)-2] = 0;
+		strcopy(name[1], length-1, temp);
+		name[0] = ' ';
+	}
+	if (strlen(name) > 18)
+	{
+		name[15] = name[16] = name[17] = '.';
+		name[18] = 0;
 	}
 }

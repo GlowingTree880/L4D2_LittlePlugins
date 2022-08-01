@@ -375,11 +375,25 @@ public Action Timer_AnnounceJoin(Handle timer, DataPack pack)
 		pack.ReadString(player_ip, sizeof(player_ip));
 		if (g_hRecordSteamID.BoolValue)
 		{
-			CPrintToChatAll("{O}%N {LG}<%s> {W}正在进入服务器", client, steamID);
+			if (player_data[client].Require_Success && player_data[client].Play_Time != 0)
+			{
+				CPrintToChatAll("{O}%N {LG}<%s> {W}正在进入服务器\n本服务器内游玩时间：{O}%s", client, steamID, FormatDuration(player_data[client].Play_Time));
+			}
+			else
+			{
+				CPrintToChatAll("{O}%N {LG}<%s> {W}正在进入服务器", client, steamID);
+			}
 		}
 		else if (g_hAnnounceConnect.BoolValue)
 		{
-			CPrintToChatAll("{O}%N {W}正在进入服务器", client);
+			if (player_data[client].Require_Success && player_data[client].Play_Time != 0)
+			{
+				CPrintToChatAll("{O}%N {W}正在进入服务器\n本服务器内游玩时间：{O}%s", client, FormatDuration(player_data[client].Play_Time));
+			}
+			else
+			{
+				CPrintToChatAll("{O}%N {W}正在进入服务器", client);
+			}
 		}
 		delete pack;
 	}
@@ -715,24 +729,45 @@ void DQL_QueryOtherInformation(DBResultSet results, DQL_DATATYPE DataType)
 	}
 }
 // 时长计算
-char[] FormatDuration(int duration)
+char[] FormatDuration(int duration, bool english = false)
 {
 	char play_time[32] = {'\0'};
 	if (duration < 60)
 	{
-		FormatEx(play_time, sizeof(play_time), "%d秒", duration);
+		if (english)
+		{
+			FormatEx(play_time, sizeof(play_time), "%ds", duration);
+		}
+		else
+		{
+			FormatEx(play_time, sizeof(play_time), "%d秒", duration);
+		}
 	}
 	else if (duration < 3600)
 	{
 		int minute = duration / 60;
-		FormatEx(play_time, sizeof(play_time), "%d分钟%d秒", minute, duration - (minute * 60));
+		if (english)
+		{
+			FormatEx(play_time, sizeof(play_time), "%dmin%ds", minute, duration - (minute * 60));
+		}
+		else
+		{
+			FormatEx(play_time, sizeof(play_time), "%d分钟%d秒", minute, duration - (minute * 60));
+		}
 	}
 	else
 	{
 		int hour = duration / 3600;
-		int minute = duration - (hour * 3600);
+		int minute = (duration - (hour * 3600)) / 60;
 		int second = duration - ((minute * 60) + (hour * 3600));
-		FormatEx(play_time, sizeof(play_time), "%d小时%d分钟%d秒", hour, minute, second);
+		if (english)
+		{
+			FormatEx(play_time, sizeof(play_time), "%dh%dmin%ds", hour, minute, second);
+		}
+		else
+		{
+			FormatEx(play_time, sizeof(play_time), "%d小时%d分钟%d秒", hour, minute, second);
+		}
 	}
 	return play_time;
 }
