@@ -19,6 +19,10 @@
     rpg_gift_min_bpoints             1        玩家打开礼物盒可以获得的最小 B 数值
     rpg_gift_min_exp                 10       玩家打开礼物盒可以获得的最小经验值
   
+  部分参考：
+  B 数，等级，技能功能参考 Anne 服务器早期数据库
+  数据库连接/查询/操作语句参考于 SuperCoop Database：https://github.com/SamuelXXX/l4d2_supercoop_for2
+  
   使用方法：
   注：查询玩家全服排名使用 row_number() over() 函数，为 MySQL 8.0 版本引入的窗口函数，低版本可更新或更改查询语句
   1.于：left4dead2\addons\sourcemod\configs\databases.cfg 中添加数据库信息，并更改 tree_server_rpg.sp 第 12 行处的 #define DBNAME "treeserver" 为修改后的配置名称
