@@ -5,7 +5,7 @@
 #define MENU_PAGE_ITEM 7
 #define MAX_HEALTH 100
 
-#define GAMEDATA "tree_server_rpg"
+#define GAMEDATA "l4d2_gift_rewards"
 
 #define INFO_SURVIVOR_BUY_ONLY "{O}[B数商店]：{LG}本指令仅限生还者购买物品"
 #define INFO_DB_NULL "{O}[B数商店]：{LG}未连接到数据库，无法读取商店所需信息"
