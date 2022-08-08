@@ -386,15 +386,14 @@ public void evt_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 		}
 		if (type & DMG_BUCKSHOT && !g_bBuckShot[attacker])
 		{
-			RequestFrame(NextFrame_Unmark, GetClientUserId(attacker));
+			RequestFrame(NextFrame_Unmark, attacker);
 			g_bBuckShot[attacker] = true;
 		}
 	}
 }
 void NextFrame_Unmark(int client)
 {
-	g_bBuckShot[GetClientOfUserId(client)] = false;
-	player_data[client].FF_Count += 1;
+	g_bBuckShot[client] = false;
 }
 public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
@@ -733,9 +732,9 @@ public Action Draw_InformationMenu(int client)
 	InfoMenu.DrawText(info);
 	FormatEx(info, sizeof(info), "总游玩地图数量：%d", player_data[client].Total_Played_Maps);
 	InfoMenu.DrawText(info);
-	FormatEx(info, sizeof(info), "总游玩时间：%s", FormatDuration(now_time));
+	FormatEx(info, sizeof(info), "总游玩时间：%s", FormatDuration(now_time, true));
 	InfoMenu.DrawText(info);
-	FormatEx(info, sizeof(info), "最长游玩时间：%s", FormatDuration(max_time));
+	FormatEx(info, sizeof(info), "最长游玩时间：%s", FormatDuration(max_time, true));
 	InfoMenu.DrawText(info);
 	FormatEx(info, sizeof(info), "黑枪次数：%d  总伤害：%d", player_data[client].FF_Count, player_data[client].FF_Damage);
 	InfoMenu.DrawText(info);

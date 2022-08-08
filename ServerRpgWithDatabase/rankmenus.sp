@@ -5,18 +5,21 @@
 // 基本于 70-100 ms 之间执行完成，先执行 SQL 语句获得结果，延迟 SHOW_DELAY 这么多时间后绘制菜单
 #define DQL_PLAYER_TOTAL_PLAYTIME "SELECT INFO.Player_Name, INFO.Total_Play_Time FROM %s AS INFO ORDER BY INFO.Total_Play_Time DESC LIMIT %d;"
 #define DQL_MAX_PLAYTIME "SELECT INFO.Player_Name, INFO.Max_Pre_Play_Time FROM %s AS INFO ORDER BY INFO.Max_Pre_Play_Time DESC LIMIT %d;"
-#define DQL_PLAYER_LEVEL "SELECT POINTS.Player_Name, POINTS.Level FROM %s AS POINTS ORDER BY POINTS.Level DESC LIMIT %d;"
-#define DQL_PLAYER_BPOINTS "SELECT POINTS.Player_Name, POINTS.BPoints FROM %s AS POINTS ORDER BY POINTS.BPoints DESC LIMIT %d;"
-#define DQL_PLAYER_EXPS "SELECT POINTS.Player_Name, POINTS.Exps FROM %s AS POINTS ORDER BY POINTS.Exps DESC LIMIT %d;"
-#define DQL_SI_KILLED "SELECT INFO.Player_Name, INFO.Total_SI_Killed FROM %s AS INFO ORDER BY INFO.Total_SI_Killed DESC LIMIT %d;"
-#define DQL_CI_KILLED "SELECT INFO.Player_Name, INFO.Total_CI_Killed FROM %s AS INFO ORDER BY INFO.Total_CI_Killed DESC LIMIT %d;"
-#define DQL_FF "SELECT INFO.Player_Name, INFO.FF_Count, INFO.FF_Damage FROM %s AS INFO ORDER BY INFO.FF_Damage DESC LIMIT %d;"
+// 加入限制数据需要大于 0
+#define DQL_PLAYER_LEVEL "SELECT POINTS.Player_Name, POINTS.Level FROM %s AS POINTS WHERE POINTS.Level > 0 ORDER BY POINTS.Level DESC LIMIT %d;"
+#define DQL_PLAYER_BPOINTS "SELECT POINTS.Player_Name, POINTS.BPoints FROM %s AS POINTS WHERE POINTS.BPoints > 0 ORDER BY POINTS.BPoints DESC LIMIT %d;"
+#define DQL_PLAYER_EXPS "SELECT POINTS.Player_Name, POINTS.Exps FROM %s AS POINTS WHERE POINTS.Exps > 0 ORDER BY POINTS.Exps DESC LIMIT %d;"
+#define DQL_SI_KILLED "SELECT INFO.Player_Name, INFO.Total_SI_Killed FROM %s AS INFO WHERE INFO.Total_SI_Killed > 0 ORDER BY INFO.Total_SI_Killed DESC LIMIT %d;"
+#define DQL_CI_KILLED "SELECT INFO.Player_Name, INFO.Total_CI_Killed FROM %s AS INFO WHERE INFO.Total_CI_Killed > 0 ORDER BY INFO.Total_CI_Killed DESC LIMIT %d;"
+#define DQL_FF "SELECT INFO.Player_Name, INFO.FF_Count, INFO.FF_Damage FROM %s AS INFO WHERE INFO.FF_Damage > 0 ORDER BY INFO.FF_Damage DESC LIMIT %d;"
+// 玩家进入，至少记录一张地图
 #define DQL_MAP_PLAYED "SELECT CP.Player_Name, CP.Total_Played_Maps FROM %s AS CP ORDER BY CP.Total_Played_Maps DESC LIMIT %d;"
-#define DQL_HEADSHOT_RATE "SELECT INFO.Player_Name, INFO.Total_SI_Killed + INFO.Total_CI_Killed AS Total_Killed,INFO.HeadShot_Count, INFO.HeadShot_Rate FROM %s AS INFO ORDER BY INFO.HeadShot_Rate DESC LIMIT %d;"
-#define DQL_MINUTE_BPOINTS "SELECT POINTS.Player_Name, POINTS.Minutes_BPoints FROM %s AS POINTS ORDER BY POINTS.Minutes_BPoints DESC LIMIT %d;"
-#define DQL_MINUTE_EXPS "SELECT POINTS.Player_Name, POINTS.Minutes_Exps FROM %s AS POINTS ORDER BY POINTS.Minutes_Exps DESC LIMIT %d;"
+//
+#define DQL_HEADSHOT_RATE "SELECT INFO.Player_Name, INFO.Total_SI_Killed + INFO.Total_CI_Killed AS Total_Killed,INFO.HeadShot_Count, INFO.HeadShot_Rate FROM %s AS INFO WHERE INFO.HeadShot_Rate > 0.0 ORDER BY INFO.HeadShot_Rate DESC LIMIT %d;"
+#define DQL_MINUTE_BPOINTS "SELECT POINTS.Player_Name, POINTS.Minutes_BPoints FROM %s AS POINTS WHERE POINTS.Minutes_BPoints > 0.0 ORDER BY POINTS.Minutes_BPoints DESC LIMIT %d;"
+#define DQL_MINUTE_EXPS "SELECT POINTS.Player_Name, POINTS.Minutes_Exps FROM %s AS POINTS WHERE POINTS.Minutes_Exps > 0.0 ORDER BY POINTS.Minutes_Exps DESC LIMIT %d;"
 // 需要 MySQL 8.0 以上版本，使用 row_number() over() 分组排序，低版本可使用临时表获得排序
-#define DQL_PLAYER_ALLRANK "SELECT merge.no FROM ( SELECT info.STEAM_ID, info.%s, row_number() OVER (ORDER BY info.%s DESC ) AS no FROM %s AS info ) \
+#define DQL_PLAYER_ALLRANK "SELECT merge.no FROM ( SELECT info.STEAM_ID, info.%s, row_number() OVER (ORDER BY info.%s DESC) AS no FROM %s AS info ) \
 AS merge WHERE merge.STEAM_ID = '%s' UNION ALL SELECT count(1) FROM %s;"
 
 static const char SerialNum[][] = 
@@ -138,7 +141,7 @@ public Action Draw_SubRankMenu(int client, RANK_TYPE Type)
 				{
 					Rank_Packs[client].ReadString(player_name, sizeof(player_name));
 					Rank_Packs[client].ReadString(play_time, sizeof(play_time));
-					FormatEx(info, sizeof(info), "NO%d：%s（%s）", i + 1, player_name, play_time);
+					FormatEx(info, sizeof(info), "NO%d：%s(%s)", i + 1, player_name, play_time);
 					SubRankMenu.DrawText(info);
 				}
 			}
@@ -165,10 +168,10 @@ public Action Draw_SubRankMenu(int client, RANK_TYPE Type)
 					int level_bpoints_exp = Rank_Packs[client].ReadCell();
 					switch (Type)
 					{
-						case RANK_PLAYER_LEVEL: FormatEx(info, sizeof(info), "NO%d：%s（%d级）", i + 1, player_name, level_bpoints_exp);
-						case RANK_PLAYER_BPOINTS, RANK_PLAYER_EXPS: FormatEx(info, sizeof(info), "NO%d：%s（%d点）", i + 1, player_name, level_bpoints_exp);
-						case RANK_SI_KILLED, RANK_CI_KILLED: FormatEx(info, sizeof(info), "NO%d：%s（%d只）", i + 1, player_name, level_bpoints_exp);
-						case RANK_MAP_PLAYED: FormatEx(info, sizeof(info), "NO%d：%s（%d张）", i + 1, player_name, level_bpoints_exp);
+						case RANK_PLAYER_LEVEL: FormatEx(info, sizeof(info), "NO%d：%s(%d级)", i + 1, player_name, level_bpoints_exp);
+						case RANK_PLAYER_BPOINTS, RANK_PLAYER_EXPS: FormatEx(info, sizeof(info), "NO%d：%s(%d点)", i + 1, player_name, level_bpoints_exp);
+						case RANK_SI_KILLED, RANK_CI_KILLED: FormatEx(info, sizeof(info), "NO%d：%s(%d只)", i + 1, player_name, level_bpoints_exp);
+						case RANK_MAP_PLAYED: FormatEx(info, sizeof(info), "NO%d：%s(%d张)", i + 1, player_name, level_bpoints_exp);
 					}
 					SubRankMenu.DrawText(info);
 				}
@@ -187,7 +190,7 @@ public Action Draw_SubRankMenu(int client, RANK_TYPE Type)
 					Rank_Packs[client].ReadString(player_name, sizeof(player_name));
 					int player_ff_count = Rank_Packs[client].ReadCell();
 					int player_ff_damage = Rank_Packs[client].ReadCell();
-					FormatEx(info, sizeof(info), "NO%d：%s（%d次%d伤害）", i + 1, player_name, player_ff_count, player_ff_damage);
+					FormatEx(info, sizeof(info), "NO%d：%s(%d次%d伤害)", i + 1, player_name, player_ff_count, player_ff_damage);
 					SubRankMenu.DrawText(info);
 				}
 			}
@@ -206,7 +209,7 @@ public Action Draw_SubRankMenu(int client, RANK_TYPE Type)
 					int total_killed = Rank_Packs[client].ReadCell();
 					int headshot_count = Rank_Packs[client].ReadCell();
 					float headshot_rate = Rank_Packs[client].ReadFloat();
-					FormatEx(info, sizeof(info), "NO%d：%s（%d击杀%d爆头%.2f爆头率）", i + 1, player_name, total_killed, headshot_count, headshot_rate * 100.0);
+					FormatEx(info, sizeof(info), "NO%d：%s(%dHs/%dKills - %.2f%%)", i + 1, player_name, headshot_count, total_killed, headshot_rate * 100.0);
 					SubRankMenu.DrawText(info);
 				}
 			}
@@ -226,7 +229,7 @@ public Action Draw_SubRankMenu(int client, RANK_TYPE Type)
 				{
 					Rank_Packs[client].ReadString(player_name, sizeof(player_name));
 					float minute_bpoints_exp = Rank_Packs[client].ReadFloat();
-					FormatEx(info, sizeof(info), "NO%d：%s（%.2f点）", i + 1, player_name, minute_bpoints_exp);
+					FormatEx(info, sizeof(info), "NO%d：%s(%.2f点)", i + 1, player_name, minute_bpoints_exp);
 					SubRankMenu.DrawText(info);
 				}
 			}
