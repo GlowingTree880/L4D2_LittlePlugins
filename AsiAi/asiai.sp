@@ -24,6 +24,7 @@
 #define MAXSURVIVORS 8
 #define SURVIVORHEIGHT 72.0
 #define ASSULTDELAY 0.3
+#define PLAYER_HEIGHT 72.0
 // SMOKER
 #define SMOKERMELEERANGE 300.0
 // JOCKEY
@@ -47,6 +48,7 @@
 #define TANKROCKAIMDELAY 0.25
 #define TANKATTACKRANGEFACTOR 0.90
 #define TANKTHROWHEIGHT 100.0
+#define THROW_OVERHEAD 50
 // SPITTER
 #define SPITTERRUNSPEED 200.0
 #define SPITDELAY 2.0
@@ -202,49 +204,42 @@ public void UpdateThink(int client)
 // *********************
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
-	if (IsInfectedBot(client))
+	if (IsInfectedBot(client) && !IsGhost(client))
 	{
-		if (!IsGhost(client))
+		int zombieclass = GetZombieClass(client);
+		Action react = Plugin_Continue;
+		if (zombieclass == ZC_TANK)
 		{
-			int zombieclass = GetZombieClass(client);
-			Action react = Plugin_Continue;
-			if (zombieclass == ZC_TANK)
+			react = OnTankRunCmd(client, buttons, vel, angles);
+		}
+		else if (g_bAiEnable[client])
+		{
+			switch (zombieclass)
 			{
-				react = OnTankRunCmd(client, buttons, vel, angles);
-			}
-			else if (g_bAiEnable[client])
-			{
-				switch (zombieclass)
+				case ZC_SMOKER:
 				{
-					case ZC_SMOKER:
-					{
-						react = OnSmokerRunCmd(client, buttons, vel, angles);
-					}
-					case ZC_HUNTER:
-					{
-						react = OnHunterRunCmd(client, buttons, vel, angles);
-					}
-					case ZC_SPITTER:
-					{
-						react = OnSpitterRunCmd(client, buttons, vel, angles);
-					}
-					case ZC_JOCKEY:
-					{
-						react = OnJockeyRunCmd(client, buttons, vel, angles);
-					}
-					case ZC_CHARGER:
-					{
-						react = OnChargerRunCmd(client, buttons, vel, angles);
-					}
+					react = OnSmokerRunCmd(client, buttons, vel, angles);
+				}
+				case ZC_HUNTER:
+				{
+					react = OnHunterRunCmd(client, buttons, vel, angles);
+				}
+				case ZC_SPITTER:
+				{
+					react = OnSpitterRunCmd(client, buttons, vel, angles);
+				}
+				case ZC_JOCKEY:
+				{
+					react = OnJockeyRunCmd(client, buttons, vel, angles);
 				}
 			}
-			// 保存特感最近的一次攻击的时间戳
-			if (buttons & IN_ATTACK)
-			{
-				UpdateSiAttackTime();
-			}
-			return react;
 		}
+		// 保存特感最近的一次攻击的时间戳
+		if (buttons & IN_ATTACK)
+		{
+			UpdateSiAttackTime();
+		}
+		return react;
 	}
 	return Plugin_Continue;
 }
@@ -268,7 +263,7 @@ public Action OnSmokerRunCmd(int client, int &buttons, float vel[3], float angle
 			int target = GetClientAimTarget(client, true);
 			if (IsValidSurvivor(target) && IsVisibleTo(client, target))
 			{
-				float targetpos[3] = 0.0, selfpos[3] = 0.0, dist = 0.0;
+				float targetpos[3] = {0.0}, selfpos[3] = {0.0}, dist = 0.0;
 				GetClientAbsOrigin(client, selfpos);
 				GetClientAbsOrigin(target, targetpos);
 				dist = GetVectorDistance(selfpos, targetpos, false);
@@ -339,17 +334,6 @@ public Action OnJockeyRunCmd(int client, int &buttons, float vel[3], float angle
 			SetState(client, 0, IN_JUMP);
 		}
 		DelayStart(client, 0);
-		return Plugin_Changed;
-	}
-	return Plugin_Continue;
-}
-
-public Action OnChargerRunCmd(int client, int &buttons, float vel[3], float angles[3])
-{
-	if (!(buttons & IN_ATTACK) && GetEntityMoveType(client) != MOVETYPE_LADDER && (GetEntityFlags(client) & FL_ONGROUND) && DelayExpired(client, 0, CHARGERMELEEDELAY) && NearestSurvivorDistance(client) < CHARGERMELEERANGE)
-	{
-		DelayStart(client, 0);
-		buttons |= IN_ATTACK2;
 		return Plugin_Changed;
 	}
 	return Plugin_Continue;
@@ -485,8 +469,8 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 			{
 				GetClientAbsOrigin(firsttarget, targetpos);
 				targetpos[2] += SURVIVORHEIGHT;
-				hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_SHOT, RayType_EndPoint, traceFilter, client);
-				if (!TR_DidHit(hTrace))
+				hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_VISIBLE, RayType_EndPoint, traceFilter, client);
+				if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == firsttarget)
 				{
 					targetclient = firsttarget;
 					GetClientAbsOrigin(targetclient, targetpos);
@@ -496,7 +480,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 				else
 				{
 					int entity = -1;
-					char classname[64] = '\0';
+					char classname[64] = {'\0'};
 					entity = TR_GetEntityIndex(hTrace);
 					GetEntityClassname(entity, classname, sizeof(classname));
 					if (strcmp(classname, "player") != 0 && strcmp(classname, "env_physics_blocker") != 0 && strcmp(classname, "tank_rock") != 0)
@@ -505,16 +489,17 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 						for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
 						{
 							// 生还者有效，未死亡，且未倒地与被控状态下
-							if (IsClientConnected(newtarget) && IsClientInGame(newtarget) && IsPlayerAlive(newtarget) && GetClientTeam(newtarget) == TEAM_SURVIVOR && IsPlayerAlive(newtarget) && !IsIncapped(newtarget) && !IsPinned(newtarget))
+							if (newtarget != targetclient && IsClientConnected(newtarget) && IsClientInGame(newtarget) && IsPlayerAlive(newtarget) && GetClientTeam(newtarget) == TEAM_SURVIVOR && IsPlayerAlive(newtarget) && !IsIncapped(newtarget) && !IsPinned(newtarget))
 							{
 								GetClientAbsOrigin(newtarget, targetpos);
 								targetpos[2] += SURVIVORHEIGHT;
-								hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_SHOT, RayType_EndPoint, traceFilter, client);
+								hTrace = TR_TraceRayFilterEx(selfpos, targetpos, MASK_VISIBLE, RayType_EndPoint, traceFilter, client);
 								if (!TR_DidHit(hTrace))
 								{
-									// 射线未撞击到物体，则跳出，找到可以被攻击的生还者，上面已经判断是生还者，不需要进行二次判断
+									// 射线未撞击到物体，则跳出，找到可以被攻击的生还者，上面已经判断是生还者，不需要进行二次判断，设置 hittimes = 0，避免判断为所有生还均被遮挡
+									hittimes = 0;
 									targetclient = newtarget;
-									GetClientAbsOrigin(targetclient, targetpos);
+									GetClientAbsOrigin(newtarget, targetpos);
 									delete hTrace;
 									hTrace = INVALID_HANDLE;
 									break;
@@ -558,10 +543,8 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 				{
 					ComputeAimAngles(client, targetclient, aimangles, AimEye);
 					GetEntPropVector(targetclient, Prop_Send, "m_vecOrigin", absdist);
-					int dist = RoundToNearest(GetVectorDistance(selfpos, absdist));
+					int dist = RoundToNearest(GetVectorDistance(selfpos, absdist)), sequence = GetEntProp(client, Prop_Send, "m_nSequence");
 					float height = selfpos[2] - targetpos[2];
-					// PrintToChatAll("目标pos：%.2f %.2f %.2f", targetpos[0], targetpos[1], targetpos[2]);
-					// PrintToChatAll("dist：%d，height：%.2f, 余1000：%d", dist, height, dist / 1000);
 					// 距离小于 300，则说明离生还较近，直接瞄准生还下部即可
 					if (dist <= 250)
 					{
@@ -572,60 +555,63 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 					else if ((dist / 1000) == 0)
 					{
 						// PrintToConsoleAll("[Ai-Tank]：克与最近生还者距离小于 1000，距离：%d，除以 1000：%d", dist, dist / 1000);
-						aimangles[0] = 0.0;
-						aimangles[0] -= (dist * 0.0065);
 						// 高度相减小于 0，说明自身处于生还下方，高度相减大于 0，则在生还上方
 						if (flags & FL_ONGROUND)
 						{
 							if (height < 0.0 && height < -100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，且距离小于1000");
-								aimangles[0] -= 0.020 * FloatAbs(height);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，且距离小于1000");
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.2));
 							}
 							else if (height < 0.0 && height > -100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离小于1000", height);
-								aimangles[0] -= 0.035 * FloatAbs(height);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离小于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5));
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离小于1000");
-								aimangles[0] += 0.045 * height;
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，距离小于1000，距离：%d", dist);
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / PLAYER_HEIGHT * 0.8) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2));
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离小于1000", height);
-								aimangles[0] += 0.080 * height;
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离小于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimBody);
+								aimangles[0] -= dist / PLAYER_HEIGHT * 0.8;
 							}
 						}
 					}
 					else
 					{
 						// PrintToConsoleAll("[Ai-Tank]：克与最近生还者距离大于 1000，距离：%d，除以 1000：%d", dist, dist / 1000);
-						int times = dist / 1000;
-						aimangles[0] = 0.0;
-						aimangles[0] -= ((dist * 0.0070) + (2.35 * times));
 						if (flags & FL_ONGROUND)
 						{
 							if (height < 0.0 && height < -100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，且距离大于1000");
-								aimangles[0] -= 0.030 * FloatAbs(height);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，且距离大于1000");
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.2)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5));
 							}
-							else if (height < 0.0 && height > -100.0)
+							else if ((height < 0.0 && height > -100.0))
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离大于1000", height);
-								aimangles[0] -= 0.040 * FloatAbs(height);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离大于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.8));
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000");
-								aimangles[0] += 0.050 * height;
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000，高度：%.2f， 距离：%d", height, dist);
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.8)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2));
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
-								// PrintToConsoleAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
-								aimangles[0] += 0.120 * height;
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimEye);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.1)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.3));
 							}
 						}
 					}
