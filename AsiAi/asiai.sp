@@ -582,6 +582,12 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 								ComputeAimAngles(client, targetclient, aimangles, AimBody);
 								aimangles[0] -= dist / PLAYER_HEIGHT * 0.8;
 							}
+							else if (height == 0.0)
+							{
+								// PrintToChatAll("[Ai-Tank]：克的位置与生还位置相等，height：%.2f，且距离小于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimBody);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 0.8)) : (aimangles[0] -= dist / PLAYER_HEIGHT);
+							}
 						}
 					}
 					else
@@ -612,6 +618,12 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000"，高度小于100：%.2f，距离：%d, dist, height);
 								ComputeAimAngles(client, targetclient, aimangles, AimEye);
 								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.1)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.3));
+							}
+							else if (height == 0.0)
+							{
+								// PrintToChatAll("[Ai-Tank]：克的位置与生还位置相等，height：%.2f，且距离大于1000", height);
+								ComputeAimAngles(client, targetclient, aimangles, AimBody);
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.2)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5));
 							}
 						}
 					}
