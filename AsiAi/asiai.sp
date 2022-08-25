@@ -562,13 +562,13 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							{
 								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，且距离小于1000");
 								ComputeAimAngles(client, targetclient, aimangles, AimEye);
-								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.2));
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.2)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5));
 							}
 							else if (height < 0.0 && height > -100.0)
 							{
 								// PrintToChatAll("[Ai-Tank]：克的位置位于生还下方，height：%.2f，且距离小于1000", height);
 								ComputeAimAngles(client, targetclient, aimangles, AimEye);
-								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5));
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.5)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2));
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
@@ -603,13 +603,13 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 							}
 							else if (height > 0.0 && height > 100.0)
 							{
-								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000，高度：%.2f， 距离：%d", height, dist);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000，高度大于100：%.2f， 距离：%d", height, dist);
 								ComputeAimAngles(client, targetclient, aimangles, AimEye);
-								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.8)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2));
+								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 1.6)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2));
 							}
 							else if (height > 0.0 && height < 100.0)
 							{
-								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，height：%.2f，且距离大于1000", height);
+								// PrintToChatAll("[Ai-Tank]：克的位置位于生还上方，且距离大于1000"，高度小于100：%.2f，距离：%d, dist, height);
 								ComputeAimAngles(client, targetclient, aimangles, AimEye);
 								(sequence == THROW_OVERHEAD) ? (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.1)) : (aimangles[0] -= dist / (PLAYER_HEIGHT * 2.3));
 							}
