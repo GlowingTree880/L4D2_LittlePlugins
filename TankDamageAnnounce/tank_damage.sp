@@ -21,11 +21,11 @@ public Plugin myinfo =
 // ConVars
 ConVar g_hEnable, g_hEnableHealthSet, g_hHealthLimit, g_hSurvivorLimit;
 // Bools
-bool g_bTankInPlay = false, g_bAnnounceDamage = false, g_bHasPrintedRemaingHealth = false, g_bHasPrintedHealth = false;
+bool g_bTankInPlay = false, g_bAnnounceDamage = false, g_bHasPrintedRemaingHealth = false;
 // Ints
-int g_iTankClient = -1, g_iLastTankHealth = 0, g_iPassCount = 1;
+int g_iTankClient = -1, g_iLastTankHealth = 0, g_iPassCount = 0;
 // Chars
-char client_name[64] = '\0', temp_name[64] = '\0', controlers_name[1024] = '\0';
+char client_name[64] = {'\0'}, temp_name[64] = {'\0'}, controlers_name[256] = {'\0'};
 
 // 编译器会将所有未初始化的 int 类型初始化为 0
 enum struct TankDamageFact
@@ -75,15 +75,6 @@ public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 		g_iTankClient = client;
 		eTankDamageFact[client].TankAttackFact_Init();
 		eTankDamageFact[client].fLifeTime = GetGameTime();
-		if (!g_bHasPrintedHealth)
-		{
-			g_iPassCount = 1;
-			for (int i = 0; i < sizeof(controlers_name) && controlers_name[i] != '\0'; i++)
-			{
-				controlers_name[i] = '\0';
-			}
-		}
-		g_bHasPrintedHealth = false;
 		// 设置生命
 		if (g_hEnableHealthSet.BoolValue)
 		{
@@ -120,7 +111,7 @@ public void evt_TankFrustrated(Event event, const char[] name, bool dontBroadcas
 
 public void evt_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 {
-	char weapon[64] = '\0';
+	char weapon[64] = {'\0'};
 	int victim = GetClientOfUserId(event.GetInt("userid"));
 	int attacker = GetClientOfUserId(event.GetInt("attacker"));
 	int damage = event.GetInt("dmg_health");
@@ -247,9 +238,10 @@ void PrintTankDamage(int tank_client, int max_health)
 		// 先循环一次所有客户端，同时获取所有客户端的操控坦克的总时长，无需在打印伤害标题前再循环一次所有玩家
 		float total_survive_time = 0.0;
 		int[] survivors = new int[g_hSurvivorLimit.IntValue];
-		int survivor = 1, total_percent = 0, total_damage = 0, survivor_index = -1, damage_percent = 0, damage = 0, percent_adjustment = 0, last_percent = 100, adjust_percent_damage = 0,
+		int survivor, total_percent = 0, total_damage = 0, survivor_index = -1, damage_percent = 0, damage = 0, percent_adjustment = 0, last_percent = 100, adjust_percent_damage = 0,
 			got_damage = 0, total_got_damage = 0, got_damage_percent = 0;
-		for (survivor = 1; survivor <= MaxClients; survivor++)
+		// 首先 survivor 等于 0，用于计算坦克存活时间
+		for (survivor = 0; survivor <= MaxClients; survivor++)
 		{
 			total_survive_time += eTankDamageFact[survivor].fLifeTime;
 			eTankDamageFact[survivor].fLifeTime = 0.0;
@@ -268,14 +260,10 @@ void PrintTankDamage(int tank_client, int max_health)
 		// 没有打印坦克剩余血量的情况，则说明坦克已死亡
 		if (!g_bHasPrintedRemaingHealth)
 		{
-			char survive_time[64] = '\0';
+			char survive_time[64] = {'\0'};
 			FormatDuration(survive_time, sizeof(survive_time), total_survive_time);
 			CPrintToChatAll("[{B}!{W}] {B}生还者 {W}对 {B}Tank {W}- {B}存活时间：{G}%s", survive_time);
 			CPrintToChatAll("（{B}控制：{G}%s{W}）{B}的伤害：", controlers_name);
-			for (int i = 0; i < sizeof(controlers_name) && controlers_name[i] != '\0'; i++)
-			{
-				controlers_name[i] = '\0';
-			}
 		}
 		// 通过总伤害进行排序
 		SortCustom1D(survivors, g_hSurvivorLimit.IntValue, SortByDamageDesc);
@@ -305,11 +293,12 @@ void PrintTankDamage(int tank_client, int max_health)
 				}
 			}
 			last_percent = damage_percent;
-			CPrintToChatAll("%d {B}[{W}拳{G}%d{B}] [{W}石{G}%d{B}] [{W}铁{G}%d{B}]（{W}%d%%{B}） {G}| {W}承伤{G}%d （{W}%d%%{B}） {G}%N", damage, eTankDamageFact[survivor].iPunch, eTankDamageFact[survivor].iRock, eTankDamageFact[survivor].iHittable, damage_percent, got_damage, got_damage_percent, survivor);
+			CPrintToChatAll("%d {B}[{W}拳{G}%d{B}] [{W}石{G}%d{B}] [{W}铁{G}%d{B}] ({W}%d%%{B}) {G}| {W}承伤{G}%d ({W}%d%%{B}){G} %N", damage, eTankDamageFact[survivor].iPunch, eTankDamageFact[survivor].iRock, eTankDamageFact[survivor].iHittable, damage_percent, got_damage, got_damage_percent, survivor);
 			// 打印完伤害，清空坦克对生还者的伤害数据
 			eTankDamageFact[survivor].TankAttackFact_Init();
 		}
-		g_bHasPrintedHealth = true;
+		// 清空控制者名称
+		controlers_name = "";
 		eTankDamageFact[tank_client].TankAttackFact_Init();
 	}
 	g_iPassCount = 0;
@@ -405,19 +394,20 @@ void ClearTankDamage()
 void FormatDuration(char[] duration, int length, float timestamp)
 {
 	int new_timestamp = RoundToNearest(timestamp);
-	int hours = new_timestamp / 3600;
-	int minute = (new_timestamp - (hours * 3600)) / 60;
-	int second = new_timestamp - hours * 3600 - minute * 60;
-	if (hours == 0 && minute > 0)
+	if (new_timestamp < 60)
 	{
-		FormatEx(duration, length, "{G}%d分钟%d秒", minute, second);
+		FormatEx(duration, length, "{G}%d秒", new_timestamp);
 	}
-	else if (hours == 0 && minute == 0)
+	else if (new_timestamp < 3600)
 	{
-		FormatEx(duration, length, "{G}%d秒", second);
+		int minute = new_timestamp / 60;
+		FormatEx(duration, length, "{G}%d分钟%d秒", minute, new_timestamp - (minute * 60));
 	}
 	else
 	{
-		FormatEx(duration, length, "{G}%d小时%d分钟%d秒", hours, minute, second);
+		int hour = new_timestamp / 3600;
+		int minute = new_timestamp % 3600 / 60;
+		int second = new_timestamp % 60;
+		FormatEx(duration, length, "{G}%d小时%d分钟%d秒", hour, minute, second);
 	}
 }
