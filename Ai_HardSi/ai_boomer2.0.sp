@@ -11,8 +11,15 @@
 #define EYE_ANGLE_UP_HEIGHT 15.0
 #define NAV_MESH_HEIGHT 20.0
 #define FALL_DETECT_HEIGHT 120.0
-#define FORCE_ATTACK_DIST 500.0
 #define COMMAND_INTERVAL 1.0
+#define PLAYER_HEIGHT 72.0
+
+enum AimType
+{
+	AimEye,
+	AimBody,
+	AimChest
+};
 
 public Plugin myinfo = 
 {
@@ -25,9 +32,11 @@ public Plugin myinfo =
 
 ConVar g_hAllowBhop, g_hBhopSpeed, g_hUpVision, g_hTurnVision, g_hForceBile, g_hBileFindRange, g_hVomitRange, g_hVomitDuration, g_hVomitInterval, g_hTurnInterval;
 // Bools
-bool can_bile[MAXPLAYERS + 1] = true, in_bile_interval[MAXPLAYERS + 1] = false;
-// Ints
+bool can_bile[MAXPLAYERS + 1] = {true}, in_bile_interval[MAXPLAYERS + 1] = {false};
+// Ints，bile_target_num 0 位：目标数量，1 位：当前目标索引，2 位：循环次数
 int bile_target[MAXPLAYERS + 1][MAXPLAYERS + 1], bile_target_num[MAXPLAYERS + 1][3];
+// Handles
+Handle bile_interval_timer[MAXPLAYERS + 1] = {null};
 
 public void OnPluginStart()
 {
@@ -71,6 +80,7 @@ public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	{
 		can_bile[client] = true;
 		in_bile_interval[client] = false;
+		bile_interval_timer[client] = null;
 	}
 }
 
@@ -88,55 +98,55 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		// 上抬视野，可喷的生还者人数大于 0 且不在 cd 时间内，转视野和上抬视野
 		if (bile_target_num[client][0] > 0 && g_hTurnVision.BoolValue && !in_bile_interval[client])
 		{
-			if (IsValidSurvivor(bile_target[client][bile_target_num[client][1]]) && bile_target_num[client][2] <= g_hTurnInterval.IntValue)
+			// LogMessage("[Ai-Boomer]：当前Boomer的bile_target_num[0]：%d，[1]：%d，[2]：%d", bile_target_num[client][0], bile_target_num[client][1], bile_target_num[client][2]);
+			if (IsValidSurvivor(bile_target[client][bile_target_num[client][1]]) && bile_target_num[client][2] < g_hTurnInterval.IntValue)
 			{
-				float bile_target_pos[3] = {0.0}, dist = 0.0;
-				GetClientAbsOrigin(bile_target[client][bile_target_num[client][1]], target_pos);
-				GetClientEyePosition(bile_target[client][bile_target_num[client][1]], bile_target_pos);
-				MakeVectorFromPoints(self_eye_pos, bile_target_pos, bile_target_pos);
-				NormalizeVector(bile_target_pos, bile_target_pos);
-				GetVectorAngles(bile_target_pos, bile_target_pos);
+				float aim_angles[3] = {0.0}, dist = 0.0, height = 0.0;
 				dist = GetVectorDistance(self_pos, target_pos);
+				height = self_pos[2] - target_pos[2];
+				ComputeAimAngles(client, bile_target[client][bile_target_num[client][1]], aim_angles, AimEye);
 				if (g_hUpVision.BoolValue)
 				{
-					// 计算需要上抬的角度
-					if (self_pos[2] == target_pos[2])
+					if (height == 0.0 || height < 0.0)
 					{
-						bile_target_pos[0] = 0.0;
-						bile_target_pos[0] -= 0.040 * dist;
-						// PrintToConsoleAll("[Ai-Boomer]：当前目标 %N，高度相等，距离 %.2f，计算得出角度 %.2f", bile_target[client][bile_target_num[client][1]], dist, bile_target_pos[0]);
+						aim_angles[0] -= dist / (PLAYER_HEIGHT * 4.3);
 					}
-					// 目标 z 高度减去自身 z 高度小于 0，表示目标处于自身下方
-					else if (target_pos[2] - self_pos[2] < 0)
+					else if (height > 0.0)
 					{
-						bile_target_pos[0] = 0.0;
-						bile_target_pos[0] += (0.030 * dist) + 0.05 * FloatAbs(target_pos[2] - self_pos[2]);
-						// PrintToConsoleAll("[Ai-Boomer]：当前目标 %N，在下面，距离 %.2f，计算角度 %.2f", bile_target[client][bile_target_num[client][1]], dist, bile_target_pos[0]);
-					}
-					// 目标 z 高度减去自身 z 高度大于 0，表示目标处于自身上方
-					else if (target_pos[2] - self_pos[2] > 0)
-					{
-						bile_target_pos[0] = 0.0;
-						bile_target_pos[0] -= (0.030 * dist) + 0.15 * FloatAbs(target_pos[2] - self_pos[2]);
-						// PrintToConsoleAll("[Ai-Boomer]：当前目标 %N，在上面，距离 %.2f，计算角度 %.2f", bile_target[client][bile_target_num[client][1]], dist, bile_target_pos[0]);
+						aim_angles[0] -= dist / (PLAYER_HEIGHT * 5);
 					}
 				}
-				TeleportEntity(client, NULL_VECTOR, bile_target_pos, NULL_VECTOR);
+				TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
 				bile_target_num[client][2] += 1;
 			}
-			else
+			// 当前目标索引小于目标数目时，目标索引 + 1，重置循环次数
+			else if (bile_target_num[client][1] < bile_target_num[client][0])
 			{
 				bile_target_num[client][1] += 1;
 				bile_target_num[client][2] = 0;
 			}
+			// 最后一个目标循环完成，表示喷完了，此时重置 Boomer 目标数组
+			else if (bile_target_num[client][1] == bile_target_num[client][0])
+			{
+				ResetBileTarget(client);
+			}
 		}
 		// 靠近生还者，立即喷吐
-		if ((flags & FL_ONGROUND) && has_sight && closet_survivor_dist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client])
+		if ((flags & FL_ONGROUND) && IsValidSurvivor(target) && has_sight && closet_survivor_dist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client] && Player_IsVisible_To(target, client))
 		{
 			buttons |= IN_FORWARD;
 			buttons |= IN_ATTACK;
-			CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client);
+			if (bile_interval_timer[client] == null)
+			{
+				CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client);
+			}
 			can_bile[client] = false;
+		}
+		// 目标是被控或者倒地的生还，则令其蹲下攻击
+		if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target)))
+		{
+			buttons |= IN_DUCK;
+			buttons |= IN_ATTACK2;
 		}
 		// 强行被喷
 		if (g_hForceBile.BoolValue && (buttons & IN_ATTACK) && !in_bile_interval[client] && IsValidSurvivor(target))
@@ -187,12 +197,16 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 public Action Timer_ResetAbility(Handle timer, int client)
 {
 	in_bile_interval[client] = false;
+	return Plugin_Continue;
 }
 public Action Timer_ResetBile(Handle timer, int client)
 {
 	can_bile[client] = false;
 	in_bile_interval[client] = true;
+	delete bile_interval_timer[client];
+	bile_interval_timer[client] = null;
 	CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);
+	return Plugin_Continue;
 }
 
 // 获取目标
@@ -225,16 +239,17 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 // 当生还被胖子喷中时，开始计算范围内的玩家
 public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion)
 {
-	int target_num = 0;
-	if (IsBoomer(attacker) && IsValidSurvivor(victim))
+	// 当前 Boomer 目标数组中没有目标时，开始计算范围内是否有目标
+	if (IsBoomer(attacker) && IsValidSurvivor(victim) && bile_target_num[attacker][0] < 1)
 	{
 		// 计算范围内的玩家
+		int target_num = 0;
 		float self_pos[3] = {0.0}, target_pos[3] = {0.0}, self_eye_pos[3] = {0.0}, target_eye_pos[3] = {0.0};
 		GetClientAbsOrigin(attacker, self_pos);
 		GetClientEyePosition(attacker, self_eye_pos);
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(i))
+			if (i != victim && IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(i))
 			{
 				GetClientAbsOrigin(i, target_pos);
 				GetClientEyePosition(i, target_eye_pos);
@@ -245,6 +260,7 @@ public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion
 					if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
 					{
 						bile_target[attacker][target_num] = i;
+						// PrintToConsoleAll("[Ai-Boomer]：在范围内的玩家 %N，实际i的值 %N，加入玩家", bile_target[attacker][target_num], i);
 						target_num += 1;
 					}
 					delete hTrace;
@@ -252,11 +268,13 @@ public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion
 				}
 			}
 		}
+		// LogMessage("[Ai-Boomer]：当前范围内的目标：%d 个", target_num);
 		bile_target_num[attacker][0] = target_num;
-		CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBileTarget, attacker);
 	}
+	return Plugin_Continue;
 }
-public Action Timer_ResetBileTarget(Handle timer, int client)
+
+void ResetBileTarget(int client)
 {
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -268,7 +286,7 @@ public Action Timer_ResetBileTarget(Handle timer, int client)
 // 方法，是否 AI 胖子
 bool IsBoomer(int client)
 {
-	return view_as<bool>(GetInfectedClass(client) == view_as<int>(ZC_BOOMER) && IsFakeClient(client));
+	return view_as<bool>(GetInfectedClass(client) == view_as<int>(ZC_BOOMER));
 }
 // 计算与目标之间的向量
 float[] CalculateVel(float self_pos[3], float target_pos[3], float force)
@@ -284,7 +302,7 @@ bool Dont_HitWall_Or_Fall(int client, float vel[3])
 {
 	bool hullrayhit = false;
 	int down_hullray_hitent = -1;
-	char down_hullray_hitent_classname[16] = '\0';
+	char down_hullray_hitent_classname[16] = {'\0'};
 	float selfpos[3] = {0.0}, resultpos[3] = {0.0}, mins[3] = {0.0}, maxs[3] = {0.0}, hullray_endpos[3] = {0.0}, down_hullray_startpos[3] = {0.0}, down_hullray_endpos[3] = {0.0}, down_hullray_hitpos[3] = {0.0};
 	GetClientAbsOrigin(client, selfpos);
 	AddVectors(selfpos, vel, resultpos);
@@ -344,7 +362,7 @@ bool TR_EntityFilter(int entity, int mask)
 	}
 	else if (entity > MaxClients)
 	{
-		char classname[16] = '\0';
+		char classname[16] = {'\0'};
 		GetEdictClassname(entity, classname, sizeof(classname));
 		if (strcmp(classname, "infected") == 0 || strcmp(classname, "witch") == 0 || strcmp(classname, "prop_physics") == 0 || strcmp(classname, "tank_rock") == 0)
 		{
@@ -382,6 +400,31 @@ bool ClientPush(int client, float vec[3])
 	}
 	return false;
 }
+
+void ComputeAimAngles(int client, int target, float angles[3], AimType type = AimEye)
+{
+	float selfpos[3], targetpos[3], lookat[3];
+	GetClientEyePosition(client, selfpos);
+	switch (type)
+	{
+		case AimEye:
+		{
+			GetClientEyePosition(target, targetpos);
+		}
+		case AimBody:
+		{
+			GetClientAbsOrigin(target, targetpos);
+		}
+		case AimChest:
+		{
+			GetClientAbsOrigin(target, targetpos);
+			targetpos[2] += 45.0;
+		}
+	}
+	MakeVectorFromPoints(selfpos, targetpos, lookat);
+	GetVectorAngles(lookat, angles);
+}
+
 // 阻止或恢复喷吐
 /* void BlockBile(int client, bool block = true)
 {
