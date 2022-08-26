@@ -286,7 +286,7 @@ void ResetBileTarget(int client)
 // 方法，是否 AI 胖子
 bool IsBoomer(int client)
 {
-	return view_as<bool>(GetInfectedClass(client) == view_as<int>(ZC_BOOMER));
+	return view_as<bool>(GetInfectedClass(client) == view_as<int>(ZC_BOOMER) && IsFakeClient(client));
 }
 // 计算与目标之间的向量
 float[] CalculateVel(float self_pos[3], float target_pos[3], float force)
