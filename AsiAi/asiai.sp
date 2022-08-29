@@ -346,7 +346,7 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 	bool internaltrigger = false;
 	if (GetCurrentSpeed(client) <= DOOR_ATTACK_SPEED)
 	{
-		DoorAttack(client, buttons);
+		DoorAttack(client, buttons, ZC_HUNTER);
 	}
 	if (!DelayExpired(client, 1, HUNTERATTACKTIME) && GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
@@ -431,7 +431,7 @@ public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[
 {
 	if (GetCurrentSpeed(client) <= DOOR_ATTACK_SPEED)
 	{
-		DoorAttack(client, buttons);
+		DoorAttack(client, buttons, ZC_TANK);
 	}
 	if (GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
@@ -992,7 +992,7 @@ float GetCurrentSpeed(int client)
 	return curspeed;
 }
 
-public Action DoorAttack(int client, int &buttons)
+public Action DoorAttack(int client, int &buttons, int infectedClass)
 {
 	char className[16] = {'\0'};
 	float eyePos[3] = {0.0}, eyeAngle[3] = {0.0};
@@ -1009,7 +1009,17 @@ public Action DoorAttack(int client, int &buttons)
 	}
 	if (strcmp(className, "prop_door_rotat") == 0)
 	{
-		buttons &= IN_ATTACK;
+		switch (infectedClass)
+		{
+			case view_as<int>(ZC_TANK):
+			{
+				buttons &= IN_ATTACK;
+			}
+			case view_as<int>(ZC_HUNTER):
+			{
+				buttons &= IN_ATTACK2;
+			}
+		}
 		return Plugin_Changed;
 	}
 	return Plugin_Continue;
