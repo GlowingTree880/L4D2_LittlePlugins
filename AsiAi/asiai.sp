@@ -1014,13 +1014,14 @@ public Action DoorAttack(int client, int &buttons, int infectedClass)
 			case view_as<int>(ZC_TANK):
 			{
 				buttons &= IN_ATTACK;
+				return Plugin_Changed;
 			}
 			case view_as<int>(ZC_HUNTER):
 			{
 				buttons &= IN_ATTACK2;
+				return Plugin_Changed;
 			}
 		}
-		return Plugin_Changed;
 	}
 	return Plugin_Continue;
 }
