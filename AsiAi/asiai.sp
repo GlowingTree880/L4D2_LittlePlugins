@@ -343,6 +343,10 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 {
 	Action react = Plugin_Continue;
 	bool internaltrigger = false;
+	float vecspeed[3] = {0.0}, curspeed = 0.0;
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
+	curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
+	DoorAttack(client, curspeed, buttons);
 	if (!DelayExpired(client, 1, HUNTERATTACKTIME) && GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
 		buttons |= IN_DUCK;
@@ -424,6 +428,10 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 
 public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[3])
 {
+	float vecspeed[3] = {0.0}, curspeed = 0.0;
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
+	curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
+	DoorAttack(client, curspeed, buttons);
 	if (GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
 		float tankattackrange = -1.0, tankspeed = -1.0;
@@ -972,4 +980,35 @@ void CheatCommand(int client, char[] commandName, char[] argument1 = "", char[] 
 			LogError("%s could not find or create a client through which to execute cheat command %s", pluginName, commandName);
 		}
     }
+}
+
+// 特感挠门
+public Action DoorAttack(int client, float speed, int &buttons)
+{
+	if (speed <= 50.0)
+	{
+		char className[16] = {'\0'};
+		float eyePos[3] = {0.0}, eyeAngle[3] = {0.0};
+		GetClientEyePosition(client, eyePos);
+		GetClientEyeAngles(client, eyeAngle);
+		Handle hTrace = TR_TraceRayFilterEx(eyePos, eyeAngle, MASK_VISIBLE, RayType_Infinite, TR_RayFilter, client);
+		if (TR_DidHit(hTrace))
+		{
+			int entIndex = TR_GetEntityIndex(hTrace);
+			if (IsValidEntity(entIndex) && IsValidEdict(entIndex))
+			{
+				GetEdictClassname(entIndex, className, sizeof(className));
+			}
+		}
+		if (strcmp(className, "prop_door_rotat") == 0)
+		{
+			buttons &= IN_ATTACK;
+			return Plugin_Changed;
+		}
+	}
+	return Plugin_Continue;
+}
+stock bool TR_RayFilter(int entity, int mask, int self)
+{
+	return entity != self;
 }
