@@ -25,6 +25,7 @@
 #define SURVIVORHEIGHT 72.0
 #define ASSULTDELAY 0.3
 #define PLAYER_HEIGHT 72.0
+#define DOOR_ATTACK_SPEED 50.0
 // SMOKER
 #define SMOKERMELEERANGE 300.0
 // JOCKEY
@@ -343,10 +344,10 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 {
 	Action react = Plugin_Continue;
 	bool internaltrigger = false;
-	float vecspeed[3] = {0.0}, curspeed = 0.0;
-	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
-	curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
-	DoorAttack(client, curspeed, buttons);
+	if (GetCurrentSpeed(client) <= DOOR_ATTACK_SPEED)
+	{
+		DoorAttack(client, buttons);
+	}
 	if (!DelayExpired(client, 1, HUNTERATTACKTIME) && GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
 		buttons |= IN_DUCK;
@@ -428,10 +429,10 @@ public Action OnHunterRunCmd(int client, int &buttons, float vel[3], float angle
 
 public Action OnTankRunCmd(int client, int &buttons, float vel[3], float angles[3])
 {
-	float vecspeed[3] = {0.0}, curspeed = 0.0;
-	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
-	curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
-	DoorAttack(client, curspeed, buttons);
+	if (GetCurrentSpeed(client) <= DOOR_ATTACK_SPEED)
+	{
+		DoorAttack(client, buttons);
+	}
 	if (GetEntityMoveType(client) != MOVETYPE_LADDER)
 	{
 		float tankattackrange = -1.0, tankspeed = -1.0;
@@ -983,28 +984,33 @@ void CheatCommand(int client, char[] commandName, char[] argument1 = "", char[] 
 }
 
 // 特感挠门
-public Action DoorAttack(int client, float speed, int &buttons)
+float GetCurrentSpeed(int client)
 {
-	if (speed <= 50.0)
+	float vecspeed[3] = {0.0}, curspeed = 0.0;
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
+	curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
+	return curspeed;
+}
+
+public Action DoorAttack(int client, int &buttons)
+{
+	char className[16] = {'\0'};
+	float eyePos[3] = {0.0}, eyeAngle[3] = {0.0};
+	GetClientEyePosition(client, eyePos);
+	GetClientEyeAngles(client, eyeAngle);
+	Handle hTrace = TR_TraceRayFilterEx(eyePos, eyeAngle, MASK_VISIBLE, RayType_Infinite, TR_RayFilter, client);
+	if (TR_DidHit(hTrace))
 	{
-		char className[16] = {'\0'};
-		float eyePos[3] = {0.0}, eyeAngle[3] = {0.0};
-		GetClientEyePosition(client, eyePos);
-		GetClientEyeAngles(client, eyeAngle);
-		Handle hTrace = TR_TraceRayFilterEx(eyePos, eyeAngle, MASK_VISIBLE, RayType_Infinite, TR_RayFilter, client);
-		if (TR_DidHit(hTrace))
+		int entIndex = TR_GetEntityIndex(hTrace);
+		if (IsValidEntity(entIndex) && IsValidEdict(entIndex))
 		{
-			int entIndex = TR_GetEntityIndex(hTrace);
-			if (IsValidEntity(entIndex) && IsValidEdict(entIndex))
-			{
-				GetEdictClassname(entIndex, className, sizeof(className));
-			}
+			GetEdictClassname(entIndex, className, sizeof(className));
 		}
-		if (strcmp(className, "prop_door_rotat") == 0)
-		{
-			buttons &= IN_ATTACK;
-			return Plugin_Changed;
-		}
+	}
+	if (strcmp(className, "prop_door_rotat") == 0)
+	{
+		buttons &= IN_ATTACK;
+		return Plugin_Changed;
 	}
 	return Plugin_Continue;
 }
