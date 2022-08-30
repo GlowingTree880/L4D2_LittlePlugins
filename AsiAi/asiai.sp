@@ -994,34 +994,44 @@ float GetCurrentSpeed(int client)
 
 public Action DoorAttack(int client, int &buttons, int infectedClass)
 {
-	char className[16] = {'\0'};
-	float eyePos[3] = {0.0}, eyeAngle[3] = {0.0};
-	GetClientEyePosition(client, eyePos);
-	GetClientEyeAngles(client, eyeAngle);
-	Handle hTrace = TR_TraceRayFilterEx(eyePos, eyeAngle, MASK_VISIBLE, RayType_Infinite, TR_RayFilter, client);
-	if (TR_DidHit(hTrace))
+	int target = GetNearestSurvivor(client);
+	if (IsValidSurvivor(target))
 	{
-		int entIndex = TR_GetEntityIndex(hTrace);
-		if (IsValidEntity(entIndex) && IsValidEdict(entIndex))
+		char className[32] = {'\0'};
+		float eyePos[3] = {0.0}, targetPos[3] = {0.0}, mins[3] = {0.0}, maxs[3] = {0.0};
+		GetClientAbsOrigin(client, eyePos);
+		GetClientAbsOrigin(target, targetPos);
+		GetClientMins(client, mins);
+		GetClientMaxs(client, maxs);
+		mins[2] += 15.0;
+		Handle hTrace = TR_TraceHullFilterEx(eyePos, targetPos, mins, maxs, MASK_VISIBLE, TR_RayFilter, client);
+		if (TR_DidHit(hTrace))
 		{
-			GetEdictClassname(entIndex, className, sizeof(className));
-		}
-	}
-	if (strcmp(className, "prop_door_rotat") == 0)
-	{
-		switch (infectedClass)
-		{
-			case view_as<int>(ZC_TANK):
+			// 射线撞击，获取实体名称
+			int entIndex = TR_GetEntityIndex(hTrace);
+			if (IsValidEntity(entIndex) && IsValidEdict(entIndex))
 			{
-				buttons &= IN_ATTACK;
-				return Plugin_Changed;
+				GetEdictClassname(entIndex, className, sizeof(className));
 			}
-			case view_as<int>(ZC_HUNTER):
+			if (className[0] != '\0' && strcmp(className, "prop_door_rotating") == 0 || strcmp(className, "infected") == 0 || strcmp(className, "witch") == 0)
 			{
-				buttons &= IN_ATTACK2;
-				return Plugin_Changed;
+				delete hTrace;
+				switch (infectedClass)
+				{
+					case view_as<int>(ZC_TANK):
+					{
+						buttons &= IN_ATTACK;
+						return Plugin_Changed;
+					}
+					case view_as<int>(ZC_HUNTER):
+					{
+						buttons &= IN_ATTACK2;
+						return Plugin_Changed;
+					}
+				}
 			}
 		}
+		delete hTrace;
 	}
 	return Plugin_Continue;
 }
