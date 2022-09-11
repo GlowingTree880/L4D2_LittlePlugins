@@ -19,6 +19,7 @@
 #define LAG_DETECT_TIME 2.0									// 坦克位置检测间隔
 #define LAG_DETECT_RAIDUS 100								// 坦克位置检测范围
 #define TREE_DETECT_TIME 1.5								// 绕树检测间隔
+#define SPEED_FIXED_LENGTH 350.0							// 速度修正最大速度长度
 #define RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
 #define FL_JUMPING 65922
 #define DEBUG_ALL 0
@@ -190,23 +191,26 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				}
 				else if (flags == FL_JUMPING)
 				{
-					float velangles[3] = {0.0}, new_velvec[3] = {0.0}, self_target_vec[3] = {0.0}, self_target_pos[2][3], speed_length = 0.0;
-					speed_length = GetVectorLength(vecspeed, false);
+					float velangles[3] = {0.0}, new_velvec[3] = {0.0}, self_target_vec[3] = {0.0};
+					/* float speed_length = 0.0;
+					speed_length = GetVectorLength(vecspeed, false); */
 					GetVectorAngles(vecspeed, velangles);
 					velangles[0] = velangles[2] = 0.0;
 					GetAngleVectors(velangles, new_velvec, NULL_VECTOR, NULL_VECTOR);
 					NormalizeVector(new_velvec, new_velvec);
-					self_target_pos[0] = selfpos;
-					self_target_pos[1] = targetpos;
+					// 获取自身与生还之间的向量，x，y 方向不置 0，z 方向置 0
+					selfpos[2] = targetpos[2] = 0.0;
 					MakeVectorFromPoints(selfpos, targetpos, self_target_vec);
 					NormalizeVector(self_target_vec, self_target_vec);
-					self_target_vec[2] = 0.0;
 					if (RadToDeg(ArcCosine(GetVectorDotProduct(new_velvec, self_target_vec))) > g_hAirAngleRestrict.FloatValue)
 					{
-						MakeVectorFromPoints(self_target_pos[0], self_target_pos[1], new_velvec);
+						MakeVectorFromPoints(selfpos, targetpos, new_velvec);
+						GetVectorAngles(new_velvec, velangles);
 						NormalizeVector(new_velvec, new_velvec);
 						// 按照原来速度向量长度 + 缩放长度缩放修正后的速度向量，觉得太阴间了可以修改
-						ScaleVector(new_velvec, speed_length + curspeed);
+						// ScaleVector(new_velvec, speed_length + curspeed);
+						NormalizeVector(new_velvec, new_velvec);
+						ScaleVector(new_velvec, SPEED_FIXED_LENGTH);
 						TeleportEntity(client, NULL_VECTOR, velangles, new_velvec);
 					}
 				}
