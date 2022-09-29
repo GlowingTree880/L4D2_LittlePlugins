@@ -50,6 +50,8 @@
 <br>（当 Hunter 与 Jockey 刷新后并在 Hunter 未在飞扑与它们未在控人时，令他们固定间隔发出警示音）
 * **ServerRPGwithDatabase：** A plug-in that uses MySQL database to record player level/points/skills and other information
 <br>（配合使用 MySQL 数据库记录玩家等级/B数/技能/其他信息的插件）
+* **BossController：** A plug-in that in campaign or versus (may support other modes) allows the Boss to be spawned on a fixed distance
+<br>（战役或对抗（可能支持其他模式）允许在固定路程刷新 Boss，支持投票更改 Boss 刷新位置）
 
   * 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件文件并修复反编译后的文件内容得到<br>（The above plugins's code which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
   * 关于反编译行为的合理性与 Sourcemod GPL version 3 许可证及编写的插件/拓展与许可证间的关系可查阅：<br>[SourceModLicense](https://www.sourcemod.net/license.php)<br>[Quoted from Azelphur](https://forums.alliedmods.net/showpost.php?p=1648709&postcount=80)<br>[Quoted from Silvers](https://forums.alliedmods.net/showpost.php?p=2709004&postcount=394)<br>[Quoted from Sazpaimon](https://forums.alliedmods.net/showpost.php?p=1587691&postcount=10)
