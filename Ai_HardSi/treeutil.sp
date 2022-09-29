@@ -1,11 +1,11 @@
-enum PlayerTeam
+enum
 {
 	TEAM_SPECTATOR = 1,
 	TEAM_SURVIVOR,
 	TEAM_INFECTED
-};
+}
 
-enum ZombieClass
+enum
 {
 	ZC_SMOKER = 1,
 	ZC_BOOMER,
@@ -15,7 +15,7 @@ enum ZombieClass
 	ZC_CHARGER,
 	ZC_WITCH,
 	ZC_TANK
-};
+}
 
 enum
 {
@@ -152,7 +152,7 @@ stock int IdentifySurvivor(int client)
 {
 	if (IsValidSurvivor(client))
 	{
-		char model_name[42] = '\0';
+		char model_name[42] = {'\0'};
 		GetClientModel(client, model_name, sizeof(model_name));
 		return ModelToSorce(model_name);
 	}
@@ -179,6 +179,25 @@ stock void InitSurvivorModelTrie()
 	{
 		mSurvivorModelsTrie.SetValue(SurvivorModels[i], i);
 	}
+}
+// 获取当前客户端实血数量，返回实血数量，客户端无效则返回 -1
+stock int GetPermanentHealth(int client)
+{
+	if (IsValidClient(client))
+	{
+		return GetEntProp(client, Prop_Send, "m_iHealth");
+	}
+	return -1;
+}
+// 获取当前生还者虚血数量，返回虚血数量，生还者无效则返回 -1
+stock int GetSurvivorTempHealth(int client)
+{
+	if (IsValidSurvivor(client))
+	{
+		int temp_health = RoundToCeil(GetEntPropFloat(client, Prop_Send, "m_healthBuffer") - ((GetGameTime() - GetEntPropFloat(client, Prop_Send, "m_healthBufferTime")) * GetConVarFloat(FindConVar("pain_pills_decay_rate")))) - 1;
+		return temp_health > 0 ? temp_health : 0;
+	}
+	return -1;
 }
 // 获取当前生还者倒地次数，返回倒地次数，生还者无效则返回 -1
 stock int GetClientIncappedCount(int client)
@@ -211,12 +230,39 @@ stock int GetRandomMobileSurvivor()
 		return 0;
 	}
 }
-// 获取距离某玩家最近的有效（未死亡，未倒地，未被控）生还者，如有则返回生还者 id，无则返回 0
+// 获取距离某玩家最近的有效（未死亡，未倒地，未被控）生还者，如有则返回生还者 id，玩家无效或未找到则返回 0
 stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 {
 	if (IsValidClient(client))
 	{
-		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
+		int target = -1;
+		float selfPos[3] = {0.0}, targetPos[3] = {0.0};
+		GetClientAbsOrigin(client, selfPos);
+		// 遍历所有玩家
+		ArrayList targetList = new ArrayList(2);
+		for (int newTarget = 1; newTarget <= MaxClients; newTarget++)
+		{
+			// 找到了一个有效玩家
+			if (IsValidSurvivor(newTarget) && IsPlayerAlive(newTarget) && !IsClientIncapped(newTarget) &&!IsClientPinned(newTarget) && newTarget != client && newTarget != exclude_client)
+			{
+				GetClientAbsOrigin(newTarget, targetPos);
+				float dist = GetVectorDistance(selfPos, targetPos);
+				// int Push(any value)，返回新增的索引值，集合中存储（0：距离，1：玩家索引）
+				// void Set(int index, any value, int block, bool asChar)
+				targetList.Set(targetList.Push(dist), newTarget, 1);
+			}
+		}
+		if (targetList.Length == 0)
+		{
+			delete targetList;
+			return 0;
+		}
+		targetList.Sort(Sort_Ascending, Sort_Float);
+		target = targetList.Get(0, 1);
+		delete targetList;
+		return target;
+		// 原方法，辗转比较
+		/* float self_pos[3] = {0.0}, target_pos[3] = {0.0};
 		int closet_survivor = GetRandomMobileSurvivor();
 		if (IsValidSurvivor(closet_survivor))
 		{
@@ -225,7 +271,7 @@ stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 			int target_distance = RoundToNearest(GetVectorDistance(self_pos, target_pos));
 			for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
 			{
-				if (IsValidSurvivor(newtarget) && IsPlayerAlive(newtarget) && !IsClientIncapped(client) &&!IsClientPinned(client) && newtarget != exclude_client)
+				if (IsValidSurvivor(newtarget) && IsPlayerAlive(newtarget) && !IsClientIncapped(newtarget) &&!IsClientPinned(newtarget) && newtarget != exclude_client)
 				{
 					GetClientAbsOrigin(newtarget, target_pos);
 					int newtarget_distance = RoundToNearest(GetVectorDistance(self_pos, target_pos));
@@ -247,6 +293,8 @@ stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 		{
 			return 0;
 		}
+	}
+	return 0; */
 	}
 	return 0;
 }
@@ -338,7 +386,7 @@ stock int IsInGhostState(int client)
 // 			其他类
 // *************************
 // 获取生还者数量，可指定是否包含 bot 和死亡的玩家
-stock int GetSurvivorCount(bool include_bot, bool include_death)
+stock int GetSurvivorCount(bool include_bot = true, bool include_death = false)
 {
 	int count = 0;
 	for (int client = 1; client <= MaxClients; client++)
@@ -374,7 +422,6 @@ stock int GetSurvivorCount(bool include_bot, bool include_death)
 // 检测某个坐标是否能被任意生还者看到，如果有一个生还者能看见这个位置，返回 true，所有生还者都不可见这个位置，返回 false
 stock bool Pos_IsVisibleTo_Player(int self, float refpos[3])
 {
-	bool bVisible = false;
 	float target_pos[3] = {0.0};
 	for (int client = 1; client <= MaxClients; client++)
 	{
@@ -385,34 +432,98 @@ stock bool Pos_IsVisibleTo_Player(int self, float refpos[3])
 			if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == client)
 			{
 				delete hTrace;
-				bVisible = true;
+				hTrace = INVALID_HANDLE;
+				return true;
 			}
 			delete hTrace;
+			hTrace = INVALID_HANDLE;
 		}
 	}
-	return bVisible;
+	return false;
 }
-// 检测某个玩家是否能看到生还者，能看见返回 true，不能看见则返回 false
+// 检测某个玩家是否能看到指定生还者，能看见返回 true，不能看见则返回 false
 stock bool Player_IsVisible_To(int client, int target)
 {
-	bool bVisible = false;
 	float self_pos[3] = {0.0}, target_pos[3] = {0.0}, look_at[3] = {0.0}, vec_angles[3] = {0.0};
 	GetClientEyePosition(client, self_pos);
 	GetClientEyePosition(target, target_pos);
 	MakeVectorFromPoints(self_pos, target_pos, look_at);
 	GetVectorAngles(look_at, vec_angles);
-	Handle hTrace = TR_TraceRayFilterEx(self_pos, vec_angles, MASK_SOLID, RayType_Infinite, TR_RayFilter, client);
+	Handle hTrace = TR_TraceRayFilterEx(self_pos, vec_angles, MASK_VISIBLE, RayType_Infinite, TR_RayFilter, client);
 	if (TR_DidHit(hTrace))
 	{
-		int ray_hit_ent = TR_GetEntityIndex(hTrace);
-		if (ray_hit_ent == target)
+		if(TR_GetEntityIndex(hTrace) == target)
 		{
-			bVisible = true;
+			delete hTrace;
+			hTrace = INVALID_HANDLE;
+			return true;
 		}
 	}
 	delete hTrace;
-	return bVisible;
+	hTrace = INVALID_HANDLE;
+	return false;
 }
+// 检测某个玩家是否能看到任意生还者，能看见返回 true，不能看见则返回 false
+stock bool Player_IsVisible_To_AnyPlayer(int client)
+{
+	float self_pos[3] = {0.0};
+	GetClientEyePosition(client, self_pos);
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientConnected(i) && IsClientInGame(i) && GetClientTeam(i) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(i))
+		{
+			float target_pos[3] = {0.0};
+			GetClientEyePosition(i, target_pos);
+			Handle hTrace = TR_TraceRayFilterEx(self_pos, target_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
+			if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
+			{
+				delete hTrace;
+				hTrace = INVALID_HANDLE;
+				return true;
+			}
+			delete hTrace;
+			hTrace = INVALID_HANDLE;
+		}
+	}
+	return false;
+}
+// 查找指定玩家指定范围内生还者或感染者团队成员数量，使用入参成员数组保存范围内的成员客户端索引，同时返回成员数量，无效则返回 -1
+stock int Find_Ranged_Clients(int client, int[] targets, int team, float range, bool include_incapped = false, bool include_visible = true)
+{
+	// 检查入参合法性
+	if (!IsValidClient(client) || team < view_as<int>(TEAM_SURVIVOR) || team > view_as<int>(TEAM_INFECTED))
+	{
+		return -1
+	}
+	int index = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientConnected(i) && IsClientInGame(i) && (GetClientTeam(i) == team) && IsPlayerAlive(i) && (!include_incapped && GetEntProp(i, Prop_Send, "m_isIncapacitated") != 1))
+		{
+			float self_pos[3] = {0.0}, target_pos[3] = {0.0};
+			GetClientEyePosition(client, self_pos);
+			GetClientEyePosition(i, target_pos);
+			// 自身与目标距离小于给定范围
+			if (GetVectorDistance(self_pos, target_pos) <= range)
+			{
+				if (include_visible)
+				{
+					Handle hTrace = TR_TraceRayFilterEx(self_pos, target_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
+					if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
+					{
+						targets[index] = i;
+						index += 1;
+					}
+					continue;
+				}
+				targets[index] = i;
+				index += 1;
+			}
+		}
+	}
+	return index;
+}
+// 射线碰撞过滤器，返回 true 则通过检测，返回 false 则不通过检测
 stock bool TR_RayFilter(int entity, int mask, int self)
 {
 	return entity != self;
@@ -427,7 +538,7 @@ stock void Logic_RunScript(const char[] code, any ...)
 		DispatchKeyValue(scriptent, "targetname", PLUGIN_SCRIPTLOGIC);
 		DispatchSpawn(scriptent);
 	}
-	char buffer[512] = '\0';
+	char buffer[512] = {'\0'};
 	VFormat(buffer, sizeof(buffer), code, 2);
 	SetVariantString(buffer);
 	AcceptEntityInput(scriptent, "RunScriptCode");
@@ -439,7 +550,7 @@ stock int FindEntityByTargetname(int index, const char[] name)
 	{
 		if (IsValidEntity(entity))
 		{
-			char entname[128] = '\0';
+			char entname[128] = {'\0'};
 			GetEntPropString(entity, Prop_Data, "m_iName", entname, sizeof(entname));
 			if (strcmp(name, entname) == 0)
 			{
@@ -448,6 +559,22 @@ stock int FindEntityByTargetname(int index, const char[] name)
 		}
 	}
 	return -1;
+}
+// 获取玩家当前速度向量长度，成功返回速度大小，失败返回 -1.0
+stock float GetCurrentSpeed(int client)
+{
+	if (IsValidClient(client) && GetClientTeam(client) != view_as<int>(TEAM_SPECTATOR))
+	{
+		float vec_speed[3] = {0.0};
+		GetEntPropVector(client, Prop_Data, "m_vecVelocity", vec_speed);
+		return (SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0)));
+	}
+	return -1.0
+}
+// 获取当前是否在对抗第二轮
+stock bool InVersusSecondRound()
+{
+	return view_as<bool>(GameRules_GetProp("m_bInSecondHalfOfRound"));
 }
 
 // *************************
@@ -459,4 +586,23 @@ stock void CopyVectors(float origin[3], float result[3])
 	result[0] = origin[0];
 	result[1] = origin[1];
 	result[2] = origin[2];
+}
+// 向量置零
+stock void ZeroVector(float origin[3])
+{
+	origin = NULL_VECTOR;
+}
+
+// *************************
+// 			数据类
+// *************************
+// 获取服务器 tickrate 值，成功返回 tickrate 值，失败返回 -1
+stock int GetServerTickRate()
+{
+	int tick_rate = -1;
+	if (tick_rate == -1 && IsServerProcessing())
+	{
+		tick_rate = RoundToNearest(1.0 / GetTickInterval());
+	}
+	return tick_rate;
 }
