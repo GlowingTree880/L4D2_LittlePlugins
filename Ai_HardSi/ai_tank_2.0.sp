@@ -19,6 +19,7 @@
 #define LAG_DETECT_TIME 2.0									// 坦克位置检测间隔
 #define LAG_DETECT_RAIDUS 100								// 坦克位置检测范围
 #define TREE_DETECT_TIME 1.5								// 绕树检测间隔
+#define VISION_UNLOCK_TIME 5.0								// 视角解锁间隔
 #define SPEED_FIXED_LENGTH 350.0							// 速度修正最大速度长度
 #define RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
 #define FL_JUMPING 65922
@@ -43,6 +44,7 @@ enum struct struct_TankConsume
 	bool bInConsumePlace;			// 是否在消耗位上
 	bool bHasRecordProgress;		// 是否记录生还者当前路程
 	bool bHasCreatePosTimer;		// 是否创建位置检测时钟
+	bool bCanLockVision;
 	// Ints
 	int iTreeTarget;				// 绕树目标
 	int iConsumeSurPercent;			// 坦克开始消耗时生还者在地图上的进度
@@ -56,12 +58,13 @@ enum struct struct_TankConsume
 	float fTreeTargetPos[3];		// 绕树生还当前位置
 	float fFailedJumpedTime;		// 团灭嘲讽跳起来的时间戳
 	float fRockThrowTime;			// 扔石头的时间戳
+	float fLockVisonTime;			// 视角解锁时间戳
 	// 结构体变量初始化
 	void struct_Init()
 	{
-		this.bCanInitPos = this.bCanConsume = this.bIsReachingFunctionPos = this.bIsReachingRayPos = this.bInConsumePlace = this.bHasRecordProgress = this.bHasCreatePosTimer = false;
+		this.bCanInitPos = this.bCanConsume = this.bIsReachingFunctionPos = this.bIsReachingRayPos = this.bInConsumePlace = this.bHasRecordProgress = this.bHasCreatePosTimer = this.bCanLockVision = false;
 		this.iTreeTarget = this.iConsumeSurPercent = this.iConsumeNum = this.iIncappedCount = 0;
-		this.fTreeTime = this.fFailedJumpedTime = this.fRockThrowTime = 0.0;
+		this.fTreeTime = this.fFailedJumpedTime = this.fRockThrowTime = this.fLockVisonTime = 0.0;
 	}
 }
 static struct_TankConsume eTankStructure[MAXPLAYERS + 1];
@@ -154,6 +157,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecspeed);
 		curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
 		bHasSight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
+		// 判断周围是否有梯子，有则不锁定视角
+		IsLadderAround(client, 150.0, selfpos);
 		// 连跳与扔石头相关，判断目标是否有效，目标有效，执行连跳与空中防止跳过头操作，同时判断距离，是否允许扔石头
 		if (IsValidSurvivor(target))
 		{
@@ -294,7 +299,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			eTankStructure[client].fRockThrowTime = GetGameTime();
 		}
 		// 视角锁定，不允许消耗时并当前时间戳减去扔石头时的时间戳大于 ROCK_AIM_TIME 锁定视角
-		if (bHasSight && !eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && Dont_HitWall_Or_Fall(client, vecspeed))
+		if (bHasSight && !eTankStructure[client].bCanConsume && GetGameTime() - eTankStructure[client].fRockThrowTime > ROCK_AIM_TIME && Dont_HitWall_Or_Fall(client, vecspeed) && eTankStructure[client].bCanLockVision)
 		{
 			float self_eye_pos[3] = {0.0}, targetpos[3] = {0.0}, look_at[3] = {0.0};
 			if (IsValidSurvivor(nearest_target))
@@ -1060,4 +1065,40 @@ int Calculate_Flow(Address pNavArea)
 		now_nav_promixity = 1.0;
 	}
 	return RoundToNearest(now_nav_promixity * 100.0);
+}
+
+// 检测当前坦克周围有没有梯子
+void IsLadderAround(int client, float distance, float selfpos[3])
+{
+	if (IsAiTank(client) && IsPlayerAlive(client))
+	{
+		float mins[3] = {0.0}, maxs[3] = {0.0};
+		GetClientMins(client, mins);
+		GetClientMaxs(client, maxs);
+		mins[0] -= distance;
+		mins[1] -= distance;
+		mins[2] += NAV_MESH_HEIGHT;
+		maxs[0] += distance;
+		maxs[1] += distance;
+		TR_EnumerateEntitiesHull(selfpos, selfpos, mins, maxs, MASK_NPCSOLID_BRUSHONLY, TR_LadderFilter, client);
+	}
+}
+stock bool TR_LadderFilter(int entity, int self)
+{
+	if (IsValidEntity(entity) && IsValidEdict(entity))
+	{
+		char classname[64] = {'\0'};
+		GetEntityClassname(entity, classname, sizeof(classname));
+		if (classname[0] == 'f' && (strcmp(classname, "func_simpleladder") == 0 || strcmp(classname, "func_ladder") == 0))
+		{
+			eTankStructure[self].bCanLockVision = false;
+			eTankStructure[self].fLockVisonTime = GetGameTime();
+			return false;
+		}
+	}
+	if (GetGameTime() - eTankStructure[self].fLockVisonTime > VISION_UNLOCK_TIME)
+	{
+		eTankStructure[self].bCanLockVision = true;
+	}
+	return true;
 }
