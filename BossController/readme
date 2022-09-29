@@ -5,6 +5,7 @@
     boss_controller.sp 需要 builtinvotes.inc 支持，可以在 zoneMod 中找到这个 inc
     treeutil.sp 在 AiHardSi 目录下
     colors.inc 在 TankStatusPanel 目录下
+    本地测试环境：2.2.2.5 (left4dead2)，SourceMod Version: 1.11.0.6837
   
   更新日志：
     2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
