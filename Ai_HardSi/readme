@@ -33,6 +33,9 @@ Ai_Tank_2.0
   注意②：默认使用 Infected_Control 作为刷特插件，读取的是此插件的特感数量，如果使用其他刷特插件请更改源码 133 行为 g_hSiLimit = FindConVar("自己的刷特插件创建的特感数量的 Cvar"); 不使用刷特插件请更改为 g_hSiLimit = FindConVar("z_max_player_zombies");
   实际使用的时候，请把 28 行 #define DEBUG_ALL 1 改为 0 否则消耗找位的时候会出现找位射线！
   
+  更新日志：
+    2022-9-29：更新坦克周围有梯子（func_ladder \ func_simple_ladder）时，不锁定视角，感谢 Anne 电信服服主东哥提出的建议
+  
 Ai_Boomer：
   ai_BoomerBhop：1 是否开启胖子连跳
   ai_BoomerBhopSpeed：80.0 胖子连跳的速度
