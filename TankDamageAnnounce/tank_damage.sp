@@ -127,7 +127,7 @@ public void evt_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 		}
 	}
 	// 如果攻击者是坦克且受害者是生还者同时不在倒地状态，伤害大于 0，则记录生还者受到的伤害类型
-	if (attacker == GetTankClient() && IsValidSurvivor(victim) && !IsClientIncapped(victim) && damage > 0)
+	if (attacker == GetTankClient() && IsValidSurvivor(victim) && damage > 0)
 	{
 		if (strcmp(weapon, "tank_claw") == 0)
 		{
@@ -154,7 +154,8 @@ public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 	{
 		int victim = GetClientOfUserId(event.GetInt("userid"));
 		int attacker = GetClientOfUserId(event.GetInt("attacker"));
-		if (victim == g_iTankClient)
+		// 坦克被处死或者卡死，victim == attacker，处死或者卡死时，不显示伤害报告
+		if (victim == g_iTankClient && victim != attacker)
 		{
 			// 获取当前坦克最大生命值与控制者
 			TrimString(controlers_name);
