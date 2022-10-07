@@ -9,6 +9,7 @@
   
   更新日志：
     2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
+    2022-10-7：修复战役第一张图刷出 Boss 后下一张图因关闭无效时钟引发的报错，修复当 minFlow 值为 0 时读取 minFlow - 1 索引位置引发的报错，优化 Witch 位置有效性判断
   
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
@@ -67,6 +68,9 @@
           }
         }
     插件将会读取所有禁止刷新路程并将它们从允许刷新的路程的集合中删除
+    
+  静态 Boss 地图：某些地图（如救援关）不适合插件接管 Tank 和 Witch 刷新，可以将其设置为静态 Boss 地图（Static Tank / Witch Map），方法如下
+    在 Server.cfg 或其他可被 SourceMod 加载的 cfg 文件中使用：static_tank_map + 建图代码添加静态 Tank 地图，使用：static_witch_map + 建图代码添加静态 Witch 地图，如：static_tank_map c5m5_bridge，static_witch_map c5m5_bridge
  
 原理分析：
   读取 versus_boss_flow_min 与 versus_boss_flow_max 的值，作为 boss 刷新的最小与最大路程限制，如果 mapInfo 中定义了同样的 key 值，则使用 mapInfo 中的对应 key 值覆盖，创建 lTankFlows 与 lWitchFlows 两个集合存储 1 - 100 之间的整数（ArrayList<Integer>），先将不在 versus_boss_flow_min 与 versus_boss_flow_max 的值设置为 -1，有 mapInfo 再读取 mapInfo 中的 TankBanFlow 与 WitchBanFlow 信息，将集合中对应的元素设置为 -1，最后使用 ArrayList.Sort() 方法对集合倒序排序（90,89...-1,-1），使用 Resize() 方法保留有效元素，最后在 0 - Length - 1 的元素中随机 boss 刷新路程，对抗模式下，使用 L4D2Direct_SetVSTankFlowPercent() 与 L4D2Direct_SetVSTankToSpawnThisRound() 函数固定 boss 刷新位置，非对抗模式下，在生还者离开安全区域后创建时钟检测生还者推进路程，到达路程使用 L4D2_SpawnTank() 与 L4D2_SpawnWitch() 函数刷新 boss
