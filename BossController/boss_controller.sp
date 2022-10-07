@@ -29,7 +29,7 @@ public Plugin myinfo =
 Handle tankTimer = INVALID_HANDLE, witchTimer = INVALID_HANDLE;
 ConVar g_hVsBossBuffer, g_hVsBossFlowMin, g_hVsBossFlowMax, g_hTankCanSpawn, g_hWitchCanSpawn, g_hWitchAvoidTank, g_hVersusConsist, g_hCanVoteBoss, g_hEnablePrompt, g_hStopDirector;
 int nowTankFlow = 0, nowWitchFlow = 0, survivorPrompDist = 0, /* readyUpIndex = -1, */ versusFirstTankFlow = 0, versusFirstWitchFlow = 0, dkrFirstTankFlow = 0, dkrFirstWitchFlow = 0,
-tankActFlow = -1, witchActFlow = -1;
+tankActFlow = -1, witchActFlow = -1, minFlow = -1, maxFlow = -1;
 bool isReadyUpExist = false, isDKR = false /* , isReadyUpAdded = false */, canSetTank = false, canSetWitch = false, isLeftSafeArea = false, spawnedTank = false, spawnedWitch = false;
 char curMapName[64] = {'\0'}, mapInfoPath[PLATFORM_MAX_PATH] = {'\0'};
 // 复杂数据类型
@@ -222,7 +222,7 @@ public Action Cmd_BossVote(int client, int args)
 	}
 	else if (args != 2)
 	{
-		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}使用 !bossvote {G}<Tank> <Witch> {W}更改 Boss 刷新位置");
+		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}使用 !bossvote {G}<Tank> <Witch> {W}更改 Boss 刷新路程");
 		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}参数为 0 则禁止刷新 Boss，-1 则插件不接管 Boss 刷新");
 		return Plugin_Handled;
 	}
@@ -327,7 +327,7 @@ public Action Cmd_BossVote(int client, int args)
 		SetBuiltinVoteResultCallback(bossVoteHandler, BossVoteResult_Handler);
 		DisplayBuiltinVote(bossVoteHandler, players, playerNum, MENU_DISPLAY_TIME);
 		FakeClientCommand(client, "Vote Yes");
-		CPrintToChatAll("{B}<{G}BossVote{B}>：{G}玩家 {O}%N {G}发起了一个设置 Boss 刷新位置的投票", client);
+		CPrintToChatAll("{B}<{G}BossVote{B}>：{G}玩家 {O}%N {G}发起了一个设置 Boss 刷新路程的投票", client);
 	}
 	else
 	{
@@ -366,15 +366,15 @@ public int BossVoteResult_Handler(Handle vote, int num_votes, int num_clients, c
 				} */
 				if (canSetTank && canSetWitch)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Boss 刷新位置...");
+					DisplayBuiltinVotePass(vote, "正在更改 Boss 刷新路程...");
 				}
 				else if (canSetTank)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Tank 刷新位置...");
+					DisplayBuiltinVotePass(vote, "正在更改 Tank 刷新路程...");
 				}
 				else if (canSetWitch)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Witch 刷新位置...");
+					DisplayBuiltinVotePass(vote, "正在更改 Witch 刷新路程...");
 				}
 				else
 				{
@@ -414,12 +414,17 @@ public Action Cmd_ForceTank(int client, int args)
 	}
 	else if (isDKR)
 	{
-		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新位置", curMapName);
+		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新路程", curMapName);
 		return Plugin_Handled;
 	}
 	else if (IsStaticTankMap(curMapName))
 	{
 		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：%s 为静态坦克地图，插件不接管坦克刷新，无法投票更改坦克刷新路程", curMapName);
+		return Plugin_Handled;
+	}
+	else if (spawnedTank)
+	{
+		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}本轮坦克已经刷新完成，无法再次更改坦克刷新路程");
 		return Plugin_Handled;
 	}
 	/* else if (!IsInReady())
@@ -436,17 +441,17 @@ public Action Cmd_ForceTank(int client, int args)
 	int tankNewFlow = StringToInt(tankFlow);
 	if (tankNewFlow < 0)
 	{
-		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}新的坦克刷新位置必须大于等于 0");
+		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}新的坦克刷新路程必须大于等于 0");
 		return Plugin_Handled;
 	}
 	else if (!IsValidTankFlow(tankNewFlow))
 	{
-		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}当前坦克刷新位置：{O}%d {B}已被禁止", tankNewFlow);
+		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}当前坦克刷新路程：{O}%d {B}已被禁止", tankNewFlow);
 		return Plugin_Handled;
 	}
 	SetTankPercent(tankNewFlow);
 	tankActFlow = nowTankFlow = tankNewFlow;
-	CPrintToChatAll("{B}<{G}BossVote{B}>：{G}管理员：{O}%N {W}更改本轮坦克刷新位置为：{O}%d", client, tankNewFlow);
+	CPrintToChatAll("{B}<{G}BossVote{B}>：{G}管理员：{O}%N {W}更改本轮坦克刷新路程为：{O}%d", client, tankNewFlow);
 	/* UpdateBossPercents(); */
 	Call_StartForward(fUpdateBoss);
 	Call_PushCell(tankNewFlow);
@@ -462,12 +467,17 @@ public Action Cmd_ForceWitch(int client, int args)
 	}
 	else if (isDKR)
 	{
-		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新位置", curMapName);
+		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新路程", curMapName);
 		return Plugin_Handled;
 	}
 	else if (IsStaticWitchMap(curMapName))
 	{
 		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：%s 为静态女巫地图，插件不接管女巫刷新，无法投票更改女巫刷新路程", curMapName);
+		return Plugin_Handled;
+	}
+	else if (spawnedWitch)
+	{
+		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}本轮女巫已经刷新完成，无法再次更改女巫刷新路程");
 		return Plugin_Handled;
 	}
 	/* else if (!IsInReady())
@@ -484,17 +494,17 @@ public Action Cmd_ForceWitch(int client, int args)
 	int witchNewFlow = StringToInt(witchFlow);
 	if (witchNewFlow < 0)
 	{
-		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}新的女巫刷新位置必须大于等于 0");
+		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}新的女巫刷新路程必须大于等于 0");
 		return Plugin_Handled;
 	}
 	else if (!IsValidWitchFlow(witchNewFlow, false))
 	{
-		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}当前女巫刷新位置：{O}%d {B}已被禁止", witchNewFlow);
+		CPrintToChatAll("{B}<{G}BossVote{B}>：{W}当前女巫刷新路程：{O}%d {B}已被禁止", witchNewFlow);
 		return Plugin_Handled;
 	}
 	SetWitchPercent(witchNewFlow);
 	witchActFlow = nowWitchFlow = witchNewFlow;
-	CPrintToChatAll("{B}<{G}BossVote{B}>：{G}管理员：{O}%N {W}更改本轮女巫刷新位置为：{O}%d", client, witchNewFlow);
+	CPrintToChatAll("{B}<{G}BossVote{B}>：{G}管理员：{O}%N {W}更改本轮女巫刷新路程为：{O}%d", client, witchNewFlow);
 	/* UpdateBossPercents(); */
 	Call_StartForward(fUpdateBoss);
 	Call_PushCell(-1);
@@ -505,6 +515,17 @@ public Action Cmd_ForceWitch(int client, int args)
 
 public void OnMapStart()
 {
+	// 出了安全屋，没有刷克，且坦克时钟不为空，表示存在时钟，不能直接删除时钟，如果上一把先刷克，刷出来后 return Plugin_Stop 时钟已经停止，tankTimer 不为 INVALID_HANDLE 且记录的为无效句柄，删除报错
+	// 刷了克，spawnedTank 或 spawnedWitch 记录为 true，已经返回 Plugin_Stop，可直接置空
+	if (isLeftSafeArea && !spawnedTank && tankTimer != INVALID_HANDLE)
+	{
+		delete tankTimer;
+	}
+	if (isLeftSafeArea && !spawnedWitch && witchTimer != INVALID_HANDLE)
+	{
+		delete witchTimer;
+	}
+	tankTimer = witchTimer = INVALID_HANDLE;
 	GetCurrentMap(curMapName, sizeof(curMapName));
 	isDKR = IsDKR();
 	isLeftSafeArea = spawnedTank = spawnedWitch = false;
@@ -529,6 +550,15 @@ public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	/* isReadyUpAdded = false;
 	readyUpIndex = -1; */
+	if (isLeftSafeArea && !spawnedTank && tankTimer != INVALID_HANDLE)
+	{
+		delete tankTimer;
+	}
+	if (isLeftSafeArea && !spawnedWitch && witchTimer != INVALID_HANDLE)
+	{
+		delete witchTimer;
+	}
+	tankTimer = witchTimer = INVALID_HANDLE;
 	isLeftSafeArea = spawnedTank = spawnedWitch = false;
 	nowTankFlow = nowWitchFlow = survivorPrompDist = 0;
 	CreateTimer(0.5, Timer_GetBossFlow, TIMER_FLAG_NO_MAPCHANGE);
@@ -541,8 +571,8 @@ public Action Timer_GetBossFlow(Handle timer)
 	lTankFlows.Clear();
 	lWitchFlows.Clear();
 	// 获取设定 Boss 刷新范围
-	int minFlow = RoundToCeil(g_hVsBossFlowMin.FloatValue * 100.0);
-	int maxFlow = RoundToFloor(g_hVsBossFlowMax.FloatValue * 100.0);
+	minFlow = RoundToCeil(g_hVsBossFlowMin.FloatValue * 100.0);
+	maxFlow = RoundToFloor(g_hVsBossFlowMax.FloatValue * 100.0);
 	// 统一设置 minFlow 和 maxFlow
 	for (int i = 1; i <= 100; i++)
 	{
@@ -653,7 +683,7 @@ public Action Timer_GetBossFlow(Handle timer)
 					if (IsValidInterval(interval))
 					{
 						// 找到有效的禁止刷新距离，更改原集合中禁止刷新距离为 -1
-						for (int i = interval[0] - 1; i < interval[1] + 1; i++)
+						for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] + 1 > 100 ? 100 : interval[1] + 1); i++)
 						{
 							lTankFlows.Set(i, -1);
 						}
@@ -676,7 +706,8 @@ public Action Timer_GetBossFlow(Handle timer)
 			if (!canSpawnTank)
 			{
 				// 不允许刷克时
-				SetTankPercent(0);
+				if (L4D_IsVersusMode()) { SetTankPercent(0); }
+ 				else { nowTankFlow = 0; }
 				#if (DEBUG_ALL)
 				{
 					LogMessage("[Boss-Controller]：当前禁止刷新的路程涵盖了所有允许坦克刷新的路程，坦克将不会刷新");
@@ -712,7 +743,8 @@ public Action Timer_GetBossFlow(Handle timer)
 		else
 		{
 			// 是静态坦克地图，插件不接管刷克
-			SetTankPercent(0);
+			if (L4D_IsVersusMode()) { SetTankPercent(0); }
+			else { nowTankFlow = 0; }
 			#if (DEBUG_ALL)
 			{
 				LogMessage("[Boss-Controller]：当前地图：%s 是静态坦克地图，不允许坦克刷新", curMapName);
@@ -743,7 +775,7 @@ public Action Timer_GetBossFlow(Handle timer)
 					#endif
 					if (IsValidInterval(interval))
 					{
-						for (int i = interval[0] - 1; i < interval[1] + 1; i++)
+						for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] == 100 ? 100 : interval[1] + 1); i++)
 						{
 							lWitchFlows.Set(i, -1);
 						}
@@ -752,6 +784,14 @@ public Action Timer_GetBossFlow(Handle timer)
 				while (mapInfo.GotoNextKey());
 			}
 			mapInfo.Rewind();
+			// 如果开了女巫需要距离坦克一定距离刷新，则继续判断
+			if (g_hWitchAvoidTank.IntValue > 0)
+			{
+				for (int i = nowTankFlow - (g_hWitchAvoidTank.IntValue / 2); i <= nowTankFlow + (g_hWitchAvoidTank.IntValue / 2); i++)
+				{
+					if (lWitchFlows.FindValue(i)) lWitchFlows.Set(i, -1);
+				}
+			}
 			// 检查允许刷新集合中所有元素是否都为 -1 禁止刷新标识
 			bool canSpawnWitch = false;
 			for (int i = 0; i < lWitchFlows.Length; i++)
@@ -762,9 +802,11 @@ public Action Timer_GetBossFlow(Handle timer)
 					break;
 				}
 			}
-			if (!canSpawnWitch || lWitchFlows.Length < g_hWitchAvoidTank.IntValue)
+			// 此时女巫集合长度为 100，未删除 -1 元素，无需判断长度是否小于 g_hWitchAvoidTank.IntValue
+			if (!canSpawnWitch)
 			{
-				SetWitchPercent(0);
+				if (L4D_IsVersusMode()) { SetWitchPercent(0); }
+				else { nowWitchFlow = 0; }
 				#if (DEBUG_ALL)
 				{
 					LogMessage("[Boss-Controller]：当前禁止刷新的路程涵盖了所有允许女巫刷新的路程，女巫将不会刷新");
@@ -774,10 +816,6 @@ public Action Timer_GetBossFlow(Handle timer)
 			else
 			{
 				nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
-				while (lWitchFlows.Length > g_hWitchAvoidTank.IntValue && FloatAbs(float(nowTankFlow) - float(nowWitchFlow)) < (g_hWitchAvoidTank.FloatValue / 2))
-				{
-					nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
-				}
 				#if (DEBUG_ALL)
 				{
 					LogMessage("[Boss-Controller]：当前允许女巫刷新，随机一个女巫刷新位置：%d 路程", nowWitchFlow);
@@ -802,7 +840,8 @@ public Action Timer_GetBossFlow(Handle timer)
 		}
 		else
 		{
-			SetWitchPercent(0);
+			if (L4D_IsVersusMode()) { SetWitchPercent(0); }
+			else { nowWitchFlow = 0; }
 			#if (DEBUG_ALL)
 			{
 				LogMessage("[Boss-Controller]：当前地图：%s 是静态女巫地图，不允许女巫刷新", curMapName);
@@ -814,74 +853,111 @@ public Action Timer_GetBossFlow(Handle timer)
 	{
 		// 没有 mapinfo，直接随机一个在 minFlow 和 maxFlow 之间的位置
 		nowTankFlow = GetRandomSpawnPos(lTankFlows);
-		nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
-		// 如果允许女巫刷新的集合长度大于 AvoidTank 的值，且当前女巫位置小于 AvoidTank 的值，重新随机一个女巫位置
-		while (lWitchFlows.Length > g_hWitchAvoidTank.IntValue && FloatAbs(float(nowTankFlow) - float(nowWitchFlow)) < (g_hWitchAvoidTank.FloatValue / 2.0))
+		if (g_hWitchAvoidTank.IntValue > 0)
 		{
-			nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
+			for (int i = nowTankFlow - (g_hWitchAvoidTank.IntValue / 2); i <= nowTankFlow + (g_hWitchAvoidTank.IntValue / 2); i++)
+			{
+				lWitchFlows.Set(i, -1);
+			}
 		}
+		nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
 		#if (DEBUG_ALL)
 		{
 			LogMessage("[Boss-Controller]：当前地图：%s 不是静态坦克女巫地图，并且没有 mapinfo 文件，随机坦克位置：%d，随机女巫位置：%d", curMapName, nowTankFlow, nowWitchFlow);
 		}
 		#endif
-		SetTankPercent(nowTankFlow);
-		SetWitchPercent(nowWitchFlow);
+		if (L4D_IsVersusMode())
+		{
+			SetTankPercent(nowTankFlow);
+			SetWitchPercent(nowWitchFlow);
+		}
 	}
 	return Plugin_Stop;
 }
-// 在坦克刷新位置发生变化的时候，动态调整女巫刷新位置
+// 在坦克刷新位置发生变化的时候，此时 tankFlow 有效，动态调整女巫刷新位置
 void DynamicAdjustWtichPercent(int tankFlow)
 {
 	if (g_hWitchCanSpawn.BoolValue)
 	{
-		int interval[2] = {0};
-		if (GetTankAvoidInterval(interval) && IsValidInterval(interval))
+		// 全路段禁止刷新女巫，则直接设置为 0
+		if (lWitchFlows.Length == 0)
 		{
-			// 新的坦克位置有效，检查当前女巫位置是否被禁止刷新
-			int newWitchFlow = RoundFloat(L4D2Direct_GetVSWitchFlowPercent(0) * 100);
-			// 当前女巫刷新位置集合长度是否等于 0
-			if (lWitchFlows.Length == 0 || lWitchFlows.Length < g_hWitchAvoidTank.IntValue)
+			#if (DEBUG_ALL)
 			{
-				SetWitchPercent(0);
-				#if (DEBUG_ALL)
-				{
-					LogMessage("[Boss-Controller]：当前禁止刷新的路程涵盖了所有允许女巫刷新的路程，女巫将不会刷新");
-				}
-				#endif
+				LogMessage("[Boss-Controller]：坦克位置即将发生变化，新位置：%d，且禁止刷新的路程涵盖了所有允许女巫刷新的路程，女巫将不会刷新", tankFlow);
 			}
-			// 当前位置已禁止刷新女巫，则选择新位置
-			if (interval[0] <= newWitchFlow <= interval[1])
-			{
-				while (lWitchFlows.Length > g_hWitchAvoidTank.IntValue && FloatAbs(float(tankFlow) - float(newWitchFlow)) < (g_hWitchAvoidTank.FloatValue / 2.0))
-				{
-					newWitchFlow = GetRandomSpawnPos(lWitchFlows);
-				}
-				#if (DEBUG_ALL)
-				{
-					LogMessage("[Boss-Controller]：当前坦克位置发生改变，新坦克刷新位置：%d，动态调整女巫刷新位置为：%d", tankFlow, newWitchFlow);
-				}
-				#endif
-			}
-			SetWitchPercent(newWitchFlow);
+			#endif
+			if (L4D_IsVersusMode()) { SetWitchPercent(0); }
+			else { nowWitchFlow = 0; }
+			return;
 		}
+		int newWitchFlow = -1;
+		if (L4D_IsVersusMode()) { newWitchFlow = RoundFloat(L4D2Direct_GetVSWitchFlowPercent(0) * 100); }
+		else { newWitchFlow = nowWitchFlow; }
+		if (g_hWitchAvoidTank.IntValue > 0)
+		{
+			// 找到新的被坦克位置阻挡的女巫范围，如果在集合中能找到索引，设置为 -1，否则跳出
+			for (int i = tankFlow + (g_hWitchAvoidTank.IntValue / 2); i >= tankFlow - (g_hWitchAvoidTank.IntValue / 2); i--)
+			{
+				if (lWitchFlows.FindValue(i))
+				{
+					lWitchFlows.Set(i, -1);
+				}
+				break;
+			}
+			// 找到原来被坦克范围阻挡的不能刷女巫的范围重新调整为可以刷女巫，此时集合已经处理完毕，需要在 minFlow 和 maxFlow 之间进行添加，而不是 0 - 100
+			int interval[2] = {0};
+			if (GetTankAvoidInterval(interval) && IsValidInterval(interval))
+			{
+				interval[0] = interval[0] - 1 < minFlow ? minFlow : interval[0] - 1;
+				interval[1] = interval[1] + 1 > maxFlow ? maxFlow : interval[1] + 1;
+				for (int i = interval[0]; i < interval[1]; i++)
+				{
+					lWitchFlows.Push(i);
+				}
+			}
+			lWitchFlows.Sort(Sort_Descending, Sort_Integer);
+		}
+		bool canSpawnWitch = false;
+		for (int i = 0; i < lWitchFlows.Length; i++)
+		{
+			if (lWitchFlows.Get(i) > -1)
+			{
+				canSpawnWitch = true;
+				break;
+			}
+		}
+		if (!canSpawnWitch)
+		{
+			#if (DEBUG_ALL)
+			{
+				LogMessage("[Boss-Controller]：坦克位置即将发生变化，新位置：%d，且禁止刷新的路程涵盖了所有允许女巫刷新的路程，女巫将不会刷新", tankFlow);
+			}
+			#endif
+			if (L4D_IsVersusMode()) { SetWitchPercent(0); }
+			else { newWitchFlow = nowWitchFlow = 0; }
+			return;
+		}
+		newWitchFlow = GetRandomSpawnPos(lWitchFlows);
+		if (L4D_IsVersusMode()) { SetWitchPercent(newWitchFlow); }
+		else { nowWitchFlow = newWitchFlow; }
 	}
 }
 // 生还者离开安全区域后，如果不是对抗模式，则创建时钟检测生还者路程
 public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 {
-	if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName))
+	if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName) && nowTankFlow > 0)
 	{
-		if (tankTimer != INVALID_HANDLE)
+		if (tankTimer != INVALID_HANDLE || tankTimer != null)
 		{
 			delete tankTimer;
 			tankTimer = INVALID_HANDLE;
 		}
 		tankTimer = CreateTimer(0.5, Timer_SpawnTank, _, TIMER_REPEAT);
 	}
-	if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName))
+	if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName) && nowWitchFlow > 0)
 	{
-		if (witchTimer != INVALID_HANDLE)
+		if (witchTimer != INVALID_HANDLE || witchTimer != null)
 		{
 			delete witchTimer;
 			witchTimer = INVALID_HANDLE;
@@ -1066,12 +1142,12 @@ bool CheckCanVoteBoss(int client)
 	{
 		if (isDKR)
 		{
-			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新位置", curMapName);
+			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：{O}%s {W}不允许投票更改 Boss 刷新路程", curMapName);
 			return false;
 		}
 		if (isLeftSafeArea)
 		{
-			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前已离开本地图起始安全区域，不允许投票更改 Boss 刷新位置");
+			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前已离开本地图起始安全区域，不允许投票更改 Boss 刷新路程");
 			return false;
 		}
 		/* if (isReadyUpExist && !IsInReady())
@@ -1081,17 +1157,17 @@ bool CheckCanVoteBoss(int client)
 		} */
 		if (InVersusSecondRound())
 		{
-			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前是对抗第二轮，不允许更改 Boss 刷新位置");
+			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前是对抗第二轮，不允许更改 Boss 刷新路程");
 			return false;
 		}
 		if (GetClientTeam(client) == view_as<int>(TEAM_SPECTATOR))
 		{
-			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}旁观者不允许更改 Boss 刷新位置");
+			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}旁观者不允许更改 Boss 刷新路程");
 			return false;
 		}
 		if (!IsNewBuiltinVoteAllowed())
 		{
-			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前暂时不允许发起新的投票更改 Boss 刷新位置");
+			CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前暂时不允许发起新的投票更改 Boss 刷新路程");
 			return false;
 		}
 		return true;
