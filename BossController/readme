@@ -10,6 +10,7 @@
   更新日志：
     2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
     2022-10-7：修复战役第一张图刷出 Boss 后下一张图因关闭无效时钟引发的报错，修复当 minFlow 值为 0 时读取 minFlow - 1 索引位置引发的报错，优化 Witch 位置有效性判断
+    2022-10-12：将原本战役无论是否静态 Boss 地图都接管 director_no_bosses Cvar 更改为仅非静态 Boss 地图接管
   
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
