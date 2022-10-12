@@ -529,8 +529,8 @@ public void OnMapStart()
 	GetCurrentMap(curMapName, sizeof(curMapName));
 	isDKR = IsDKR();
 	isLeftSafeArea = spawnedTank = spawnedWitch = false;
-	// 非对抗模式下，接管 director_no_bosses
-	if (!L4D_IsVersusMode() && !g_hStopDirector.BoolValue)
+	// 非对抗模式下，且非静态 Boss 地图，接管 director_no_bosses
+	if (!L4D_IsVersusMode() && !g_hStopDirector.BoolValue && !IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName))
 	{
 		#if (DEBUG_ALL)
 		{
