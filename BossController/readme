@@ -7,96 +7,12 @@
     colors.inc 在 TankStatusPanel 目录下
     本地测试环境：2.2.2.5 (left4dead2)，SourceMod Version: 1.11.0.6837
   
-  更新日志：  这是一个：兼容战役对抗（可能可以兼容其他模式），无论有无 mapInfo.txt 文件，都允许在固定路程刷新 Tank 和 Witch 的插件，基本相当于整合 witch_and_tankifier.smx（药役药抗中固定路程刷新 boss 的插件），l4d_boss_percent.smx（显示 boss 刷新位置的插件）与 l4d_boss_vote.smx（投票更改 boss 刷新路程的插件） 的整合插件
-
-  注：
-    目录下的 boss_spawner.smx 插件为 zoneMod 下 confoglcompmod.smx 中整合的 BossSpawning.sp，在对抗中第一轮 boss 刷新时，记录 boss 刷新的位置，第二轮，刷新 boss 时将它们传送到与第一轮相同的位置（可选插件，与 boss_controller.smx 配合使用效果更佳）
-    boss_controller.sp 需要 builtinvotes.inc 支持，可以在 zoneMod 中找到这个 inc
-    treeutil.sp 在 AiHardSi 目录下
-    colors.inc 在 TankStatusPanel 目录下
-    本地测试环境：2.2.2.5 (left4dead2)，SourceMod Version: 1.11.0.6837
-  
   更新日志：
     2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
     2022-10-7：修复战役第一张图刷出 Boss 后下一张图因关闭无效时钟引发的报错，修复当 minFlow 值为 0 时读取 minFlow - 1 索引位置引发的报错，优化 Witch 位置有效性判断
     2022-10-12：将原本战役无论是否静态 Boss 地图都接管 director_no_bosses Cvar 更改为仅非静态 Boss 地图接管
     2022-10-13：修复原本不能更改 director_no_bosses 的 Cvar 值的问题，修复无法使用 !bossvote 指令启动更改 boss 位置投票且第二轮无法投票的问题，修复无 mapInfo.txt 下女巫集合越界的问题，更改检测 Tank Ban Witch 刷新范围从使用 L4D2Direct_GetVSTankFlowPercent() 到直接使用 nowTankFlow  
 
-  Cvars：
-    boss_tank_can_spawn 1：是否允许插件生成 Tank
-    boss_witch_can_spawn 1：是否允许插件生成 Witch
-    boss_witch_avoid_tank 20：女巫应该距离坦克刷新位置多远的路程刷新（将会以坦克刷新位置为中点，左右 / 2 距离，比如坦克在 76 刷，女巫则不能设置在 66 - 86 的路程）
-    boss_versus_consist 1：是否保持在对抗的两局中坦克女巫刷新在同一路程
-    boss_enable_vote 1：是否允许通过 !bossvote 等指令投票坦克女巫刷新位置
-    boss_enable_prompt 1：在距离 boss 刷新位置前 PROMPT_DIST（默认 5） 开始提示生还者准备刷 boss，例如 Tank 刷新在 50，插件将会在生还者推进到 45,46,47,48,49 路程时提示当前路程与 Tank 刷新路程（再也不用担心队友乱跑引克导致团灭啦）
-    boss_enable_director 0：非对抗模式下，通过调整 director_no_bosses 决定是否允许导演系统刷新 boss
-
-  提供的 Natives：
-    IsStaticTankMap：返回当前地图是否静态 Tank 地图
-    IsStaticWitchMap：返回当前地图是否静态 Witch 地图
-    IsTankPercentValid：返回当前传入的 Tank 路程是否有效
-    IsWitchPercentValid：返回当前传入的 Witch 路程是否有效
-    IsWitchPercentBlockedForTank：返回当前传入的 Witch 路程是否被当前 Tank 路程所阻止
-    SetTankPercent：设置本轮 Tank 刷新路程
-    SetWitchPercent：设置本轮 Witch 刷新路程
-    SetTankDisabled：设置本轮禁止刷新 Tank（需要在出安全区之前设置才有效）
-    SetWitchDisabled：设置本轮禁止刷新 Witch（需要在出安全区之前设置才有效）
-    GetStoredTankPercent：返回本轮存储的 Tank 刷新路程
-    GetStoredWitchPercent：返回本轮存储的 Witch 刷新路程
-    IsDarkCarniRemix：返回当前地图是否 DarkCarnivalRemix 地图
-    // UpdateBossPercents（需要使用 readyup.smx，本插件中关于 readyup 准备面板插件的支持已注释，有需要可自行开启（未测试））
-    // GetReadyUpFooterIndex
-
-  如需使用 mapInfo.txt，请将 mapInfo.txt 放入：cfg/cfgogl 文件夹中，没有 cfgogl 可以新建一个同名的文件夹，可以使用 zoneMod 的 mapInfo.txt
-    设置 Tank 禁止刷新路程：
-      例：（zoneMod -> c1m1_hotel）
-        "tank_ban_flow"
-        {
-          "Before elevator exit"
-          {
-            "min"		"38"
-            "max"		"79"
-          }
-          "Early spawns"
-          {
-            "min"		"0"
-            "max"		"24"
-          }
-        }
-    设置 Witch 禁止刷新路程：
-      例：（zoneMod -> c2m2_fairgrounds）
-        "witch_ban_flow"
-        {
-          "Ladder"
-          {
-            "min"		"54"
-            "max"		"58"
-          }
-          "Start of event"
-          {
-            "min"		"78"
-            "max"		"87"
-          }
-        }
-    插件将会读取所有禁止刷新路程并将它们从允许刷新的路程的集合中删除
-    
-  静态 Boss 地图：某些地图（如救援关）不适合插件接管 Tank 和 Witch 刷新，可以将其设置为静态 Boss 地图（Static Tank / Witch Map），方法如下
-    在 Server.cfg 或其他可被 SourceMod 加载的 cfg 文件中使用：static_tank_map + 建图代码添加静态 Tank 地图，使用：static_witch_map + 建图代码添加静态 Witch 地图，如：static_tank_map c5m5_bridge，static_witch_map c5m5_bridge
- 
-原理分析：
-  读取 versus_boss_flow_min 与 versus_boss_flow_max 的值，作为 boss 刷新的最小与最大路程限制，如果 mapInfo 中定义了同样的 key 值，则使用 mapInfo 中的对应 key 值覆盖，创建 lTankFlows 与 lWitchFlows 两个集合存储 1 - 100 之间的整数（ArrayList<Integer>），先将不在 versus_boss_flow_min 与 versus_boss_flow_max 的值设置为 -1，有 mapInfo 再读取 mapInfo 中的 TankBanFlow 与 WitchBanFlow 信息，将集合中对应的元素设置为 -1，最后使用 ArrayList.Sort() 方法对集合倒序排序（90,89...-1,-1），使用 Resize() 方法保留有效元素，最后在 0 - Length - 1 的元素中随机 boss 刷新路程，对抗模式下，使用 L4D2Direct_SetVSTankFlowPercent() 与 L4D2Direct_SetVSTankToSpawnThisRound() 函数固定 boss 刷新位置，非对抗模式下，在生还者离开安全区域后创建时钟检测生还者推进路程，到达路程使用 L4D2_SpawnTank() 与 L4D2_SpawnWitch() 函数刷新 boss
-
-可能存在的 BUG：
-  1.生还者当前推进路程有时计算不准确，导致 Tank 或 Witch 刷新路程不准确
-  2.战役模式下，使用 left4dhooks 的 L4D_GetRandomPZSpawnPosition() 函数寻找 boss 刷新位置，可能会导致 boss 刷新在生还前面 \ 后面或者一些奇怪的地方（房顶？）
-  3.未测试在 DarkCarnivalRemix 地图下，是否能正确设置 boss 路程（看不懂 boss_percent 中这部分代码的意图）
-  4.Natives 并未测试，可能某些 Natives 无效或错误
-  如发现其他 BUG 或报错欢迎提出 (｡･ω･｡)
-
-    2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
-    2022-10-7：修复战役第一张图刷出 Boss 后下一张图因关闭无效时钟引发的报错，修复当 minFlow 值为 0 时读取 minFlow - 1 索引位置引发的报错，优化 Witch 位置有效性判断
-    2022-10-12：将原本战役无论是否静态 Boss 地图都接管 director_no_bosses Cvar 更改为仅非静态 Boss 地图接管
-  
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
     boss_witch_can_spawn 1：是否允许插件生成 Witch
