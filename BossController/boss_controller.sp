@@ -15,14 +15,14 @@
 #define PROMPT_DIST 5
 #define SPAWN_ATTEMPT 15
 #define MENU_DISPLAY_TIME 20
-#define DEBUG_ALL 0
+#define DEBUG_ALL 1
 
 public Plugin myinfo = 
 {
 	name 			= "Boss Controller",
 	author 			= "CanadaRox，Sir，devilesk，Derpduck，Forgetest，Spoon，夜羽真白",
 	description 	= "整合 witch_and_tankifier 与 boss_percent 与 boss_vote 的插件，战役或对抗 / 有无 mapInfo.txt 文件都允许在固定路程刷新 boss",
-	version 		= "1.0.1.0 - SNAPSHOT",
+	version 		= "1.0.1.1 - SNAPSHOT",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -142,11 +142,13 @@ public void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char
 	{
 		if (g_hStopDirector.BoolValue)
 		{
-			SetConVarInt(FindConVar("director_no_bosses"), 0);
+			SetCommandFlags("director_no_bosses", GetCommandFlags("director_no_bosses") & ~FCVAR_CHEAT);
+			ServerCommand("director_no_bosses 0");
 		}
 		else
 		{
-			SetConVarInt(FindConVar("director_no_bosses"), 1);
+			SetCommandFlags("director_no_bosses", GetCommandFlags("director_no_bosses") & ~FCVAR_CHEAT);
+			ServerCommand("director_no_bosses 1");
 		}
 	}
 }
@@ -238,7 +240,7 @@ public Action Cmd_BossVote(int client, int args)
 	witchActFlow = StringToInt(witchFlow);
 	#if (DEBUG_ALL)
 	{
-		LogMessage("[Boss-Controller]：路程是否有效：%b %b", IsValidTankFlow(tankActFlow), IsValidWitchFlow(witchActFlow, false));
+		LogMessage("[Boss-Controller]：路程是否有效：%b %b，是否允许更改 boss 位置：%b %b", IsValidTankFlow(tankActFlow), IsValidWitchFlow(witchActFlow, false), canSetTank, canSetWitch);
 	}
 	#endif
 	if (IsStaticTankMap(curMapName))
@@ -246,10 +248,18 @@ public Action Cmd_BossVote(int client, int args)
 		canSetTank = false;
 		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：%s 为静态坦克地图，坦克刷新路程将不会更改", curMapName);
 	}
+	else
+	{
+		canSetTank = tankActFlow > 0 ? true : false;
+	}
 	if (IsStaticWitchMap(curMapName))
 	{
 		canSetWitch = false;
 		CPrintToChat(client, "{B}<{G}BossVote{B}>：{W}当前地图：%s 为静态女巫地图，女巫刷新路程将不会更改", curMapName);
+	}
+	else
+	{
+		canSetWitch = witchActFlow > 0 ? true : false;
 	}
 	if ((!IsStaticTankMap(curMapName) && tankActFlow > 0 && !IsValidTankFlow(tankActFlow)) || (!IsStaticWitchMap(curMapName) && witchActFlow > 0 && !IsValidWitchFlow(witchActFlow, false)))
 	{
@@ -534,10 +544,11 @@ public void OnMapStart()
 	{
 		#if (DEBUG_ALL)
 		{
-			LogMessage("[Boss-Controller]：当前非对抗模式，且不允许 boss 刷新，更改 boss 刷新 Cvar 为 0");
+			LogMessage("[Boss-Controller]：当前非对抗模式，且不允许 boss 刷新，更改 boss 刷新 Cvar：director_no_bosses 为 1");
 		}
 		#endif
-		SetConVarInt(FindConVar("director_no_bosses"), 1);
+		SetCommandFlags("director_no_bosses", GetCommandFlags("director_no_bosses") & ~FCVAR_CHEAT);
+		ServerCommand("director_no_bosses 1");
 	}
 }
 public void OnMapEnd()
@@ -851,13 +862,16 @@ public Action Timer_GetBossFlow(Handle timer)
 	}
 	else
 	{
+		// 设置坦克女巫允许调整为 true
+		canSetTank = canSetWitch = true;
 		// 没有 mapinfo，直接随机一个在 minFlow 和 maxFlow 之间的位置
 		nowTankFlow = GetRandomSpawnPos(lTankFlows);
 		if (g_hWitchAvoidTank.IntValue > 0)
 		{
 			for (int i = nowTankFlow - (g_hWitchAvoidTank.IntValue / 2); i <= nowTankFlow + (g_hWitchAvoidTank.IntValue / 2); i++)
 			{
-				lWitchFlows.Set(i, -1);
+				// i 大于等于 0 且小于集合长度，保证不越界，设置为 -1
+				if (i >= 0 && i < lWitchFlows.Length) { lWitchFlows.Set(i, -1); }
 			}
 		}
 		nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
@@ -1029,6 +1043,11 @@ void SpawnBoss(int class)
 		{
 			if (L4D_GetRandomPZSpawnPosition(target, class, SPAWN_ATTEMPT, spawnPos))
 			{
+				#if (DEBUG_ALL)
+				{
+					LogMessage("[Boss-Controller]：找到一个有效的 %s 刷新位置：%.2f %.2f %.2f", class == ZC_TANK ? "坦克" : "女巫", spawnPos[0], spawnPos[1], spawnPos[2]);
+				}
+				#endif
 				break;
 			}
 		}
@@ -1044,13 +1063,23 @@ void SpawnBoss(int class)
 	}
 	if (class == view_as<int>(ZC_TANK))
 	{
-		L4D2_SpawnTank(spawnPos, NULL_VECTOR);
+		int tankId = L4D2_SpawnTank(spawnPos, NULL_VECTOR);
 		spawnedTank = true;
+		#if (DEBUG_ALL)
+		{
+			LogMessage("[Boss-Controller]：已在：%.2f %.2f %.2f 位置刷新坦克，坦克 ID：%d", spawnPos[0], spawnPos[1], spawnPos[2], tankId);
+		}
+		#endif
 	}
 	else if (class == view_as<int>(ZC_WITCH))
 	{
-		L4D2_SpawnWitch(spawnPos, NULL_VECTOR);
+		int witchId = L4D2_SpawnWitch(spawnPos, NULL_VECTOR);
 		spawnedWitch = true;
+		#if (DEBUG_ALL)
+		{
+			LogMessage("[Boss-Controller]：已在：%.2f %.2f %.2f 位置刷新女巫，女巫 ID：%d", spawnPos[0], spawnPos[1], spawnPos[2], witchId);
+		}
+		#endif
 	}
 }
 void PrintBossPercent(int type, int client = -1)
@@ -1240,7 +1269,9 @@ bool GetTankAvoidInterval(int interval[2])
 {
 	if (g_hWitchAvoidTank.FloatValue != 0.0)
 	{
-		float flow = L4D2Direct_GetVSTankFlowPercent(0);
+		// 使用当前坦克位置计算，静态坦克地图为 0，非静态坦克地图则一定大于 0
+		float flow = 0.0;
+		if (nowTankFlow > 0) { flow = float(nowTankFlow); }
 		if (flow != 0.0)
 		{
 			interval[0] = RoundToFloor((flow * 100.0) - (g_hWitchAvoidTank.FloatValue / 2.0));
@@ -1288,6 +1319,12 @@ bool IsValidWitchFlow(int flow, bool ignoreBlock)
 		int interval[2] = {0};
 		if (GetTankAvoidInterval(interval) && IsValidInterval(interval))
 		{
+			#if (DEBUG_ALL)
+			{
+				LogMessage("[Boss-Controller]：检测当前女巫路程是否有效，禁止刷新坦克路程：%d - %d，flow 是否大于 0：%b，集合长度大于 0：%b，是否小于 Get(0)：%b，是否大于 Get(n - 1)：%b，\
+				flow 是否在 interval 外：%b", interval[0], interval[1], flow >= 0, lWitchFlows.Length > 0, flow <= lWitchFlows.Get(0), flow >= lWitchFlows.Get(lWitchFlows.Length - 1), (flow <= interval[0] - 1 || flow >= interval[1] + 1));
+			}
+			#endif
 			return (flow >= 0 && lWitchFlows.Length > 0 && flow <= lWitchFlows.Get(0) && flow >= lWitchFlows.Get(lWitchFlows.Length - 1) && (flow <= interval[0] - 1 || flow >= interval[1] + 1));
 		}
 		return (flow >= 0 && lWitchFlows.Length > 0 && flow <= lWitchFlows.Get(0) && flow >= lWitchFlows.Get(lWitchFlows.Length - 1));
