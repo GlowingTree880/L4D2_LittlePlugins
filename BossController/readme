@@ -17,6 +17,7 @@
                 修复无 mapInfo.txt 下女巫集合越界的问题，更改检测 Tank Ban Witch 刷新范围从使用 L4D2Direct_GetVSTankFlowPercent() 到直接使用 nowTankFlow
                 增加无 mapInfo.txt 下对静态坦克女巫地图的支持
                 增加只有一方是静态地图时对导演模式产生而非插件刷出的固定路程 boss 的禁止刷新
+                修复无 mapInfo.txt 对抗模式下，开启 boss_versus_consist 两轮 Boss 刷新位置仍有不同的情况
 
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
