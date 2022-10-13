@@ -26,7 +26,7 @@ ConVar g_hVoteTeam, g_hVoteDisplayToSpec, g_hVotePercent, g_hBanJoinSur;
 // Ints
 int g_iTargetClient = 0;
 // Bools
-bool g_bHasBanJoin[MAXPLAYERS + 1] = false;
+bool g_bHasBanJoin[MAXPLAYERS + 1] = {false};
 // Floats
 float g_fBanJoinTime[MAXPLAYERS + 1] = {0.0};
 
@@ -50,7 +50,7 @@ public Action Cmd_CallSpecVote(int client, int args)
 	{
 		Menu menu = new Menu(VoteSpecMenuHandler);
 		menu.SetTitle("请选择需要移到旁观的玩家：");
-		char player_name[MAX_NAME_LENGTH] = '\0', client_userid[32] = '\0';
+		char player_name[MAX_NAME_LENGTH] = {'\0'}, client_userid[32] = {'\0'};
 		// 投票列表，旁观者除外
 		for (int index = 1; index <= MaxClients; index++)
 		{
@@ -68,6 +68,7 @@ public Action Cmd_CallSpecVote(int client, int args)
 	{
 		PrintToServer("[提示]：投票旁观的指令不允许在服务器控制台使用");
 	}
+	return Plugin_Continue;
 }
 
 public Action Cmd_AdminCallSpec(int client, int args)
@@ -77,7 +78,7 @@ public Action Cmd_AdminCallSpec(int client, int args)
 		ReplyToCommand(client, "[提示]：用法：sm_forcespec [客户端id]");
 		return Plugin_Handled;
 	}
-	char argument[50] = '\0';
+	char argument[50] = {'\0'};
 	GetCmdArgString(argument, sizeof(argument));
 	if (IsCharNumeric(argument[0]))
 	{
@@ -99,7 +100,7 @@ public int VoteSpecMenuHandler(Menu menu, MenuAction action, int client, int ite
 {
 	if (action == MenuAction_Select)
 	{
-		char item_id[16] = '\0';
+		char item_id[16] = {'\0'};
 		int target_user_id = 0, target_client = 0;
 		menu.GetItem(item, item_id, sizeof(item_id));
 		target_user_id = StringToInt(item_id);
@@ -109,12 +110,12 @@ public int VoteSpecMenuHandler(Menu menu, MenuAction action, int client, int ite
 			if (!IsNewBuiltinVoteAllowed())
 			{
 				CPrintToChat(client, "{O}[错误]：{LG}现在无法进行新的投票");
-				return;
+				return 0;
 			}
 			if (IsBuiltinVoteInProgress())
 			{
 				CPrintToChat(client, "{O}[错误]：{LG}现在已经有一个投票正在进行，无法进行新的投票");
-				return;
+				return 0;
 			}
 			// 统计参与投票的人数
 			int player_num = 0;
@@ -131,7 +132,7 @@ public int VoteSpecMenuHandler(Menu menu, MenuAction action, int client, int ite
 				}
 			}
 			// 发起投票
-			char vote_title[64] = '\0';
+			char vote_title[64] = {'\0'};
 			g_iTargetClient = target_client;
 			FormatEx(vote_title, sizeof(vote_title), "将玩家：%N 移动到旁观位置?", target_client);
 			Handle hVoteSpec = CreateBuiltinVote(VoteSpecHandler_Action, BuiltinVoteType_Custom_YesNo, BuiltinVoteAction_Cancel | BuiltinVoteAction_VoteEnd | BuiltinVoteAction_End);
@@ -148,6 +149,7 @@ public int VoteSpecMenuHandler(Menu menu, MenuAction action, int client, int ite
 			CPrintToChat(client, "{O}[错误]：{LG}选择的玩家 {O}%N 不是有效的玩家", target_client);
 		}
 	}
+	return 0;
 }
 public int VoteSpecHandler_Action(Handle vote, BuiltinVoteAction action, int client, int item)
 {
@@ -163,6 +165,7 @@ public int VoteSpecHandler_Action(Handle vote, BuiltinVoteAction action, int cli
 			DisplayBuiltinVoteFail(vote, view_as<BuiltinVoteFailReason>(client));
 		}
 	}
+	return 0;
 }
 public int VoteSpecHandler_Result(Handle vote, int num_votes, int num_clients, const int[][] client_info, int num_items, const int[][] item_info)
 {
@@ -173,19 +176,21 @@ public int VoteSpecHandler_Result(Handle vote, int num_votes, int num_clients, c
 		{
 			if (item_info[index][BUILTINVOTEINFO_ITEM_VOTES] > num_votes * RoundToNearest(g_hVotePercent.FloatValue * 0.01))
 			{
-				char pass_title[64] = '\0';
+				char pass_title[64] = {'\0'};
 				FormatEx(pass_title, sizeof(pass_title), "正在将玩家：%N 移动到旁观位置", g_iTargetClient);
 				DisplayBuiltinVotePass(vote, pass_title);
 				ChangeClientTeam(g_iTargetClient, view_as<int>(TEAM_SPECTATOR));
 				g_fBanJoinTime[g_iTargetClient] = GetGameTime();
 				g_bHasBanJoin[g_iTargetClient] = true;
-				g_iTargetClient = 0;
 				CPrintToChatAll("{O}[提示]：{LG}已将玩家 {O}%N {LG}移到旁观", g_iTargetClient);
-				return;
+				// 重置 g_iTargetClient
+				g_iTargetClient = 0;
+				return 0;
 			}
 		}
 	}
 	DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
+	return 0;
 }
 
 public Action evt_TeamChange(Event event, const char[] name, bool dontBroadcast)
@@ -225,17 +230,17 @@ bool Client_VotePermissionCheck(int client)
 {
 	if (IsValidClient(client) && !IsFakeClient(client))
 	{
-		if (GetClientTeam(client) == view_as<int>(TEAM_SPECTATOR) && g_hVoteTeam.IntValue != 1 || g_hVoteTeam.IntValue != 4)
+		if (GetClientTeam(client) == view_as<int>(TEAM_SPECTATOR) && g_hVoteTeam.IntValue != 1 && g_hVoteTeam.IntValue != 4)
 		{
 			CPrintToChat(client, "{O}[提示]：{LG}当前不允许旁观者发起旁观投票");
 			return false;
 		}
-		if (GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && g_hVoteTeam.IntValue != 2 || g_hVoteTeam.IntValue != 4)
+		if (GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && g_hVoteTeam.IntValue != 2 && g_hVoteTeam.IntValue != 4)
 		{
 			CPrintToChat(client, "{O}[提示]：{LG}当前不允许生还者发起旁观投票");
 			return false;
 		}
-		if (GetClientTeam(client) == view_as<int>(TEAM_INFECTED) && g_hVoteTeam.IntValue != 3 || g_hVoteTeam.IntValue != 4)
+		if (GetClientTeam(client) == view_as<int>(TEAM_INFECTED) && g_hVoteTeam.IntValue != 3 && g_hVoteTeam.IntValue != 4)
 		{
 			CPrintToChat(client, "{O}[提示]：{LG}当前不允许感染者发起旁观投票");
 			return false;
