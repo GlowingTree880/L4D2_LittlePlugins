@@ -6,4 +6,7 @@ SpecVote_DisplayToSpec：1 旁观者是否允许参与投票
 SpecVote_PassPercent：50 需要达到这么多比率的通过票数投票才会通过
 SpecVote_BanJoinSurvivorTime：10 被投票至旁观的玩家将会在这个时间（单位：分钟）内不得加入生还与特感阵营
 
+更新日志：
+  2022-10-13：更新为 1.11 语法，修复阵营判断错误问题
+
 需要 builtinvotes 拓展的支持，treeutil.sp 位于 Ai_HardSi 文件夹内
