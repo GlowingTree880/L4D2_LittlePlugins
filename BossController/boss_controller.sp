@@ -828,7 +828,7 @@ public Action Timer_GetBossFlow(Handle timer)
 			{
 				for (int i = nowTankFlow - (g_hWitchAvoidTank.IntValue / 2); i <= nowTankFlow + (g_hWitchAvoidTank.IntValue / 2); i++)
 				{
-					if (lWitchFlows.FindValue(i)) lWitchFlows.Set(i, -1);
+					if (i >= 0 && i < lWitchFlows.Length) lWitchFlows.Set(i, -1);
 				}
 			}
 			// 检查允许刷新集合中所有元素是否都为 -1 禁止刷新标识
@@ -1074,11 +1074,7 @@ void DynamicAdjustWtichPercent(int tankFlow)
 			// 找到新的被坦克位置阻挡的女巫范围，如果在集合中能找到索引，设置为 -1，否则跳出
 			for (int i = tankFlow + (g_hWitchAvoidTank.IntValue / 2); i >= tankFlow - (g_hWitchAvoidTank.IntValue / 2); i--)
 			{
-				if (lWitchFlows.FindValue(i))
-				{
-					lWitchFlows.Set(i, -1);
-				}
-				break;
+				if (i >= 0 && i < lWitchFlows.Length) { lWitchFlows.Set(i, -1); }
 			}
 			// 找到原来被坦克范围阻挡的不能刷女巫的范围重新调整为可以刷女巫，此时集合已经处理完毕，需要在 minFlow 和 maxFlow 之间进行添加，而不是 0 - 100
 			int interval[2] = {0};
@@ -1158,6 +1154,12 @@ public Action Timer_SpawnTank(Handle timer)
 			SpawnBoss(view_as<int>(ZC_TANK));
 			return Plugin_Stop;
 		}
+		else if (L4D_IsVersusMode() && survivorDist >= nowTankFlow && !spawnedTank)
+		{
+			// 对抗模式下，超过这个距离就算刷出了，设置 spawned 为真，结束时钟
+			spawnedTank = true;
+			return Plugin_Stop;
+		}
 		else if (g_hEnablePrompt.BoolValue && (nowTankFlow - PROMPT_DIST <= survivorDist < nowTankFlow) && survivorDist >= survivorPrompDist)
 		{
 			CPrintToChatAll("{LG}当前：{O}%d%%，{LG}Tank 将于：{O}%d%% {LG}位置刷新", survivorDist, nowTankFlow);
@@ -1178,6 +1180,11 @@ public Action Timer_SpawnWitch(Handle timer)
 		if (!L4D_IsVersusMode() && survivorDist >= nowWitchFlow && !spawnedWitch)
 		{
 			SpawnBoss(view_as<int>(ZC_WITCH));
+			return Plugin_Stop;
+		}
+		else if (L4D_IsVersusMode() && survivorDist >= nowWitchFlow && !spawnedWitch)
+		{
+			spawnedWitch = true;
 			return Plugin_Stop;
 		}
 		else if (g_hEnablePrompt.BoolValue && (nowWitchFlow - PROMPT_DIST <= survivorDist < nowWitchFlow) && survivorDist >= survivorPrompDist)
@@ -1258,8 +1265,8 @@ void PrintBossPercent(int type, int client = -1)
 {
 	char tankStr[64] = {'\0'}, witchStr[64] = {'\0'};
 	char hasSpawnedTank[32] = {'\0'}, hasSpawnedWitch[32] = {'\0'};
-	spawnedTank ? FormatEx(hasSpawnedTank, sizeof(hasSpawnedTank), "已刷新") : FormatEx(hasSpawnedTank, sizeof(hasSpawnedTank), "未刷新");
-	spawnedWitch ? FormatEx(hasSpawnedWitch, sizeof(hasSpawnedWitch), "已刷新") : FormatEx(hasSpawnedWitch, sizeof(hasSpawnedWitch), "未刷新");
+	spawnedTank == true ? FormatEx(hasSpawnedTank, sizeof(hasSpawnedTank), "已刷新") : FormatEx(hasSpawnedTank, sizeof(hasSpawnedTank), "未刷新");
+	spawnedWitch == true ? FormatEx(hasSpawnedWitch, sizeof(hasSpawnedWitch), "已刷新") : FormatEx(hasSpawnedWitch, sizeof(hasSpawnedWitch), "未刷新");
 	if (nowTankFlow > 0)
 	{
 		FormatEx(tankStr, sizeof(tankStr), "{G}Tank 刷新：{O}%d%%（%s）", nowTankFlow, hasSpawnedTank);
