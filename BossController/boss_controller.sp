@@ -753,20 +753,24 @@ public Action Timer_GetBossFlow(Handle timer)
 					LogMessage("[Boss-Controller]：当前允许坦克刷新，随机一个坦克刷新位置：%d 路程", nowTankFlow);
 				}
 				#endif
-				if (!InVersusSecondRound() || (!g_hVersusConsist.BoolValue && InVersusSecondRound()))
+				// 开启对抗模式刷新对齐，则记录第一轮刷新位置，第二轮时将更改为第一轮刷新位置
+				if (g_hVersusConsist.BoolValue)
 				{
-					versusFirstTankFlow = nowTankFlow;
-					SetTankPercent(nowTankFlow);
-				}
-				else
-				{
-					#if (DEBUG_ALL)
+					if (!InVersusSecondRound())
 					{
-						LogMessage("[Boss-Controller]：当前是对抗第二局，把坦克刷新位置更改为与第一局相同：%d", versusFirstTankFlow);
+						versusFirstTankFlow = nowTankFlow;
+						SetTankPercent(nowTankFlow);
 					}
-					#endif
-					nowTankFlow = versusFirstTankFlow;
-					SetTankPercent(versusFirstTankFlow);
+					else
+					{
+						#if (DEBUG_ALL)
+						{
+							LogMessage("[Boss-Controller]：当前是对抗第二局，把坦克刷新位置更改为与第一局相同：%d", versusFirstTankFlow);
+						}
+						#endif
+						nowTankFlow = versusFirstTankFlow;
+						SetTankPercent(versusFirstTankFlow);
+					}
 				}
 			}
 		}
@@ -851,20 +855,24 @@ public Action Timer_GetBossFlow(Handle timer)
 					LogMessage("[Boss-Controller]：当前允许女巫刷新，随机一个女巫刷新位置：%d 路程", nowWitchFlow);
 				}
 				#endif
-				if (!InVersusSecondRound() || (!g_hVersusConsist.BoolValue && InVersusSecondRound()))
+				// 非对抗第二轮，且开启 g_hVersusConsist 情况，记录第一轮刷新位置
+				if (g_hVersusConsist.BoolValue)
 				{
-					versusFirstWitchFlow = nowWitchFlow;
-					SetWitchPercent(nowWitchFlow);
-				}
-				else
-				{
-					#if (DEBUG_ALL)
+					if (!InVersusSecondRound())
 					{
-						LogMessage("[Boss-Controller]：当前是对抗第二局，把女巫刷新位置更改为与第一局相同：%d", versusFirstWitchFlow);
+						versusFirstWitchFlow = nowWitchFlow;
+						SetWitchPercent(nowWitchFlow);
 					}
-					#endif
-					nowWitchFlow = versusFirstWitchFlow;
-					SetWitchPercent(versusFirstWitchFlow);
+					else
+					{
+						#if (DEBUG_ALL)
+						{
+							LogMessage("[Boss-Controller]：当前是对抗第二局，把女巫刷新位置更改为与第一局相同：%d", versusFirstWitchFlow);
+						}
+						#endif
+						nowWitchFlow = versusFirstWitchFlow;
+						SetWitchPercent(versusFirstWitchFlow);
+					}
 				}
 			}
 		}
@@ -896,16 +904,43 @@ public Action Timer_GetBossFlow(Handle timer)
 				}
 			}
 			nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
-			#if (DEBUG_ALL)
-			{
-				LogMessage("[Boss-Controller]：当前地图：%s 不是静态坦克女巫地图，并且没有 mapinfo 文件，随机坦克位置：%d，随机女巫位置：%d", curMapName, nowTankFlow, nowWitchFlow);
-			}
-			#endif
 			if (L4D_IsVersusMode())
 			{
-				SetTankPercent(nowTankFlow);
-				SetWitchPercent(nowWitchFlow);
+				if (g_hVersusConsist.BoolValue)
+				{
+					if (!InVersusSecondRound())
+					{
+						versusFirstTankFlow = nowTankFlow;
+						versusFirstWitchFlow = nowWitchFlow;
+						SetTankPercent(nowTankFlow);
+						SetWitchPercent(nowWitchFlow);
+						#if (DEBUG_ALL)
+						{
+							LogMessage("[Boss-Controller]：当前地图：%s 不是静态坦克女巫地图，并且没有 mapinfo 文件，且为对抗模式，随机坦克位置：%d，随机女巫位置：%d", curMapName, nowTankFlow, nowWitchFlow);
+						}
+						#endif
+					}
+					else
+					{
+						nowTankFlow = versusFirstTankFlow;
+						nowWitchFlow = versusFirstWitchFlow;
+						SetTankPercent(versusFirstTankFlow);
+						SetWitchPercent(versusFirstWitchFlow);
+						#if (DEBUG_ALL)
+						{
+							LogMessage("[Boss-Controller]：当前地图：%s 不是静态坦克女巫地图，并且没有 mapinfo 文件，且为对抗模式，将坦克位置更改为与第一局相同：%d \
+							将女巫位置更改为与第一局相同：%d", curMapName, versusFirstTankFlow, versusFirstWitchFlow);
+						}
+						#endif
+					}
+				}
+				return Plugin_Continue;
 			}
+			#if (DEBUG_ALL)
+			{
+				LogMessage("[Boss-Controller]：当前地图：%s 不是静态坦克女巫地图，并且没有 mapinfo 文件，且非对抗模式，随机坦克位置：%d，随机女巫位置：%d", curMapName, nowTankFlow, nowWitchFlow);
+			}
+			#endif
 		}
 		// 当前地图是静态坦克地图且非静态女巫地图
 		else if (IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName))
@@ -943,6 +978,29 @@ public Action Timer_GetBossFlow(Handle timer)
 		{
 			// 坦克无论在什么时候都可以随机刷新
 			nowTankFlow = nowTankFlow = GetRandomSpawnPos(lTankFlows);
+			// 不是静态坦克地图，对抗模式下
+			if (L4D_IsVersusMode())
+			{
+				if (g_hVersusConsist.BoolValue)
+				{
+					if (!InVersusSecondRound())
+					{
+						versusFirstTankFlow = nowTankFlow;
+						SetTankPercent(nowTankFlow);
+					}
+					else
+					{
+						#if (DEBUG_ALL)
+						{
+							LogMessage("[Boss-Controller]：当前是对抗第二局，并且没有 mapinfo 文件，且当前地图：%s 是静态女巫地图，把坦克刷新位置更改为与第一局相同：%d", curMapName, versusFirstWitchFlow);
+						}
+						#endif
+						nowTankFlow = versusFirstTankFlow;
+						SetTankPercent(versusFirstTankFlow);
+					}
+				}
+				return Plugin_Continue;
+			}
 			#if (DEBUG_ALL)
 			{
 				LogMessage("[Boss-Controller]：当前地图：%s 是静态女巫地图且非静态坦克地图，非对抗模式，并且没有 mapinfo 文件，随机坦克位置：%d", curMapName, nowTankFlow);
