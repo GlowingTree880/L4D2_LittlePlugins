@@ -772,8 +772,11 @@ public Action Timer_GetBossFlow(Handle timer)
 						SetTankPercent(versusFirstTankFlow);
 					}
 				}
-				// 没开对抗 Boss 对齐情况，直接设置坦克位置
-				SetTankPercent(nowTankFlow);
+				else
+				{
+					// 没开对抗 Boss 对齐情况，直接设置坦克位置
+					SetTankPercent(nowTankFlow);
+				}
 			}
 		}
 		else
@@ -876,7 +879,10 @@ public Action Timer_GetBossFlow(Handle timer)
 						SetWitchPercent(versusFirstWitchFlow);
 					}
 				}
-				SetWitchPercent(nowWitchFlow);
+				else
+				{
+					SetWitchPercent(nowWitchFlow);
+				}
 			}
 		}
 		else
@@ -1502,9 +1508,9 @@ public Action L4D_OnSpawnTank(const float vecPos[3], const float vecAng[3])
 {
 	if (g_hTankCanSpawn.BoolValue)
 	{
-		// 允许坦克刷新且非静态坦克地图，且是静态女巫地图，插件可以接管坦克刷新，此时 director_no_bosses 设置为 0，判断是否插件刷新的克，不是则阻止生成
+		// 非对抗模式下，允许坦克刷新且非静态坦克地图，且是静态女巫地图，插件可以接管坦克刷新，此时 director_no_bosses 设置为 0，判断是否插件刷新的克，不是则阻止生成
 		// 允许刷坦克，允许刷女巫且都是静态地图时，返回 Plugin_Continue 可刷新
-		if ((!IsStaticTankMap(curMapName) && IsStaticWitchMap(curMapName)) && IsZeroVector(tankSpawnPos))
+		if (!L4D_IsVersusMode() && (!IsStaticTankMap(curMapName) && IsStaticWitchMap(curMapName)) && IsZeroVector(tankSpawnPos))
 		{
 			#if (DEBUG_ALL)
 			{
@@ -1522,7 +1528,7 @@ public Action L4D_OnSpawnWitch(const float vecPos[3], const float vecAng[3])
 {
 	if (g_hWitchCanSpawn.BoolValue)
 	{
-		if ((IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName)) && IsZeroVector(witchSpawnPos)) { return Plugin_Handled; }
+		if (!L4D_IsVersusMode() && (IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName)) && IsZeroVector(witchSpawnPos)) { return Plugin_Handled; }
 		return Plugin_Continue;
 	}
 	return Plugin_Handled;
@@ -1531,7 +1537,7 @@ public Action L4D2_OnSpawnWitchBride(const float vecPos[3], const float vecAng[3
 {
 	if (g_hWitchCanSpawn.BoolValue)
 	{
-		if ((IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName)) && IsZeroVector(witchSpawnPos)) { return Plugin_Handled; }
+		if (!L4D_IsVersusMode() && (IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName)) && IsZeroVector(witchSpawnPos)) { return Plugin_Handled; }
 		return Plugin_Continue;
 	}
 	return Plugin_Handled;
