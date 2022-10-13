@@ -576,6 +576,33 @@ stock bool InVersusSecondRound()
 {
 	return view_as<bool>(GameRules_GetProp("m_bInSecondHalfOfRound"));
 }
+// KMP 算法求解子串位置，主串中存在子串返回子串出现索引，否则返回 -1
+stock int KMPGetPatternIndex(const char[] mainString, const char[] pattern)
+{
+	int p1 = 0, p2 = 0, i = 2, last = 0, len1 = strlen(mainString), len2 = strlen(pattern);
+	int[] next = new int[len2];
+	// 人为规定 next[0] = -1，next[1] = 0
+	next[0] = -1;
+	next[1] = 0;
+	while (i < len2)
+	{
+		if (pattern[i - 1] == pattern[last]) next[i++] = ++last;
+		else if (last > 0) last = next[last];
+		else pattern[i++] = 0;
+	}
+	// 遍历两个字符串
+	while (p1 < len1 && p2 < len2)
+	{
+		if (mainString[p1] == pattern[p2])
+		{
+			p1++;
+			p2++;
+		}
+		else if (next[p2] == -1) p1++;
+		else p2 = next[p2];
+	}
+	return p2 == len2 ? p1 - len2 : -1;
+}
 
 // *************************
 // 			向量类
@@ -591,6 +618,11 @@ stock void CopyVectors(float origin[3], float result[3])
 stock void ZeroVector(float origin[3])
 {
 	origin = NULL_VECTOR;
+}
+// 是否为零向量
+stock bool IsZeroVector(float origin[3])
+{
+	return origin[0] == NULL_VECTOR[0] && origin[1] == NULL_VECTOR[1] && origin[2] == NULL_VECTOR[2];
 }
 
 // *************************
