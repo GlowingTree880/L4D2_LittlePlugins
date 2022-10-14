@@ -2,11 +2,14 @@
 
   注：
     目录下的 boss_spawner.smx 插件为 zoneMod 下 confoglcompmod.smx 中整合的 BossSpawning.sp，在对抗中第一轮 boss 刷新时，记录 boss 刷新的位置，第二轮，刷新 boss 时将它们传送到与第一轮相同的位置（可选插件，与 boss_controller.smx 配合使用效果更佳，战役模式请不要使用，否则重启关卡后将会无法刷新 Boss）
+  
   插件依赖头文件位置：
     boss_controller.sp 需要 builtinvotes.inc 支持，可以在 zoneMod 中找到这个 inc
     treeutil.sp 在 AiHardSi 目录下
     colors.inc 在 TankStatusPanel 目录下
     本地测试环境：2.2.2.5 (left4dead2)，SourceMod Version: 1.11.0.6837
+    
+  插件默认打印 Boss 刷新日志到 logs 文件夹下，如果不需要打印日志，请更改源码第 18 行：#define DEBUG_ALL 1 为 #define DEBUG_ALL 0
   
   更新日志：
     2022-9-29：上传 boss_spawner.smx 与 boss_controller.smx（版本：1.0.1.0 - SNAPSHOT）
