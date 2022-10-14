@@ -526,8 +526,7 @@ public Action Cmd_ForceWitch(int client, int args)
 
 public void OnMapStart()
 {
-	// 出了安全屋，没有刷克，且坦克时钟不为空，表示存在时钟，不能直接删除时钟，如果上一把先刷克，刷出来后 return Plugin_Stop 时钟已经停止，tankTimer 不为 INVALID_HANDLE 且记录的为无效句柄，删除报错
-	// 刷了克，spawnedTank 或 spawnedWitch 记录为 true，已经返回 Plugin_Stop，可直接置空
+	// delete 会先进行是否为 null 检测，可直接使用 delete 删除时钟句柄
 	delete tankTimer;
 	delete witchTimer;
 	GetCurrentMap(curMapName, sizeof(curMapName));
@@ -1147,7 +1146,7 @@ public Action Timer_SpawnTank(Handle timer)
 		}
 		else if (L4D_IsVersusMode() && survivorDist >= nowTankFlow && !spawnedTank)
 		{
-			// 对抗模式下，超过这个距离就算刷出了，设置 spawned 为真，结束时钟
+			// 对抗模式下，超过这个距离就算刷出了，设置 spawned 为真，结束时钟前，先将句柄设置为 null，防止计时器已经停止但仍然记录不为 null 的情况，删除出错
 			spawnedTank = true;
 			tankTimer = null;
 			return Plugin_Stop;
