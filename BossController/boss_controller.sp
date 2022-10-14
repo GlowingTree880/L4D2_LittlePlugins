@@ -22,11 +22,11 @@ public Plugin myinfo =
 	name 			= "Boss Controller",
 	author 			= "CanadaRox，Sir，devilesk，Derpduck，Forgetest，Spoon，夜羽真白",
 	description 	= "整合 witch_and_tankifier 与 boss_percent 与 boss_vote 的插件，战役或对抗 / 有无 mapInfo.txt 文件都允许在固定路程刷新 boss",
-	version 		= "1.0.1.1 - SNAPSHOT",
+	version 		= "1.0.1.2 - SNAPSHOT",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
-Handle tankTimer = INVALID_HANDLE, witchTimer = INVALID_HANDLE;
+Handle tankTimer = null, witchTimer = null;
 ConVar g_hVsBossBuffer, g_hVsBossFlowMin, g_hVsBossFlowMax, g_hTankCanSpawn, g_hWitchCanSpawn, g_hWitchAvoidTank, g_hVersusConsist, g_hCanVoteBoss, g_hEnablePrompt, g_hEnableDirector;
 int nowTankFlow = 0, nowWitchFlow = 0, survivorPrompDist = 0, /* readyUpIndex = -1, */ versusFirstTankFlow = 0, versusFirstWitchFlow = 0, dkrFirstTankFlow = 0, dkrFirstWitchFlow = 0,
 tankActFlow = -1, witchActFlow = -1, minFlow = -1, maxFlow = -1;
@@ -528,15 +528,8 @@ public void OnMapStart()
 {
 	// 出了安全屋，没有刷克，且坦克时钟不为空，表示存在时钟，不能直接删除时钟，如果上一把先刷克，刷出来后 return Plugin_Stop 时钟已经停止，tankTimer 不为 INVALID_HANDLE 且记录的为无效句柄，删除报错
 	// 刷了克，spawnedTank 或 spawnedWitch 记录为 true，已经返回 Plugin_Stop，可直接置空
-	if (isLeftSafeArea && !spawnedTank && tankTimer != INVALID_HANDLE)
-	{
-		delete tankTimer;
-	}
-	if (isLeftSafeArea && !spawnedWitch && witchTimer != INVALID_HANDLE)
-	{
-		delete witchTimer;
-	}
-	tankTimer = witchTimer = INVALID_HANDLE;
+	delete tankTimer;
+	delete witchTimer;
 	GetCurrentMap(curMapName, sizeof(curMapName));
 	isDKR = IsDKR();
 	isLeftSafeArea = spawnedTank = spawnedWitch = false;
@@ -578,15 +571,8 @@ public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	/* isReadyUpAdded = false;
 	readyUpIndex = -1; */
-	if (isLeftSafeArea && !spawnedTank && tankTimer != INVALID_HANDLE)
-	{
-		delete tankTimer;
-	}
-	if (isLeftSafeArea && !spawnedWitch && witchTimer != INVALID_HANDLE)
-	{
-		delete witchTimer;
-	}
-	tankTimer = witchTimer = INVALID_HANDLE;
+	delete tankTimer;
+	delete witchTimer;
 	isLeftSafeArea = spawnedTank = spawnedWitch = false;
 	nowTankFlow = nowWitchFlow = survivorPrompDist = 0;
 	ZeroVector(tankSpawnPos);
@@ -1131,20 +1117,12 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 {
 	if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName) && nowTankFlow > 0)
 	{
-		if (tankTimer != INVALID_HANDLE || tankTimer != null)
-		{
-			delete tankTimer;
-			tankTimer = INVALID_HANDLE;
-		}
+		delete tankTimer;
 		tankTimer = CreateTimer(0.5, Timer_SpawnTank, _, TIMER_REPEAT);
 	}
 	if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName) && nowWitchFlow > 0)
 	{
-		if (witchTimer != INVALID_HANDLE || witchTimer != null)
-		{
-			delete witchTimer;
-			witchTimer = INVALID_HANDLE;
-		}
+		delete witchTimer;
 		witchTimer = CreateTimer(0.5, Timer_SpawnWitch, _, TIMER_REPEAT);
 	}
 	PrintBossPercent(TYPE_ALL);
@@ -1164,12 +1142,14 @@ public Action Timer_SpawnTank(Handle timer)
 		if (!L4D_IsVersusMode() && survivorDist >= nowTankFlow && !spawnedTank)
 		{
 			SpawnBoss(view_as<int>(ZC_TANK));
+			tankTimer = null;
 			return Plugin_Stop;
 		}
 		else if (L4D_IsVersusMode() && survivorDist >= nowTankFlow && !spawnedTank)
 		{
 			// 对抗模式下，超过这个距离就算刷出了，设置 spawned 为真，结束时钟
 			spawnedTank = true;
+			tankTimer = null;
 			return Plugin_Stop;
 		}
 		else if (g_hEnablePrompt.BoolValue && (nowTankFlow - PROMPT_DIST <= survivorDist < nowTankFlow) && survivorDist >= survivorPrompDist)
@@ -1180,6 +1160,7 @@ public Action Timer_SpawnTank(Handle timer)
 	}
 	else
 	{
+		tankTimer = null;
 		return Plugin_Stop;
 	}
 	return Plugin_Continue;
@@ -1192,11 +1173,13 @@ public Action Timer_SpawnWitch(Handle timer)
 		if (!L4D_IsVersusMode() && survivorDist >= nowWitchFlow && !spawnedWitch)
 		{
 			SpawnBoss(view_as<int>(ZC_WITCH));
+			witchTimer = null;
 			return Plugin_Stop;
 		}
 		else if (L4D_IsVersusMode() && survivorDist >= nowWitchFlow && !spawnedWitch)
 		{
 			spawnedWitch = true;
+			witchTimer = null;
 			return Plugin_Stop;
 		}
 		else if (g_hEnablePrompt.BoolValue && (nowWitchFlow - PROMPT_DIST <= survivorDist < nowWitchFlow) && survivorDist >= survivorPrompDist)
@@ -1207,6 +1190,7 @@ public Action Timer_SpawnWitch(Handle timer)
 	}
 	else
 	{
+		witchTimer = null;
 		return Plugin_Stop;
 	}
 	return Plugin_Continue;
@@ -1289,11 +1273,11 @@ void PrintBossPercent(int type, int client = -1)
 	}
 	else if (IsStaticTankMap(curMapName))
 	{
-		FormatEx(tankStr, sizeof(tankStr), "{G}Tank：{O}固定");
+		FormatEx(tankStr, sizeof(tankStr), "{G}Tank：{O}固定（Static）");
 	}
 	else
 	{
-		FormatEx(tankStr, sizeof(tankStr), "{G}Tank：{O}无");
+		FormatEx(tankStr, sizeof(tankStr), "{G}Tank：{O}默认（Default）");
 	}
 	// Witch
 	if (nowWitchFlow > 0)
@@ -1306,11 +1290,11 @@ void PrintBossPercent(int type, int client = -1)
 	}
 	else if (IsStaticWitchMap(curMapName))
 	{
-		FormatEx(witchStr, sizeof(witchStr), "{G}Witch：{O}固定");
+		FormatEx(witchStr, sizeof(witchStr), "{G}Witch：{O}固定（Static）");
 	}
 	else
 	{
-		FormatEx(witchStr, sizeof(witchStr), "{G}Witch：{O}无");
+		FormatEx(witchStr, sizeof(witchStr), "{G}Witch：{O}默认（Default）");
 	}
 	// 整合两个字符串
 	if (g_hTankCanSpawn.BoolValue && g_hWitchCanSpawn.BoolValue)
@@ -1778,7 +1762,7 @@ public Action Timer_UpdateReadyUpFooter(Handle timer)
 		}
 		else
 		{
-			FormatEx(tankStr, sizeof(tankStr), "Tank：无");
+			FormatEx(tankStr, sizeof(tankStr), "Tank：默认");
 		}
 		// Witch
 		if (nowWitchFlow > 0 && !IsStaticWitchMap(curMapName))
@@ -1795,7 +1779,7 @@ public Action Timer_UpdateReadyUpFooter(Handle timer)
 		}
 		else
 		{
-			FormatEx(witchStr, sizeof(witchStr), "Witch：无");
+			FormatEx(witchStr, sizeof(witchStr), "Witch：默认");
 		}
 		// 整合两个字符串
 		if (g_hTankCanSpawn.BoolValue && g_hWitchCanSpawn.BoolValue)
