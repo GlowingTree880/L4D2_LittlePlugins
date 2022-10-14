@@ -686,8 +686,8 @@ public Action Timer_GetBossFlow(Handle timer)
 			LogMessage("[Boss-Controller]：调整 Boss 刷新范围为：%d%% - %d%%，坦克集合长度：%d，女巫集合长度：%d", minFlow, maxFlow, lTankFlows.Length, lWitchFlows.Length);
 		}
 		#endif
-		// 有 mapinfo 文件且允许刷新坦克，且不是静态坦克地图，可以随机一个坦克位置，设置kv 位置为当前地图
-		if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName) && mapInfo.JumpToKey(curMapName))
+		// 有 mapinfo 文件且允许刷新坦克，且不是静态坦克地图，可以随机一个坦克位置
+		if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName))
 		{
 			#if (DEBUG_ALL)
 			{
@@ -696,33 +696,42 @@ public Action Timer_GetBossFlow(Handle timer)
 			#endif
 			// 可以投票设置坦克位置
 			canSetTank = true;
-			// 读取 mapinfo 文件中的 tank ban flow 路程，MapInfo -> currentMap -> tankBanFlow -> 遍历下面的所有 min 和 max
-			int interval[2] = {0};
-			if (mapInfo.JumpToKey("tank_ban_flow") && mapInfo.GotoFirstSubKey())
+			// 如果当前 mapinfo 文件存在当前地图的文件，则跳转到当前地图，读取 tankBanFlow
+			if (mapInfo.JumpToKey(curMapName))
 			{
-				do
+				#if (DEBUG_ALL)
 				{
-					interval[0] = mapInfo.GetNum("min", -1);
-					interval[1] = mapInfo.GetNum("max", -1);
-					#if (DEBUG_ALL)
+					LogMessage("[Boss-Controller]：当前 mapinfo.txt 文件中存在当前地图信息：%s，进入读取信息", curMapName);
+				}
+				#endif
+				// 读取 mapinfo 文件中的 tank ban flow 路程，MapInfo -> currentMap -> tankBanFlow -> 遍历下面的所有 min 和 max
+				int interval[2] = {0};
+				if (mapInfo.JumpToKey("tank_ban_flow") && mapInfo.GotoFirstSubKey())
+				{
+					do
 					{
-						LogMessage("[Boss-Controller]：找到了一个坦克禁止刷新路程：min %d，max %d", interval[0], interval[1]);
-					}
-					#endif
-					// 禁止刷新距离有效，则将这个距离加入到集合中
-					if (IsValidInterval(interval))
-					{
-						// 找到有效的禁止刷新距离，更改原集合中禁止刷新距离为 -1
-						for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] + 1 > 100 ? 100 : interval[1] + 1); i++)
+						interval[0] = mapInfo.GetNum("min", -1);
+						interval[1] = mapInfo.GetNum("max", -1);
+						#if (DEBUG_ALL)
 						{
-							lTankFlows.Set(i, -1);
+							LogMessage("[Boss-Controller]：找到了一个坦克禁止刷新路程：min %d，max %d", interval[0], interval[1]);
+						}
+						#endif
+						// 禁止刷新距离有效，则将这个距离加入到集合中
+						if (IsValidInterval(interval))
+						{
+							// 找到有效的禁止刷新距离，更改原集合中禁止刷新距离为 -1
+							for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] + 1 > 100 ? 100 : interval[1] + 1); i++)
+							{
+								lTankFlows.Set(i, -1);
+							}
 						}
 					}
+					while (mapInfo.GotoNextKey());
 				}
-				while (mapInfo.GotoNextKey());
+				// -> mapInfo
+				mapInfo.Rewind();
 			}
-			// -> mapInfo
-			mapInfo.Rewind();
 			// 检查允许刷新集合中所有元素是否都为 -1 禁止刷新标识
 			bool canSpawnTank = false;
 			for (int i = 0; i < lTankFlows.Length; i++)
@@ -791,7 +800,7 @@ public Action Timer_GetBossFlow(Handle timer)
 			#endif
 		}
 		// 检查当前地图是否为静态女巫地图，不是，则随机一个女巫刷新位置
-		if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName) && mapInfo.JumpToKey(curMapName))
+		if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName))
 		{
 			#if (DEBUG_ALL)
 			{
@@ -800,29 +809,32 @@ public Action Timer_GetBossFlow(Handle timer)
 			#endif
 			// 可以投票设置女巫位置
 			canSetWitch = true;
-			int interval[2] = {0};
-			if (mapInfo.JumpToKey("witch_ban_flow") && mapInfo.GotoFirstSubKey())
+			if (mapInfo.JumpToKey(curMapName))
 			{
-				do
+				int interval[2] = {0};
+				if (mapInfo.JumpToKey("witch_ban_flow") && mapInfo.GotoFirstSubKey())
 				{
-					interval[0] = mapInfo.GetNum("min", -1);
-					interval[1] = mapInfo.GetNum("max", -1);
-					#if (DEBUG_ALL)
+					do
 					{
-						LogMessage("[Boss-Controller]：找到了一个禁止女巫刷新的路程：min %d，max %d", interval[0], interval[1]);
-					}
-					#endif
-					if (IsValidInterval(interval))
-					{
-						for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] == 100 ? 100 : interval[1] + 1); i++)
+						interval[0] = mapInfo.GetNum("min", -1);
+						interval[1] = mapInfo.GetNum("max", -1);
+						#if (DEBUG_ALL)
 						{
-							lWitchFlows.Set(i, -1);
+							LogMessage("[Boss-Controller]：找到了一个禁止女巫刷新的路程：min %d，max %d", interval[0], interval[1]);
+						}
+						#endif
+						if (IsValidInterval(interval))
+						{
+							for (int i = (interval[0] - 1 < 0 ? 0 : interval[0] - 1); i < (interval[1] == 100 ? 100 : interval[1] + 1); i++)
+							{
+								lWitchFlows.Set(i, -1);
+							}
 						}
 					}
+					while (mapInfo.GotoNextKey());
 				}
-				while (mapInfo.GotoNextKey());
+				mapInfo.Rewind();
 			}
-			mapInfo.Rewind();
 			// 如果开了女巫需要距离坦克一定距离刷新，则继续判断
 			if (g_hWitchAvoidTank.IntValue > 0)
 			{
@@ -1027,13 +1039,13 @@ public Action Timer_GetBossFlow(Handle timer)
 					}
 					else
 					{
+						nowTankFlow = versusFirstTankFlow;
+						SetTankPercent(versusFirstTankFlow);
 						#if (DEBUG_ALL)
 						{
 							LogMessage("[Boss-Controller]：当前是对抗第二局，并且没有 mapinfo 文件，且当前地图：%s 是静态女巫地图，把坦克刷新位置更改为与第一局相同：%d", curMapName, versusFirstTankFlow);
 						}
 						#endif
-						nowTankFlow = versusFirstTankFlow;
-						SetTankPercent(versusFirstTankFlow);
 					}
 					return Plugin_Continue;
 				}
