@@ -147,7 +147,7 @@ public Action evt_killnormal (Event event, const char[] name, bool dontBroadcast
 	int nowweapon = event.GetInt("weapon_id");
 	if (nowweapon == 19)
 	{
-		return;
+		return Plugin_Continue;
 	}
 	else
 	{
@@ -155,7 +155,7 @@ public Action evt_killnormal (Event event, const char[] name, bool dontBroadcast
 		// 是否是无效的武器
 		if (!IsValidEntity(g_weapon))
 		{
-			return;
+			return Plugin_Continue;
 		}
 		char weaponname[64];
 		GetEdictClassname(g_weapon, weaponname, sizeof(weaponname));
@@ -206,15 +206,20 @@ public Action evt_killnormal (Event event, const char[] name, bool dontBroadcast
 			}
 		}
 	}
+	return Plugin_Continue;
 }
 
 // 杀死特感
 public Action evt_kill_infected (Event event, const char[] name, bool dontBroadcast)
 {
-	int zombieClass = 0;
+	int zombieClass = 0, g_weapon = -1;
 	int killer = GetClientOfUserId(event.GetInt("attacker"));
 	int deadbody = GetClientOfUserId(event.GetInt("userid"));
-	int g_weapon = GetPlayerWeaponSlot(killer, 0);
+	// 检测击杀者是否为玩家
+	if (killer > 0 && killer <= MaxClients && IsClientConnected(killer) && IsClientInGame(killer) && !IsFakeClient(killer) && GetClientTeam(killer) == TEAM_SURVIVOR)
+	{
+		g_weapon = GetPlayerWeaponSlot(killer, 0);
+	}
 	// 检测武器是否有效
 	if (IsValidEntity(g_weapon))
 	{
@@ -227,7 +232,7 @@ public Action evt_kill_infected (Event event, const char[] name, bool dontBroadc
 			// 检测是否杀死队友
 			if(GetClientTeam(deadbody) == TEAM_SURVIVOR)
 			{
-				return;
+				return Plugin_Continue;
 			}
 			if(GetClientTeam(killer) == TEAM_SURVIVOR)
 			{
@@ -317,11 +322,7 @@ public Action evt_kill_infected (Event event, const char[] name, bool dontBroadc
 			}
 		}
 	}
-	else
-	{
-		// 如果是无效武器直接返回
-		return;
-	}
+	return Plugin_Continue;
 }
 
 // 一些方法
@@ -470,12 +471,12 @@ public void StartAmmoRegain_Clip (int client, int weapon, const char[] weaponnam
 	SetGunClip(client, nowammo + ammoregain, primtype);
 }
 
-stock int SetGunAmmo(int client, int ammo)
+stock void SetGunAmmo(int client, int ammo)
 {
 	SetEntProp(client, Prop_Send, "m_iClip1", ammo);
 }
 
-stock int SetGunClip(int client, int clipammo, int weapontype)
+stock void SetGunClip(int client, int clipammo, int weapontype)
 {
 	SetEntProp(client, Prop_Send, "m_iAmmo", clipammo, _, weapontype);
 }
