@@ -386,39 +386,39 @@ public void StartAmmoRegain_Clip (int client, int weapon, const char[] weaponnam
 	int ammoregain;
 	int primtype = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
 	int nowammo = GetEntProp(client, Prop_Send, "m_iAmmo", _, primtype);
-	if (StrEqual(weaponname, "weapon_smg") || StrEqual(weaponname, "weapon_smg_silenced"))
+	if (strcmp(weaponname, "weapon_smg") == 0 || strcmp(weaponname, "weapon_smg_silenced") == 0 || strcmp(weaponname, "weapon_smg_mp5") == 0)
 	{
 		ammoregain = g_iCLIP_SMG;
 	}
-	else if (StrEqual(weaponname, "weapon_pumpshotgun") || StrEqual(weaponname, "weapon_shotgun_chrome"))
+	else if (strcmp(weaponname, "weapon_pumpshotgun") == 0 || strcmp(weaponname, "weapon_shotgun_chrome") == 0)
 	{
 		ammoregain = g_iCLIP_FIRSTSHOTGUN;
 	}
-	else if (StrEqual(weaponname, "weapon_autoshotgun") || StrEqual(weaponname, "weapon_shotgun_spas"))
+	else if (strcmp(weaponname, "weapon_autoshotgun") == 0 || strcmp(weaponname, "weapon_shotgun_spas") == 0)
 	{
 		ammoregain = g_iCLIP_SECONDSHOTGUN;
 	}
-	else if (StrEqual(weaponname, "weapon_rifle"))
+	else if (strcmp(weaponname, "weapon_rifle") == 0 || strcmp(weaponname, "weapon_rifle_sg552") == 0)
 	{
 		ammoregain = g_iCLIP_M16;
 	}
-	else if (StrEqual(weaponname, "weapon_rifle_ak47"))
+	else if (strcmp(weaponname, "weapon_rifle_ak47") == 0)
 	{
 		ammoregain = g_iCLIP_AK47;
 	}
-	else if (StrEqual(weaponname, "weapon_rifle_desert"))
+	else if (strcmp(weaponname, "weapon_rifle_desert") == 0)
 	{
 		ammoregain = g_iCLIP_SCAR;
 	}
-	else if (StrEqual(weaponname, "weapon_hunting_rifle"))
+	else if (strcmp(weaponname, "weapon_hunting_rifle") == 0 || strcmp(weaponname, "weapon_sniper_scout") == 0 || strcmp(weaponname, "weapon_sniper_awp") == 0)
 	{
 		ammoregain = g_iCLIP_FIRSTSNIPER;
 	}
-	else if (StrEqual(weaponname, "weapon_sniper_military"))
+	else if (strcmp(weaponname, "weapon_sniper_military") == 0)
 	{
 		ammoregain = g_iCLIP_SECONDSNIPER;
 	}
-	else if (StrEqual(weaponname, "weapon_grenade_launcher"))
+	else if (strcmp(weaponname, "weapon_grenade_launcher") == 0)
 	{
 		ammoregain = g_iCLIP_LAUNCHER;
 	}
