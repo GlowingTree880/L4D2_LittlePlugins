@@ -21,13 +21,14 @@
 #define MAX_SECONDSHOTGUN 10
 #define MAX_FIRSTSNIPER 15
 #define MAX_SECONDSNIPER 30
+#define MAX_M60 150
 #define MAX_GRENADE_LAUNCHER 1
 // 其他
 #define IsValidClient(%1) (1 <= %1 <= MaxClients && IsClientInGame(%1))
 
 // 句柄
 ConVar g_AmmoFillClip, g_AmmoRegain, g_Health, g_HealthRegain, g_TempHealthRegain, g_SpecialAmmoRegain, g_SpecialClip, g_RIFLE, g_SMG, g_SHOTGUN,
-	g_SNIPER, g_LAUNCHER, g_CLIP_AK47, g_CLIP_M16, g_CLIP_SCAR, g_CLIP_SMG, g_CLIP_FIRSTSHOTGUN, g_CLIP_SECONDSHOTGUN, g_CLIP_FIRSTSNIPER, g_CLIP_SECONDSNIPER,
+	g_SNIPER, g_M60, g_LAUNCHER, g_CLIP_AK47, g_CLIP_M16, g_CLIP_SCAR, g_CLIP_SMG, g_CLIP_FIRSTSHOTGUN, g_CLIP_SECONDSHOTGUN, g_CLIP_FIRSTSNIPER, g_CLIP_SECONDSNIPER,
 	g_CLIP_LAUNCHER;
 int g_iAmmoFillClip, g_iAmmoRegain, g_iHealth, g_iHealthRegain, g_iTempHealthRegain, g_iSpecialAmmoRegain, g_iSpecialClip, g_iRIFLE, g_iSMG, g_iSHOTGUN,
 	g_iSNIPER, g_iLAUNCHER, g_iCLIP_AK47, g_iCLIP_M16, g_iCLIP_SCAR, g_iCLIP_SMG, g_iCLIP_FIRSTSHOTGUN, g_iCLIP_SECONDSHOTGUN, g_iCLIP_FIRSTSNIPER, g_iCLIP_SECONDSNIPER,
@@ -65,6 +66,7 @@ public void OnPluginStart()
 	g_SMG = CreateConVar ("ammo_smg", "2", "给smg回复多少子弹", FCVAR_NOTIFY, true, 0.0);
 	g_SHOTGUN = CreateConVar ("ammo_shotgun", "2", "给散弹回复多少子弹", FCVAR_NOTIFY, true, 0.0);
 	g_SNIPER = CreateConVar ("ammo_sniper", "2", "给狙击回复多少子弹", FCVAR_NOTIFY, true, 0.0);
+	g_M60 = CreateConVar("ammo_m60", "5", "给 M60 回复多少子弹", FCVAR_NOTIFY, true, 0.0);
 	g_LAUNCHER = CreateConVar ("ammo_launcher", "2", "给榴弹回复多少子弹", FCVAR_NOTIFY, true, 0.0);
 	g_CLIP_AK47	= CreateConVar ("clip_ak", "40", "不说了，给ak回一个弹夹的子弹，子弹数量自定义", FCVAR_NOTIFY, true, 0.0);
 	g_CLIP_M16 = CreateConVar ("clip_m16", "50", "给m16回一个弹夹的子弹，子弹数量自定义", FCVAR_NOTIFY, true, 0.0);
@@ -151,6 +153,11 @@ public Action evt_killnormal (Event event, const char[] name, bool dontBroadcast
 	}
 	else
 	{
+		// 检查玩家有效性
+		if (!(killer > 0 && killer <= MaxClients && IsClientConnected(killer) && IsClientInGame(killer) && !IsFakeClient(killer) && GetClientTeam(killer) == TEAM_SURVIVOR))
+		{
+			return Plugin_Continue;
+		}
 		int g_weapon = GetPlayerWeaponSlot(killer, 0);
 		// 是否是无效的武器
 		if (!IsValidEntity(g_weapon))
@@ -328,101 +335,48 @@ public Action evt_kill_infected (Event event, const char[] name, bool dontBroadc
 // 一些方法
 public void StartAmmoRegain_Top (int weapon, const char[] weaponname)
 {
-	int ammoregain;
 	int maxClipSize = GetEntProp (weapon, Prop_Send, "m_iClip1", 1);
 	// 检测不同武器，回复子弹
-	if (StrEqual(weaponname, "weapon_smg") || StrEqual(weaponname, "weapon_smg_silenced"))
+	if (strcmp(weaponname, "weapon_smg") == 0 || strcmp(weaponname, "weapon_smg_silenced") == 0 || strcmp(weaponname, "weapon_smg_mp5") == 0)
 	{
-		// 先定义需要回复的子弹数量
-		ammoregain = g_iSMG;
-		if (maxClipSize + ammoregain > MAX_SMG)
-		{
-			// 如果原来弹夹里的子弹加要回的子弹超过了弹夹上限，则回满弹夹
-			SetGunAmmo(weapon, MAX_SMG);
-			return;
-		}
-		// 没有超过弹夹上限就回相应的子弹数量
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iSMG > MAX_SMG) ? SetGunAmmo(weapon, MAX_SMG) : SetGunAmmo(weapon, maxClipSize + g_iSMG);
 	}
-	else if (StrEqual(weaponname, "weapon_pumpshotgun") || StrEqual(weaponname, "weapon_shotgun_chrome"))
+	else if (strcmp(weaponname, "weapon_pumpshotgun") == 0 || strcmp(weaponname, "weapon_shotgun_chrome") == 0)
 	{
-		ammoregain = g_iSHOTGUN;
-		if (maxClipSize + ammoregain > MAX_FIRSTSHOTGUN)
-		{
-			SetGunAmmo(weapon, MAX_FIRSTSHOTGUN);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iSHOTGUN > MAX_FIRSTSHOTGUN) ? SetGunAmmo(weapon, MAX_FIRSTSHOTGUN) : SetGunAmmo(weapon, maxClipSize + g_iSHOTGUN);
 	}
-	else if (StrEqual(weaponname, "weapon_autoshotgun") || StrEqual(weaponname, "weapon_shotgun_spas"))
+	else if (strcmp(weaponname, "weapon_autoshotgun") == 0 || strcmp(weaponname, "weapon_shotgun_spas") == 0)
 	{
-		ammoregain = g_iSHOTGUN;
-		if (maxClipSize + ammoregain > MAX_SECONDSHOTGUN)
-		{
-			SetGunAmmo(weapon, MAX_SECONDSHOTGUN);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iSHOTGUN > MAX_SECONDSHOTGUN) ? SetGunAmmo(weapon, MAX_SECONDSHOTGUN) : SetGunAmmo(weapon, maxClipSize + g_iSHOTGUN);
 	}
-	else if (StrEqual(weaponname, "weapon_rifle"))
+	else if (strcmp(weaponname, "weapon_rifle") == 0 || strcmp(weaponname, "weapon_rifle_sg552") == 0)
 	{
-		ammoregain = g_iRIFLE;
-		if (maxClipSize + ammoregain > MAX_M16)
-		{
-			SetGunAmmo(weapon, MAX_M16);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iRIFLE > MAX_M16) ? SetGunAmmo(weapon, MAX_M16) : SetGunAmmo(weapon, maxClipSize + g_iRIFLE);
 	}
-	else if (StrEqual(weaponname, "weapon_rifle_ak47"))
+	else if (strcmp(weaponname, "weapon_rifle_ak47") == 0)
 	{
-		ammoregain = g_iRIFLE;
-		if (maxClipSize + ammoregain > MAX_AK47)
-		{
-			SetGunAmmo(weapon, MAX_AK47);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iRIFLE > MAX_AK47) ? SetGunAmmo(weapon, MAX_AK47) : SetGunAmmo(weapon, maxClipSize + g_iRIFLE);
 	}
-	else if (StrEqual(weaponname, "weapon_rifle_desert"))
+	else if (strcmp(weaponname, "weapon_rifle_desert") == 0)
 	{
-		ammoregain = g_iRIFLE;
-		if (maxClipSize + ammoregain > MAX_SCAR)
-		{
-			SetGunAmmo(weapon, MAX_SCAR);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iRIFLE > MAX_SCAR) ? SetGunAmmo(weapon, MAX_SCAR) : SetGunAmmo(weapon, maxClipSize + g_iRIFLE);
 	}
-	else if (StrEqual(weaponname, "weapon_hunting_rifle"))
+	else if (strcmp(weaponname, "weapon_hunting_rifle") == 0 || strcmp(weaponname, "weapon_sniper_scout") == 0 || strcmp(weaponname, "weapon_sniper_awp") == 0)
 	{
-		ammoregain = g_iSNIPER;
-		if (maxClipSize + ammoregain > MAX_FIRSTSNIPER)
-		{
-			SetGunAmmo(weapon, MAX_FIRSTSNIPER);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iSNIPER > MAX_FIRSTSNIPER) ? SetGunAmmo(weapon, MAX_FIRSTSNIPER) : SetGunAmmo(weapon, maxClipSize + g_iSNIPER);
 	}
-	else if (StrEqual(weaponname, "weapon_sniper_military"))
+	else if (strcmp(weaponname, "weapon_sniper_military") == 0)
 	{
-		ammoregain = g_iSNIPER;
-		if (maxClipSize + ammoregain > MAX_SECONDSNIPER)
-		{
-			SetGunAmmo(weapon, MAX_SECONDSNIPER);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iSNIPER > MAX_SECONDSNIPER) ? SetGunAmmo(weapon, MAX_SECONDSNIPER) : SetGunAmmo(weapon, maxClipSize + g_iSNIPER);
 	}
-	else if (StrEqual(weaponname, "weapon_grenade_launcher"))
+	else if (strcmp(weaponname, "weapon_grenade_launcher") == 0)
 	{
-		ammoregain = g_iLAUNCHER;
-		if (maxClipSize + ammoregain > MAX_GRENADE_LAUNCHER)
-		{
-			SetGunAmmo(weapon, MAX_GRENADE_LAUNCHER);
-			return;
-		}
-		SetGunAmmo(weapon, maxClipSize + ammoregain);
+		(maxClipSize + g_iLAUNCHER > MAX_GRENADE_LAUNCHER) ? SetGunAmmo(weapon, MAX_GRENADE_LAUNCHER) : SetGunAmmo(weapon, maxClipSize + g_iLAUNCHER);
+	}
+	// M60 子弹设置
+	else if (strcmp(weaponname, "weapon_rifle_m60") == 0)
+	{
+		(maxClipSize + g_M60.IntValue > MAX_M60) ? SetGunAmmo(weapon, MAX_M60) : SetGunAmmo(weapon, maxClipSize + g_M60.IntValue);
 	}
 }
 
