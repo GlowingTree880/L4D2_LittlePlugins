@@ -23,6 +23,7 @@
 #define SPEED_FIXED_LENGTH 350.0							// 速度修正最大速度长度
 #define RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
 #define FL_JUMPING 65922
+#define ladderTotal 200
 #define DEBUG_ALL 0
 
 public Plugin myinfo = 
@@ -58,13 +59,12 @@ enum struct struct_TankConsume
 	float fTreeTargetPos[3];		// 绕树生还当前位置
 	float fFailedJumpedTime;		// 团灭嘲讽跳起来的时间戳
 	float fRockThrowTime;			// 扔石头的时间戳
-	float fLockVisonTime;			// 视角解锁时间戳
 	// 结构体变量初始化
 	void struct_Init()
 	{
 		this.bCanInitPos = this.bCanConsume = this.bIsReachingFunctionPos = this.bIsReachingRayPos = this.bInConsumePlace = this.bHasRecordProgress = this.bHasCreatePosTimer = this.bCanLockVision = false;
 		this.iTreeTarget = this.iConsumeSurPercent = this.iConsumeNum = this.iIncappedCount = 0;
-		this.fTreeTime = this.fFailedJumpedTime = this.fRockThrowTime = this.fLockVisonTime = 0.0;
+		this.fTreeTime = this.fFailedJumpedTime = this.fRockThrowTime = 0.0;
 	}
 }
 static struct_TankConsume eTankStructure[MAXPLAYERS + 1];
@@ -85,6 +85,16 @@ stock void ConsumePosInit(int client, bool function_pos = true, bool ray_pos = t
 	}
 }
 
+enum struct ladder_info{
+	int entityid;
+	float origin[3];
+	float position[3];
+	float normal[3];
+	float angles[3];
+}
+//ladderinfo struct
+ladder_info ladder[ladderTotal];
+
 // ConVars
 ConVar g_hAllowBhop, g_hBhopSpeed, g_hAirAngleRestrict,															// 控制坦克连跳，防止跳过头
 g_hAllowThrow, g_hAllowThrowRange,																				// 控制坦克是否可以扔石头
@@ -95,10 +105,11 @@ g_hAllowTreeDetect, g_hAntiTreeMethod, g_hTargetChoose,															// 控制�
 g_hAttackRange, g_hSiLimit, g_hVsBossFlowBuffer, g_hVomitInterval, g_hFadeTime, g_hRockInterval,
 g_hRockMinInterval;																								// 坦克攻击距离，特感数量
 // Ints
-int throw_min_range = 0, throw_max_range = 0, sicount = 0,														// 最小与最大允许投掷距离，特感数量
+int throw_min_range = 0, throw_max_range = 0, sicount = 0, ladderNum = 0,														// 最小与最大允许投掷距离，特感数量
 highest_health_target = -1, lowest_health_target = -1;
 // Handle
 Handle hPosCheckTimer[MAXPLAYERS + 1] = {null};
+
 
 public void OnPluginStart()
 {
@@ -139,7 +150,25 @@ public void OnPluginStart()
 	// HookEvents
 	HookEvent("tank_spawn", evt_TankSpawn);
 	HookEvent("player_incapacitated", evt_PlayerIncapped);
+	#if(DEBUG_ALL)
+	RegAdminCmd("sm_checkladder", CalculateLadderNum, ADMFLAG_ROOT, "测试当前地图有多少个梯子");
+	#endif
+	ladderInit();
 }
+
+#if(DEBUG_ALL)
+public Action CalculateLadderNum(int client, int args){
+	int ent = -1, laddercount = 0;
+	while((ent = FindEntityByClassname(ent, "func_simpleladder")) != -1) {
+		if(IsValidEntity(ent)) {
+			laddercount++;
+		}
+	}
+	PrintToChatAll("本地图共有：%d 个梯子 %d个初始化检测梯子", laddercount, ladderNum);
+	return Plugin_Handled;
+}
+#endif
+
 public void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	Get_ThrowRange();
@@ -158,7 +187,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		curspeed = SquareRoot(Pow(vecspeed[0], 2.0) + Pow(vecspeed[1], 2.0));
 		bHasSight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
 		// 判断周围是否有梯子，有则不锁定视角
-		IsLadderAround(client, 150.0, selfpos);
+		//IsLadderAround(client, 150.0, selfpos);
 		// 连跳与扔石头相关，判断目标是否有效，目标有效，执行连跳与空中防止跳过头操作，同时判断距离，是否允许扔石头
 		if (IsValidSurvivor(target))
 		{
@@ -459,6 +488,13 @@ public Action Timer_SpawnCheckConsume(Handle timer, int client)
 	return Plugin_Continue;
 }
 
+//玩家出安全门检索所有梯子，放到这里而不是OnMapStart里，是因为OnMapStart执行处会无法读取stripper增加的梯子
+public Action L4D_OnFirstSurvivorLeftSafeArea(){
+	ladderInit();
+	CheckAllLadder();
+	return Plugin_Continue;
+}
+
 // 玩家倒地
 public void evt_PlayerIncapped(Event event, const char[] name, bool dontBroadcast)
 {
@@ -528,6 +564,7 @@ public Action Timer_CheckLag(Handle timer, int client)
 	{
 		float selfpos[3] = {0.0};
 		GetClientAbsOrigin(client, selfpos);
+		IsLadderAround(client, 150.0, selfpos);
 		if (!Is_InConsumeRaidus(selfpos, eTankStructure[client].fNowPos, LAG_DETECT_RAIDUS))
 		{
 			CopyVectors(selfpos, eTankStructure[client].fNowPos);
@@ -1067,38 +1104,130 @@ int Calculate_Flow(Address pNavArea)
 	return RoundToNearest(now_nav_promixity * 100.0);
 }
 
+stock void ladderInit(){
+	ladderNum = 0;
+	for(int i =0; i < ladderTotal; i++){
+		ladder[i].entityid = -1;
+		ladder[i].angles = {0.0, 0.0, 0.0};
+		ladder[i].normal = {0.0, 0.0, 0.0};
+		ladder[i].position = {0.0, 0.0, 0.0};
+		ladder[i].origin = {0.0, 0.0, 0.0};
+	}
+}
+
+//遍历地图entity找到所有梯子entity，储存所有梯子信息
+stock void CheckAllLadder(){
+	int ent = -1;
+	while((ent = FindEntityByClassname(ent, "func_simpleladder")) != -1) {
+		if(IsValidEntity(ent)) {
+			ladder[ladderNum].entityid = ent;
+			GetLadderEntityInfo(ent, ladder[ladderNum].origin, ladder[ladderNum].position, ladder[ladderNum].normal, ladder[ladderNum].angles);
+			ladderNum++;
+		}
+	}
+	//return Plugin_Continue;
+}
+
 // 检测当前坦克周围有没有梯子
 void IsLadderAround(int client, float distance, float selfpos[3])
 {
 	if (IsAiTank(client) && IsPlayerAlive(client))
 	{
-		float mins[3] = {0.0}, maxs[3] = {0.0};
-		GetClientMins(client, mins);
-		GetClientMaxs(client, maxs);
-		mins[0] -= distance;
-		mins[1] -= distance;
-		mins[2] += NAV_MESH_HEIGHT;
-		maxs[0] += distance;
-		maxs[1] += distance;
-		TR_EnumerateEntitiesHull(selfpos, selfpos, mins, maxs, MASK_NPCSOLID_BRUSHONLY, TR_LadderFilter, client);
+		for(int i =0; i < ladderNum; i++){
+			if(GetVector2DDistance(selfpos, ladder[i].position) < distance ){
+				#if(DEBUG_ALL)
+					PrintToConsoleAll("检测到附近梯子，关闭%f秒视角锁定, 此地图总共有%d个梯子", LAG_DETECT_TIME, ladderNum);
+				#endif
+				eTankStructure[client].bCanLockVision = false;
+				return;
+			}
+		}
+		#if(DEBUG_ALL)
+			PrintToConsoleAll("检测到附近没有梯子，允许视角锁定, 此地图总共有%d个梯子", ladderNum);
+		#endif
+		eTankStructure[client].bCanLockVision = true;
 	}
 }
-stock bool TR_LadderFilter(int entity, int self)
+
+public float GetVector2DDistance(float vec1[3], float vec2[3]){
+	vec1[2] = 0.0;
+	vec2[2] = 0.0;
+	return GetVectorDistance(vec1, vec2);
+}
+
+
+public void GetLadderEntityInfo(int entity, float origin[3], float position[3], float normal[3], float angles[3]) {
+    float mins[3];
+    float maxs[3];
+    GetEntPropVector(entity, Prop_Send, "m_vecOrigin", origin);
+    GetEntPropVector(entity, Prop_Send, "m_vecMins", mins);
+    GetEntPropVector(entity, Prop_Send, "m_vecMaxs", maxs);
+    GetEntPropVector(entity, Prop_Send, "m_climbableNormal", normal);
+    GetEntPropVector(entity, Prop_Send, "m_angRotation", angles);
+    Math_RotateVector(mins, angles, mins);
+    Math_RotateVector(maxs, angles, maxs);
+    position[0] = origin[0] + (mins[0] + maxs[0]) * 0.5;
+    position[1] = origin[1] + (mins[1] + maxs[1]) * 0.5;
+    position[2] = origin[2] + (mins[2] + maxs[2]) * 0.5;
+}
+
+/**
+ * Rotates a vector around its zero-point.
+ * Note: As example you can rotate mins and maxs of an entity and then add its origin to mins and maxs to get its bounding box in relation to the world and its rotation.
+ * When used with players use the following angle input:
+ *   angles[0] = 0.0;
+ *   angles[1] = 0.0;
+ *   angles[2] = playerEyeAngles[1];
+ *
+ * @param vec 			Vector to rotate.
+ * @param angles 		How to rotate the vector.
+ * @param result		Output vector.
+ * @noreturn
+ */
+stock void Math_RotateVector(const float vec[3], const float angles[3], float result[3])
 {
-	if (IsValidEntity(entity) && IsValidEdict(entity))
-	{
-		char classname[64] = {'\0'};
-		GetEntityClassname(entity, classname, sizeof(classname));
-		if (classname[0] == 'f' && (strcmp(classname, "func_simpleladder") == 0 || strcmp(classname, "func_ladder") == 0))
-		{
-			eTankStructure[self].bCanLockVision = false;
-			eTankStructure[self].fLockVisonTime = GetGameTime();
-			return false;
-		}
-	}
-	if (GetGameTime() - eTankStructure[self].fLockVisonTime > VISION_UNLOCK_TIME)
-	{
-		eTankStructure[self].bCanLockVision = true;
-	}
-	return true;
+    // First the angle/radiant calculations
+    float rad[3];
+    // I don't really know why, but the alpha, beta, gamma order of the angles are messed up...
+    // 2 = xAxis
+    // 0 = yAxis
+    // 1 = zAxis
+    rad[0] = DegToRad(angles[2]);
+    rad[1] = DegToRad(angles[0]);
+    rad[2] = DegToRad(angles[1]);
+
+    // Pre-calc function calls
+    float cosAlpha = Cosine(rad[0]);
+    float sinAlpha = Sine(rad[0]);
+    float cosBeta = Cosine(rad[1]);
+    float sinBeta = Sine(rad[1]);
+    float cosGamma = Cosine(rad[2]);
+    float sinGamma = Sine(rad[2]);
+
+    // 3D rotation matrix for more information: http://en.wikipedia.org/wiki/Rotation_matrix#In_three_dimensions
+    float x = vec[0];
+    float y = vec[1];
+    float z = vec[2];
+    float newX;
+    float newY;
+    float newZ;
+    newY = cosAlpha*y - sinAlpha*z;
+    newZ = cosAlpha*z + sinAlpha*y;
+    y = newY;
+    z = newZ;
+
+    newX = cosBeta*x + sinBeta*z;
+    newZ = cosBeta*z - sinBeta*x;
+    x = newX;
+    z = newZ;
+
+    newX = cosGamma*x - sinGamma*y;
+    newY = cosGamma*y + sinGamma*x;
+    x = newX;
+    y = newY;
+
+    // Store everything...
+    result[0] = x;
+    result[1] = y;
+    result[2] = z;
 }
