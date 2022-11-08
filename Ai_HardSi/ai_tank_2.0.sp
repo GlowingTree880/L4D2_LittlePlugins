@@ -540,7 +540,7 @@ float[] CalculateVel(float selfpos[3], float targetpos[3], float force)
 bool Tank_DoBhop(int client, int &buttons, float vec[3])
 {
 	bool bJumped = false;
-	if (buttons & IN_FORWARD || buttons & IN_BACK || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT)
+	if (buttons & IN_FORWARD || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT)
 	{
 		if (ClientPush(client, vec))
 		{
