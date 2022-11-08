@@ -95,8 +95,19 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		cur_speed = SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0));
 		GetClientAbsOrigin(client, self_pos);
 		GetClientEyePosition(client, self_eye_pos);
+		if (has_sight && IsValidSurvivor(target) && bile_target_num[client][0] < 1 && !in_bile_interval[client])
+		{
+			float aim_angles[3] = {0.0}, dist = GetVectorDistance(self_pos, target_pos), height = self_pos[2] - target_pos[2];
+			ComputeAimAngles(client, target, aim_angles, AimEye);
+			if (g_hUpVision.BoolValue)
+			{
+				if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 4.3); }
+				else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 5); }
+			}
+			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
+		}
 		// 上抬视野，可喷的生还者人数大于 0 且不在 cd 时间内，转视野和上抬视野
-		if (bile_target_num[client][0] > 0 && g_hTurnVision.BoolValue && !in_bile_interval[client])
+		if (bile_target_num[client][0] >= 1 && g_hTurnVision.BoolValue && !in_bile_interval[client])
 		{
 			// LogMessage("[Ai-Boomer]：当前Boomer的bile_target_num[0]：%d，[1]：%d，[2]：%d", bile_target_num[client][0], bile_target_num[client][1], bile_target_num[client][2]);
 			if (IsValidSurvivor(bile_target[client][bile_target_num[client][1]]) && bile_target_num[client][2] < g_hTurnInterval.IntValue)
@@ -236,6 +247,26 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	}
 	return Plugin_Continue;
 }
+/* void GetBileTarget(int client, float selfPos[3], float eyePos[3])
+{
+	int index = 0;
+	float[3] targetPos[3] = {0.0}, targetEyePos[3] = {0.0};
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_SURVIVOR && IsPlayerAlive(i))
+		{
+			GetClientAbsOrigin(i, targetPos);
+			GetClientEyePosition(i, targetEyePos);
+			if (GetVectorDistance(selfPos, targetPos) <= g_hVomitRange.FloatValue + 100.0)
+			{
+				Handle hTrace = TR_TraceRayFilterEx(eyePos, targetEyePos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
+				if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i) { bile_target[client][index++] = i; }
+				delete hTrace;
+			}
+		}
+	}
+	bile_target_num[client][0] = index;
+} */
 // 当生还被胖子喷中时，开始计算范围内的玩家
 public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion)
 {
@@ -259,12 +290,10 @@ public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion
 					Handle hTrace = TR_TraceRayFilterEx(self_eye_pos, target_eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, attacker);
 					if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
 					{
-						bile_target[attacker][target_num] = i;
+						bile_target[attacker][target_num++] = i;
 						// PrintToConsoleAll("[Ai-Boomer]：在范围内的玩家 %N，实际i的值 %N，加入玩家", bile_target[attacker][target_num], i);
-						target_num += 1;
 					}
 					delete hTrace;
-					hTrace = INVALID_HANDLE;
 				}
 			}
 		}
