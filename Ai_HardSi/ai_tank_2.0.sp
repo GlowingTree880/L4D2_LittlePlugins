@@ -155,7 +155,12 @@ public void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char
 	Get_ThrowRange();
 }
 
+// 延迟获取梯子列表，OnMapStart 无法获取 Stripper 增加的梯子
 public void OnMapStart()
+{
+	CreateTimer(5.0, getLadderListHandler, _);
+}
+public Action getLadderListHandler(Handle timer)
 {
 	ladderList.Clear();
 	char className[64] = {'\0'};
@@ -177,6 +182,7 @@ public void OnMapStart()
 			}
 		}
 	}
+	return Plugin_Continue;
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
@@ -500,7 +506,7 @@ public Action Timer_SpawnCheckConsume(Handle timer, int client)
 			return Plugin_Stop;
 		}
 	}
-	return Plugin_Continue;
+	return Plugin_Stop;
 }
 
 // 玩家倒地
