@@ -58,7 +58,7 @@ public void OnPluginStart()
 	g_hJockeyStumbleRadius = CreateConVar("ai_JockeyStumbleRadius", "50", "Jockey 骑到人后会对多少范围内的生还者产生硬直效果", CVAR_FLAG, true, 0.0);
 	g_hJockeyAirAngles = CreateConVar("ai_JockeyAirAngles", "60.0", "Jockey 的速度方向与到目标的向量方向的距离大于这个角度，则停止连跳", CVAR_FLAG, true, 0.0, true, 180.0);
 	// 骗推设置
-	g_hSpecialJumpAngle = CreateConVar("ai_JockeySpecialJumpAngle", "30", "当目标正在看着 Jockey 并与其处于这个角度之内，Jockey 会尝试骗推", CVAR_FLAG, true, 0.0, true, 180.0);
+	g_hSpecialJumpAngle = CreateConVar("ai_JockeySpecialJumpAngle", "60", "当目标正在看着 Jockey 并与其处于这个角度之内，Jockey 会尝试骗推", CVAR_FLAG, true, 0.0, true, 180.0);
 	g_hSpecialJumpChance = CreateConVar("ai_JockeySpecialJumpChance", "60", "Jockey 有多少概率执行骗推", CVAR_FLAG, true, 0.0, true, 100.0);
 	g_hActionChance = CreateConVar("ai_jockeyNoActionChance", "20,40,40", "Jockey 执行以下行为的概率（冻结行动 [时间 0 - FREEZE_MAX_TIME 秒随机]，向后跳，高跳）逗号分割", CVAR_FLAG, true, 0.0, true, 100.0);
 	g_hAllowInterControl = CreateConVar("ai_JockeyAllowInterControl", "1,3", "Jockey 优先找被这些特感控制的生还者，被控完成后补控", CVAR_FLAG);
@@ -134,7 +134,7 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 		if (fDistance <= SPECIAL_JUMP_DIST)
 		{
 			// 如果目标没有正在看着 Jockey，则直接骑乘
-			if (!IsTargetWatchingAttacker(jockey, iTarget, g_hSpecialJumpAngle.IntValue * 2))
+			if (!IsTargetWatchingAttacker(jockey, iTarget, g_hSpecialJumpAngle.IntValue))
 			{
 				buttons |= IN_ATTACK;
 				buttons |= IN_JUMP;
@@ -231,7 +231,7 @@ public Action OnPlayerRunCmd(int jockey, int &buttons, int &impulse, float vel[3
 			buttons |= IN_JUMP;
 			SetState(jockey, 0, IN_JUMP);
 			// 目标正在看着 Jockey
-			if (IsTargetWatchingAttacker(jockey, iTarget, g_hSpecialJumpAngle.IntValue * 2))
+			if (IsTargetWatchingAttacker(jockey, iTarget, g_hSpecialJumpAngle.IntValue))
 			{
 				float eyeAngles[3] = {0.0}, eyeAngleVec[3] = {0.0};
 				GetClientEyeAngles(jockey, eyeAngles);
