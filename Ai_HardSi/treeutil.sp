@@ -14,7 +14,7 @@ enum
 	ZC_JOCKEY,
 	ZC_CHARGER,
 	ZC_WITCH,
-	ZC_TANK
+	ZC_TANK,
 }
 
 enum
@@ -114,29 +114,32 @@ stock bool IsValidSurvivor(int client)
 	}
 }
 // 判断玩家是否倒地，倒地返回 true，未倒地返回 false
+// @client：需要判断的生还者客户端索引
 stock bool IsClientIncapped(int client)
 {
-	if (IsValidClient(client))
-	{
-		return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
-	}
-	else
-	{
-		return false;
-	}
+	if (!IsValidClient(client)) { return false; }
+	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
 // 判断生还者是否被控，被控返回 true，未被控返回 false
+// @client：需要判断的生还者客户端索引
 stock bool IsClientPinned(int client)
 {
-	if (IsValidSurvivor(client))
-	{
-		if (GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 || GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0
-			|| GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0)
-		{
-			return true;
-		}
-	}		
-	return false;
+	if (!IsValidSurvivor(client)) { return false; }
+	return GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 
+			|| GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0 
+			|| GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0 
+			|| GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0;
+}
+// 判断生还者被哪种类型的特感控制，生还者无效或未被控返回 -1
+// @client：需要判断的生还者客户端索引
+stock int GetClientPinnedInfectedType(int client)
+{
+	if (!IsValidClient(client)) { return -1; }
+	else if (GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0) { return ZC_SMOKER; }
+	else if (GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0) { return ZC_HUNTER; }
+	else if (GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0) { return ZC_CHARGER; }
+	else if (GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0) { return ZC_JOCKEY; }
+	return -1;
 }
 // 判断生还者是否处于挂边状态，正在挂边返回 true，不在挂边返回 false
 stock bool IsClientHanging(int client)
@@ -211,24 +214,15 @@ stock int GetClientIncappedCount(int client)
 // 随机获取一个未死亡，未被控，未倒地的生还者，如有则返回生还者 id，无则返回 0
 stock int GetRandomMobileSurvivor()
 {
-	int[] survivor_array = new int[GetConVarInt(FindConVar("survivor_limit"))];
-	int survivor_index = 0;
+	ArrayList survivorList = new ArrayList();
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsClientConnected(client) && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && !IsClientPinned(client) && !IsClientIncapped(client))
-		{
-			survivor_array[survivor_index] = client;
-			survivor_index += 1;
-		}
+		if (IsValidSurvivor(client)) { survivorList.Push(client); }
 	}
-	if (survivor_index > 0)
-	{
-		return survivor_array[GetRandomInt(0, survivor_index - 1)];
-	}
-	else
-	{
-		return 0;
-	}
+	if (survivorList.Length == 0) { return 0; }
+	int targetSurvivor = survivorList.Get(GetRandomInt(0, survivorList.Length - 1));
+	delete survivorList;
+	return targetSurvivor;
 }
 // 获取距离某玩家最近的有效（未死亡，未倒地，未被控）生还者，如有则返回生还者 id，玩家无效或未找到则返回 0
 stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
@@ -261,40 +255,6 @@ stock int GetClosetMobileSurvivor(int client, int exclude_client = -1)
 		target = targetList.Get(0, 1);
 		delete targetList;
 		return target;
-		// 原方法，辗转比较
-		/* float self_pos[3] = {0.0}, target_pos[3] = {0.0};
-		int closet_survivor = GetRandomMobileSurvivor();
-		if (IsValidSurvivor(closet_survivor))
-		{
-			GetClientAbsOrigin(client, self_pos);
-			GetClientAbsOrigin(closet_survivor, target_pos);
-			int target_distance = RoundToNearest(GetVectorDistance(self_pos, target_pos));
-			for (int newtarget = 1; newtarget <= MaxClients; newtarget++)
-			{
-				if (IsValidSurvivor(newtarget) && IsPlayerAlive(newtarget) && !IsClientIncapped(newtarget) &&!IsClientPinned(newtarget) && newtarget != exclude_client)
-				{
-					GetClientAbsOrigin(newtarget, target_pos);
-					int newtarget_distance = RoundToNearest(GetVectorDistance(self_pos, target_pos));
-					if (target_distance < 0)
-					{
-						target_distance = newtarget_distance;
-						closet_survivor = newtarget;
-					}
-					else if (newtarget_distance < target_distance)
-					{
-						target_distance = newtarget_distance;
-						closet_survivor = newtarget;
-					}
-				}
-			}
-			return closet_survivor;
-		}
-		else if (closet_survivor == 0)
-		{
-			return 0;
-		}
-	}
-	return 0; */
 	}
 	return 0;
 }
