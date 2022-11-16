@@ -85,6 +85,23 @@ Ai_Jockey：
   ai_JockeyStumbleRadius：50.0 猴子在套中目标时将会对这一个范围内的生还者产生硬直效果
   ai_JockeyAirAngles：60.0 猴子连跳在空中时，如果其速度方向向量与【自身到最近生还者方向向量】的角度大于这一个角度，则停止连跳
   
+Ai_Jockey_2.0：
+  基于 1.0 版本改造更新
+  增加以下 Cvar：
+    ai_JockeySpecialJumpAngle 60：当目标正在看着 Jockey 并与其处于这个角度之内，Jockey 会尝试骗推
+    ai_JockeySpecialJumpChance 60：Jockey 有多少概率执行骗推
+    ai_jockeyNoActionChance 20,40,40：Jockey 执行以下行为的概率（冻结行动 [时间 0 - FREEZE_MAX_TIME 秒随机]，向后跳，高跳）逗号分割
+    ai_JockeyAllowInterControl 1,3（建议设为仅 3[Hunter]，否则会抢 Smoker 的控制）：Jockey 优先找被这些特感控制的生还者，补控或抢控
+  行为解释：
+    冻结：猴子将会在随机 0 - FREEZE_MAX_TIME（默认 0.8）时间内无操作，时间过后自动解除冻结，恢复操作
+    后跳：猴子不会直接扑向生还者，而是反方向跳跃
+    高跳：猴子会以 -30 ~ -60 的俯仰角向上看进行高跳
+  并提高 Jockey 灵活性：
+  ①猴子在距离生还者 SPECIAL_JUMP_DIST（默认 250）范围内且生还者正在以 ai_JockeySpecialJumpAngle 角度直视自身时，将会以 ai_JockeySpecialJumpChance 概率执行骗推操作（冻结，向后跳，高跳），在 SPECIAL_JUMP_DIST 范围外则以 50% 概率向左或向右正常连跳接近生还者
+  ②猴子在生还者没有以 ai_JockeySpecialJumpAngle 这个角度直视自身时，将会主动攻击生还者
+  ③猴子会判断生还者是否在两次推的时间之内，如果没有成功推猴，猴子则会主动攻击生还者
+  
+  
 Ai_Spitter：
   ai_SpitterBhop：1 是否开启口水连跳功能
   ai_SpitterBhopSpeed：60.0 口水连跳的速度
