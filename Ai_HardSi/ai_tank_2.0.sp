@@ -209,17 +209,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			// 扔石头相关
 			if (g_hAllowThrow.BoolValue && throw_min_range >= 0 && throw_max_range >= 0)
 			{
-				if (targetdist > throw_max_range || targetdist < throw_min_range && (g_hRockInterval.IntValue != 999 || g_hRockMinInterval.IntValue != 999))
+				if (targetdist > throw_max_range || targetdist < throw_min_range && (g_hRockInterval.IntValue < 999 || g_hRockMinInterval.IntValue < 999))
 				{
 					g_hRockInterval.SetInt(999);
 					g_hRockMinInterval.SetInt(999);
 					buttons &= ~ IN_ATTACK2;
 				}
-				else if (g_hRockInterval.IntValue != 5 || g_hRockMinInterval.IntValue != 8)
+				else
 				{
 					
-					g_hRockInterval.SetInt(5);
-					g_hRockMinInterval.SetInt(8);
+					g_hRockInterval.RestoreDefault();
+					g_hRockMinInterval.RestoreDefault();
 				}
 			}
 			// 连跳距离及防止跳过头控制，要改连跳距离改这里，默认坦克拳头长度 * 0.8 - 2500 距离允许连跳
@@ -338,6 +338,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			// Cvar 变动，不允许消耗时，重置 Tank 行为
 			if (eTankStructure[client].bCanConsume)
 			{
+				g_hRockInterval.RestoreDefault();
+				g_hRockMinInterval.RestoreDefault();
 				CreateTimer(0.5, Timer_TankAction_Reset, client);
 				eTankStructure[client].bCanConsume = eTankStructure[client].bIsReachingFunctionPos = eTankStructure[client].bIsReachingRayPos = eTankStructure[client].bInConsumePlace = false;
 			}
