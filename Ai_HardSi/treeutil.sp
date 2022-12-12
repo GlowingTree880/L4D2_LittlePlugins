@@ -17,6 +17,23 @@ enum
 	ZC_TANK,
 }
 
+// PreferredSpecialDirection 值
+enum
+{
+	SPAWN_NO_PREFERENCE = -1,
+	SPAWN_ANYWHERE,
+	SPAWN_BEHIND_SURVIVORS,
+	SPAWN_NEAR_IT_VICTIM,
+	SPAWN_SPECIALS_IN_FRONT_OF_SURVIVORS,
+	SPAWN_SPECIALS_ANYWHERE,
+	SPAWN_FAR_AWAY_FROM_SURVIVORS,
+	SPAWN_ABOVE_SURVIVORS,
+	SPAWN_IN_FRONT_OF_SURVIVORS,
+	SPAWN_VERSUS_FINALE_DISTANCE,
+	SPAWN_LARGE_VOLUME,
+	SPAWN_NEAR_POSITION
+}
+
 enum
 {
 	ID_HUNTER,
@@ -81,6 +98,25 @@ stock const int IncappAnimations[SC_SIZE_SPACE][ID_PINNED_GETUPANIM_SIZE_SPACE] 
 
 stock static StringMap mSurvivorModelsTrie = null;
 
+stock const float INFECTED_SIZE_MIN[][3] =
+{
+	{-20.0, -20.0, 0.0},
+	{-25.0, -25.0, 0.0},
+	{-25.0, -25.0, 0.0},
+	{-20.0, -20.0, 0.0},
+	{-20.0, -20.0, 0.0},
+	{-25.0, -25.0, 0.0}
+};
+stock const float INFECTED_SIZE_MAX[ZC_CHARGER][3] =
+{
+	{20.0, 20.0, 80.0},
+	{25.0, 25.0, 65.0},
+	{25.0, 25.0, 60.0},
+	{20.0, 20.0, 70.0},
+	{20.0, 20.0, 40.0},
+	{25.0, 25.0, 70.0}
+};
+
 #define PLUGIN_SCRIPTLOGIC "plugin_scripting_logic_entity"
 #define COMMANDABOT_ATTACK "CommandABot({cmd = 0, bot = GetPlayerFromUserID(%i), target = GetPlayerFromUserID(%i)})"
 #define COMMANDABOT_MOVE   "CommandABot({cmd = 1, pos = Vector(%f, %f, %f), bot = GetPlayerFromUserID(%i)})"
@@ -90,45 +126,43 @@ stock static StringMap mSurvivorModelsTrie = null;
 // 			生还者
 // *************************
 // 判断是否有效玩家 id，有效返回 true，无效返回 false
+// @client：需要判断的生还者客户端索引
 stock bool IsValidClient(int client)
 {
-	if (client > 0 && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return client > 0 && client <= MaxClients && IsClientInGame(client);
 }
 // 判断生还者是否有效，有效返回 true，无效返回 false
+// @client：需要判断的生还者客户端索引
 stock bool IsValidSurvivor(int client)
 {
-	if (IsValidClient(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return IsValidClient(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR);
 }
 // 判断玩家是否倒地，倒地返回 true，未倒地返回 false
 // @client：需要判断的生还者客户端索引
 stock bool IsClientIncapped(int client)
 {
-	if (!IsValidClient(client)) { return false; }
+	if (!IsValidClient(client) || !IsPlayerAlive(client)) { return false; }
 	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
 // 判断生还者是否被控，被控返回 true，未被控返回 false
 // @client：需要判断的生还者客户端索引
 stock bool IsClientPinned(int client)
 {
-	if (!IsValidSurvivor(client)) { return false; }
+	if (!IsValidSurvivor(client) || !IsPlayerAlive(client)) { return false; }
 	return GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 
 			|| GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0 
 			|| GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0 || GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0 
 			|| GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0;
+}
+// 判断感染者是否正在控制生还者，正在控制返回 true，否则返回 false
+// @client：需要判断的感染者客户端索引
+stock bool IsPinningSurvivor(int client)
+{
+	if (!IsValidInfected(client) || !IsPlayerAlive(client)) { return false; }
+	return GetEntPropEnt(client, Prop_Send, "m_tongueVictim") > 0 || 
+			GetEntPropEnt(client, Prop_Send, "m_pounceVictim") > 0 || 
+			GetEntPropEnt(client, Prop_Send, "m_carryVictim") > 0 || GetEntPropEnt(client, Prop_Send, "m_pummelVictim") > 0 || 
+			GetEntPropEnt(client, Prop_Send, "m_jockeyVictim") > 0;
 }
 // 判断生还者被哪种类型的特感控制，生还者无效或未被控返回 -1
 // @client：需要判断的生还者客户端索引
@@ -142,13 +176,11 @@ stock int GetClientPinnedInfectedType(int client)
 	return -1;
 }
 // 判断生还者是否处于挂边状态，正在挂边返回 true，不在挂边返回 false
+// @client：需要判断的生还者客户端索引
 stock bool IsClientHanging(int client)
 {
-	if (IsValidSurvivor(client))
-	{
-		return view_as<bool>(GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) || view_as<bool>(GetEntProp(client, Prop_Send, "m_isFallingFromLedge", 1)));
-	}
-	return false;
+	if (!IsValidSurvivor(client)) { return false; }
+	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) || view_as<bool>(GetEntProp(client, Prop_Send, "m_isFallingFromLedge", 1)));
 }
 // 使用客户端 ID 识别生还者索引，有效返回生还者索引 ID，无效返回 -1
 stock int IdentifySurvivor(int client)
@@ -212,12 +244,12 @@ stock int GetClientIncappedCount(int client)
 	return -1;
 }
 // 随机获取一个未死亡，未被控，未倒地的生还者，如有则返回生还者 id，无则返回 0
-stock int GetRandomMobileSurvivor()
+stock int GetRandomMobileSurvivor(int excludeClient = -1)
 {
 	ArrayList survivorList = new ArrayList();
 	for (int client = 1; client <= MaxClients; client++)
 	{
-		if (IsValidSurvivor(client)) { survivorList.Push(client); }
+		if (client != excludeClient && IsValidSurvivor(client)) { survivorList.Push(client); }
 	}
 	if (survivorList.Length == 0) { return 0; }
 	int targetSurvivor = survivorList.Get(GetRandomInt(0, survivorList.Length - 1));
