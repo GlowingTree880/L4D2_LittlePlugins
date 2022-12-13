@@ -37,10 +37,18 @@ public void OnPluginStart()
 	g_hPushForce = CreateConVar("l4d2_si_push_force", "600", "特感刷出时的推动力度", CVAR_FLAG, true, 0.0);
 	g_hOnlyHighPush = CreateConVar("l4d2_si_push_only_high", "0", "是否开启只有在高处刷出的特感才允许推动", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hPosHeight = CreateConVar("l4d2_si_push_height", "200", "特感在高于目标生还者这么高的地方刷出被认为是高处", CVAR_FLAG, true, 0.0);
+	// HookEvent
 	HookEvent("player_spawn", playerSpawnHandler);
+	// HookConVarChange
+	g_hAllowPushInfected.AddChangeHook(allowPushInfectedChanged);
 	// GetAllowedInfected
 	GetAllowedInfected();
 }
+public void allowPushInfectedChanged(Handle convar, const char[] oldValue, const char[] newValue)
+{
+	GetAllowedInfected();
+}
+
 public void playerSpawnHandler(Event event, const char[] name, bool dontBroadcast)
 {
 	if (!g_hAllowPushWhenSpawn.BoolValue) { return; }
