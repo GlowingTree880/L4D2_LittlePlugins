@@ -62,8 +62,7 @@ ConVar
 	g_hEveryTargetFrame,
 	g_hExpandFrame,
 	g_hMaxFindPosTime,
-	g_hAllowAllSpawnOne, 
-	g_hAllowPushWhenSpawn, 
+	g_hAllowAllSpawnOne,
 	g_hTeleportDist,
 	g_hPreTeleportCount,
 	g_hAheadTargetDist,
@@ -98,7 +97,6 @@ bool
 	g_bPosHasSorted = false,
 	g_bExceedFindPosTime = false,
 	g_bHasRecordTime = false,
-	g_bHasBeenPushed[MAXPLAYERS + 1] = { false },
 	g_bDelaySpawnInfected[7] = { false };
 float g_fFindPosStartTime = 0.0;
 
@@ -143,15 +141,12 @@ public void OnPluginStart()
 	g_hDelaySpawnTime = CreateConVar("inf_delay_spawn_time", "2.0", "特感延迟刷新的时间，超过这个时间会直接刷新", CVAR_FLAG, true, 0.0);
 	// 6 特以上是否每种特感都会产生一只
 	g_hAllowAllSpawnOne = CreateConVar("inf_allow_all_spawn_one", "1", "是否开启 6 特以上每种特感均产生一只", CVAR_FLAG, true, 0.0, true, 1.0);
-	// 是否开启刷出时给予推动效果
-	g_hAllowPushWhenSpawn = CreateConVar("inf_allow_push_force", "300", "是否开启特感刷出时向着生还方向推动效果（0 = 关闭，>0 = 以这个值作为速度）", CVAR_FLAG, true, 0.0);
 	// 日志记录
 	g_hEnableLog = CreateConVar("inf_enable_log", "1", "是否开启插件日志记录功能", CVAR_FLAG, true, 0.0, true, 1.0);
 	// 其他 Cvar
 	g_hPlayerInfectedLimit = FindConVar("z_max_player_zombies");
 	// Hook 事件
 	HookEvent("round_start", roundStartHandler);
-	HookEvent("player_spawn", playerSpawnHandler);
 	HookEvent("player_death", playerDeathHandler);
 	// 获取感染者设置数量
 	g_hSmokerCount = FindConVar("z_smoker_limit");
@@ -217,30 +212,6 @@ public Action clearAllStuff(Handle timer)
 	delete g_hFindPosTimer;
 	delete g_hDelaySpawnTimer;
 	return Plugin_Continue;
-}
-public void playerSpawnHandler(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (!IsValidInfected(client) || !IsPlayerAlive(client)) { return; }
-	g_bHasBeenPushed[client] = false;
-	int infectedType = GetEntProp(client, Prop_Send, "m_zombieClass");
-	if (!g_bHasBeenPushed[client] && infectedType > ZC_SMOKER && infectedType <= ZC_CHARGER)
-	{
-		RequestFrame(nextFramePushForwardHandler, client);
-		g_bHasBeenPushed[client] = true;
-	}
-}
-public void nextFramePushForwardHandler(int client)
-{
-	if (!IsValidInfected(client) || !IsPlayerAlive(client) || !IsValidSurvivor(targetSurvivor) || !IsPlayerAlive(targetSurvivor)) { return; }
-	float selfPos[3] = {0.0}, targetPos[3] = {0.0}, resultPos[3] = {0.0};
-	GetClientAbsOrigin(client, selfPos);
-	GetClientAbsOrigin(targetSurvivor, targetPos);
-	SubtractVectors(targetPos, selfPos, resultPos);
-	NormalizeVector(resultPos, resultPos);
-	ScaleVector(resultPos, g_hAllowPushWhenSpawn.FloatValue);
-	resultPos[2] = 300.0;
-	TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, resultPos);
 }
 public void playerDeathHandler(Event event, const char[] name, bool dontBroadcast)
 {
@@ -931,10 +902,11 @@ bool isOnValidMesh(float pos[3])
 // @pos：需要判断的坐标
 bool canBeVisibleBySurvivor(float pos[3])
 {
+	static int i;
 	static float targetPos[3] = {0.0};
-	for (int i = 1; i <= MaxClients; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || !(GetClientTeam(i) == TEAM_SURVIVOR)) { continue; }
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetClientTeam(i) != TEAM_SURVIVOR) { continue; }
 		GetClientAbsOrigin(i, targetPos);
 		if (L4D2_IsVisibleToPlayer(i, TEAM_SURVIVOR, TEAM_INFECTED, 0, pos)) { return true; }
 	}
