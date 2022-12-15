@@ -6,7 +6,6 @@
 #include <sdktools>
 #include <left4dhooks>
 #include "treeutil/treeutil.sp"
-/* #include "vector/vector_show.sp" */
 
 #define DEBUG_ALL 1
 #define CVAR_FLAG FCVAR_NOTIFY
@@ -15,9 +14,6 @@
 #define VISIBLE_HEIGHT 72.0
 // 每种特感刷新一只的阈值
 #define ALL_SPAWN_ONE_THERSHOLD 6
-// 刷特时间控制，大于 / 小于 9 秒加时
-#define SPAWN_INTERVAL_GT9_ADD_TIME 6.0
-#define SPAWN_INTERVAL_LT9_ADD_TIME 1.0
 // 函数找位每次找位次数
 #define DEFAULT_FIND_POS_ATTEMPT 15
 // 一次找位最高位置超过生还者高度这么多的位置才会被认为是找到高位
@@ -50,6 +46,8 @@ public Plugin myinfo =
 ConVar
 	g_hInfectedLimit,
 	g_hInfectedSpawnInterval,
+	g_hGt9AddTime,
+	g_hLt9AddTime,
 	g_hFindPosLimit,
 	g_hMinSpawnDist,
 	g_hMaxSpawnDist,
@@ -66,6 +64,7 @@ ConVar
 	g_hTeleportDist,
 	g_hPreTeleportCount,
 	g_hAheadTargetDist,
+	g_hAllowSpawnInSafeArea,
 	g_hEnableLog;
 // 感染者在队列中的位置 Cvar
 ConVar g_hInfectedInQueuePos[6];
@@ -86,7 +85,8 @@ int
 	expandFrame = 0, 
 	targetSurvivor = -1,
 	pinnedTarget = -1,
-	aheadTarget = -1;
+	aheadTarget = -1,
+	preferredSpawnDirection = 0;
 bool
 	g_bCanFindPos = false,
 	g_bCanTeleportFindPos = false,
@@ -97,8 +97,11 @@ bool
 	g_bPosHasSorted = false,
 	g_bExceedFindPosTime = false,
 	g_bHasRecordTime = false,
+	g_bHasRecordTeleportFindPosTime = false,
 	g_bDelaySpawnInfected[7] = { false };
-float g_fFindPosStartTime = 0.0;
+float
+	g_fFindPosStartTime = 0.0,
+	g_fTeleportFindPosStartTime = 0.0;
 
 Handle
 	g_hFindPosTimer = null,
@@ -115,16 +118,21 @@ public void OnPluginStart()
 	char cvarString[4] = {'\0'};
 	g_hInfectedLimit = CreateConVar("l4d_infected_limit", "6", "一次刷出多少特感", CVAR_FLAG, true, 0.0, true, 26.0);
 	g_hInfectedSpawnInterval = CreateConVar("versus_special_respawn_interval", "16.0", "特感刷新间隔", CVAR_FLAG, true, 0.0);
-	IntToString(g_hInfectedLimit.IntValue, cvarString, sizeof(cvarString));
+	// 找位设置
+	g_hInfectedLimit.GetString(cvarString, sizeof(cvarString));
 	g_hFindPosLimit = CreateConVar("inf_find_pos_limit", cvarString, "进行一次找位最多允许找多少个位置", CVAR_FLAG, true, 0.0);
 	g_hMinSpawnDist = CreateConVar("inf_min_spawn_dist", "250", "特感找位与生还者最小距离", CVAR_FLAG, true, 0.0);
 	g_hMaxSpawnDist = CreateConVar("inf_max_spawn_dist", "500", "特感找位与生还者最大距离", CVAR_FLAG, true, 0.0);
-	g_hEveryTargetFrame = CreateConVar("inf_evert_target_frame", "8", "以每个生还者为目标进行找位的帧数", CVAR_FLAG, true, 0.0);
-	g_hExpandFrame = CreateConVar("inf_expand_frame", "10", "找了多少次位置之后每帧扩大 2 单位找位距离", CVAR_FLAG, true, 0.0);
+	g_hEveryTargetFrame = CreateConVar("inf_evert_target_frame", "15", "以每个生还者为目标进行找位的帧数", CVAR_FLAG, true, 0.0);
+	g_hExpandFrame = CreateConVar("inf_expand_frame", "50", "找了多少次位置之后每帧扩大 1 单位找位距离", CVAR_FLAG, true, 0.0);
 	g_hMaxFindPosTime = CreateConVar("inf_max_find_pos_time", "2", "每次找位最大找位时间，超过这个时间会强制刷新", CVAR_FLAG, true, 0.0);
+	g_hGt9AddTime = CreateConVar("inf_gt9_add_time", "6", "特感刷新间隔超过 9 秒时的加时", CVAR_FLAG, true, 0.0);
+	g_hLt9AddTime = CreateConVar("inf_lt9_add_time", "1", "特感刷新间隔未超过 9 秒时的加时", CVAR_FLAG, true, 0.0);
+	// 特感传送
 	g_hPreTeleportCount = CreateConVar("inf_pre_teleport_count", "3", "特感无视野且满足传送条件多少秒后踢出重新刷新", CVAR_FLAG, true, 0.0);
 	g_hTeleportDist = CreateConVar("inf_teleport_distance", "250", "特感无视野且距离生还者多远将会踢出重新刷新", CVAR_FLAG, true, 0.0);
 	g_hAheadTargetDist = CreateConVar("inf_ahead_target_distance", "1500", "某个生还者离其他生还者多远将会被视为跑男", CVAR_FLAG, true, 0.0);
+	// 刷新队列设置
 	g_hInfectedInQueuePos[0] = CreateConVar("inf_in_queue_pos_smoker", "0,80", "Smoker 将会允许在队列的什么百分比刷新（队列长度 100%）", CVAR_FLAG);
 	g_hInfectedInQueuePos[1] = CreateConVar("inf_in_queue_pos_boomer", "90,100", "Boomer 将会允许在队列的什么百分比刷新", CVAR_FLAG);
 	g_hInfectedInQueuePos[2] = CreateConVar("inf_in_queue_pos_hunter", "0,40", "Hunter 将会允许在队列的什么百分比刷新", CVAR_FLAG);
@@ -135,6 +143,7 @@ public void OnPluginStart()
 	g_hSpawnStratergy = CreateConVar("inf_spawn_stratergy", "2", "特感刷新策略", CVAR_FLAG, true, (SPAWN_BY_DISTANCE * 1.0), true, (SPAWN_STRATERGY_COUNT - 1) * 1.0);
 	g_hOnePosInfectedLimit = CreateConVar("inf_one_pos_limit", "2", "找到一个位置允许刷新多少个特感", CVAR_FLAG, true, 0.0);
 	g_hAllowPosRadomInfectedLimit = CreateConVar("inf_allow_one_pos_random_limit", "0", "是否允许一个位置刷新随机只特感（开启此功能 g_hOnePosInfectedLimit 失效）", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hAllowSpawnInSafeArea = CreateConVar("inf_allow_in_safe_area", "1", "是否允许特感在安全屋内刷新", CVAR_FLAG, true, 0.0, true, 1.0);
 	// 延迟刷新
 	g_hAllowDelaySpawn = CreateConVar("inf_allow_delay_spawn", "1", "是否允许特感延迟刷新", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hDelaySpawnInfected = CreateConVar("inf_delay_spawn_infected", "4", "哪些特感会延迟刷新（特感编号，逗号分隔）", CVAR_FLAG);
@@ -147,6 +156,7 @@ public void OnPluginStart()
 	g_hPlayerInfectedLimit = FindConVar("z_max_player_zombies");
 	// Hook 事件
 	HookEvent("round_start", roundStartHandler);
+	HookEvent("round_end", roundEndHandler);
 	HookEvent("player_death", playerDeathHandler);
 	// 获取感染者设置数量
 	g_hSmokerCount = FindConVar("z_smoker_limit");
@@ -176,6 +186,8 @@ public void OnPluginStart()
 	int flags = g_hPlayerInfectedLimit.Flags;
 	g_hPlayerInfectedLimit.SetBounds(ConVarBound_Upper, false);
 	SetConVarFlags(g_hPlayerInfectedLimit, flags & ~FCVAR_NOTIFY);
+	// 调整导演系统 Cvar
+	setDirectorCvars(true);
 }
 public void OnPluginEnd()
 {
@@ -186,11 +198,13 @@ public void OnPluginEnd()
 	delete g_hFindPosTimer;
 	delete g_hPinnedAndTeleportTimer;
 	delete g_hDelaySpawnTimer;
+	setDirectorCvars(false);
 }
 
 public void OnMapStart()
 {
-	CreateTimer(0.5, clearAllStuff, _);
+	clearAllStuff();
+	CreateTimer(0.5, setMaxPlayerInfectedHandler, _);
 }
 
 // **********
@@ -198,12 +212,19 @@ public void OnMapStart()
 // **********
 public void roundStartHandler(Event event, const char[] name, bool dontBroadcast)
 {
-	CreateTimer(0.5, clearAllStuff, _);
+	clearAllStuff();
 	CreateTimer(0.5, setMaxPlayerInfectedHandler, _);
 }
-public Action clearAllStuff(Handle timer)
+public void roundEndHandler(Event event, const char[] name, bool dontBroadcast)
 {
-	g_bHasLeftSafeArea = g_bCanFindPos = g_bCanTeleportFindPos = g_bCanSpawn = g_bPosHasSorted = false;
+	clearAllStuff();
+}
+void clearAllStuff()
+{
+	g_bCanFindPos = g_bCanTeleportFindPos = g_bHasLeftSafeArea = g_bCanSpawn = g_bIsFirstWave = g_bGeneratedFirstWave = g_bPosHasSorted = g_bExceedFindPosTime
+	= g_bHasRecordTime = g_bHasRecordTeleportFindPosTime = false;
+	g_fFindPosStartTime = g_fTeleportFindPosStartTime = 0.0;
+	preferredSpawnDirection = SPAWN_ANYWHERE;
 	spawnPosList.Clear();
 	spawnList.Clear();
 	delaySpawnList.Clear();
@@ -211,12 +232,11 @@ public Action clearAllStuff(Handle timer)
 	clearPreTeleportCount();
 	delete g_hFindPosTimer;
 	delete g_hDelaySpawnTimer;
-	return Plugin_Continue;
 }
 public void playerDeathHandler(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (!IsValidInfected(client) || !IsFakeClient(client)) { return; }
+	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client) || GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_SPITTER) { return; }
 	RequestFrame(nextFrameKickBotHandler, client);
 }
 public void nextFrameKickBotHandler(int client)
@@ -242,6 +262,7 @@ public void OnGameFrame()
 	// 刷特射线找位
 	if (spawnPosList.Length < g_hFindPosLimit.IntValue && (g_bCanFindPos || g_bCanTeleportFindPos))
 	{
+		// 统计非传送找位和传送找位的时间
 		if (!g_bCanTeleportFindPos && calculateFindPosTime() > g_hMaxFindPosTime.FloatValue)
 		{
 			#if DEBUG_ALL
@@ -251,6 +272,16 @@ public void OnGameFrame()
 			g_bCanFindPos = false;
 			return;
 		}
+		if (g_bCanTeleportFindPos && calculateTeleportFindPosTime() > g_hMaxFindPosTime.FloatValue)
+		{
+			#if DEBUG_ALL
+				PrintToConsoleAll("[INF]：本次传送找位超过了最大找位时间，目前时间：%.2f 秒", calculateTeleportFindPosTime());
+			#endif
+			g_bExceedFindPosTime = true;
+			g_bCanTeleportFindPos = false;
+			return;
+		}
+		// 生成第一波将要刷新的特感
 		if (g_bIsFirstWave && !g_bGeneratedFirstWave && spawnList.Length < g_hInfectedLimit.IntValue)
 		{
 			#if DEBUG_ALL
@@ -274,9 +305,6 @@ public void OnGameFrame()
 		}
 		TR_GetEndPosition(rayEndPos, trace);
 		delete trace;
-		/* #if DEBUG_ALL
-			ShowLaser(4, rayStartPos, rayEndPos);
-		#endif */
 		visiblePos = rayEndPos; visiblePos[2] += VISIBLE_HEIGHT; rayEndPos[2] += NAV_HEIGHT;
 		if (!checkIfSpawnPosValid(rayEndPos, visiblePos, targetSurvivorPos)) { return; }
 		// 刷新第一波特感
@@ -285,10 +313,13 @@ public void OnGameFrame()
 			posInfectedLimit = getOnePosInfecetdLimit();
 			while (spawnList.Length > 0 && posInfectedLimit-- > 0)
 			{
+				#if DEBUG_ALL
+					PrintToConsoleAll("[INF]：开始第一波特感刷新（射线找到位置），特感种类：%d", spawnList.Get(0));
+				#endif
 				L4D2_SpawnSpecial(spawnList.Get(0), rayEndPos, INFECTED_SPAWN_EYE_ANGLE);
 				spawnList.Erase(0);
 			}
-			if (spawnList.Length <= 0) { g_bIsFirstWave = false; }
+			if (spawnList.Length <= 0) { g_bIsFirstWave = g_bCanFindPos = false; }
 			return;
 		}
 		// 刷新落后特感
@@ -297,6 +328,9 @@ public void OnGameFrame()
 			nowInfectedCount = getNowInfectedCount();
 			if (teleportList.Length > 0 && nowInfectedCount < g_hInfectedLimit.IntValue)
 			{
+				#if DEBUG_ALL
+					PrintToConsoleAll("[INF]：开始刷新落后特感（射线找到位置），特感种类：%d", teleportList.Get(0));
+				#endif
 				L4D2_SpawnSpecial(teleportList.Get(0), rayEndPos, INFECTED_SPAWN_EYE_ANGLE);
 				teleportList.Erase(0);
 			}
@@ -309,7 +343,7 @@ public void OnGameFrame()
 		}
 		// 找到了有效位置，加入到位置集合中
 		#if DEBUG_ALL
-			PrintToConsoleAll("位置有效，将找到的位置：%.2f %.2f %.2f 加入到位置集合中", rayEndPos[0], rayEndPos[1], rayEndPos[2]);
+			PrintToConsoleAll("[INF]：位置有效，将找到的位置：%.2f %.2f %.2f 加入到位置集合中", rayEndPos[0], rayEndPos[1], rayEndPos[2]);
 		#endif
 		posIndex = spawnPosList.PushArray(rayEndPos);
 		switch (g_hSpawnStratergy.IntValue)
@@ -323,11 +357,28 @@ public void OnGameFrame()
 		}
 		return;
 	}
+	// 超过了最大找位时间，仍有待传送的特感未刷出，使用函数刷出
+	if (!g_bCanTeleportFindPos && teleportList.Length > 0)
+	{
+		if (getNowInfectedCount() < g_hInfectedLimit.IntValue)
+		{
+			preferredSpawnDirection = SPAWN_IN_FRONT_OF_SURVIVORS;
+			infectedType = teleportList.Get(0);
+			getInfectedSpawnPosUsingFunction(infectedType, targetSurvivor, spawnPos);
+			L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
+			teleportList.Erase(0);
+		} else { teleportList.Clear(); }
+		return;
+	} 
+	else if (teleportList.Length <= 0)
+	{
+		g_bHasRecordTeleportFindPosTime = false;
+		preferredSpawnDirection = SPAWN_ANYWHERE;
+	}
 	// 有生还者被控，则立即刷新需要延迟刷新的特感
 	if (delaySpawnList.Length > 0 && IsValidSurvivor(pinnedTarget))
 	{
-		nowInfectedCount = getNowInfectedCount();
-		if (nowInfectedCount >= g_hInfectedLimit.IntValue)
+		if (getNowInfectedCount() >= g_hInfectedLimit.IntValue)
 		{
 			delete g_hDelaySpawnTimer;
 			delaySpawnList.Clear();
@@ -342,6 +393,9 @@ public void OnGameFrame()
 			if (canBeVisibleBySurvivor(spawnPos)) { spawnPosList.Erase(posIndex); }
 			else
 			{
+				#if DEBUG_ALL
+					PrintToConsoleAll("[INF]：有生还者被控（射线找到位置）刷新延迟刷新的特感，特感种类：%d", infectedType);
+				#endif
 				L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 				spawnPosList.Erase(posIndex);
 				delaySpawnList.Erase(0);
@@ -349,6 +403,9 @@ public void OnGameFrame()
 		}
 		else
 		{
+			#if DEBUG_ALL
+				PrintToConsoleAll("[INF]：有生还者被控（函数找到位置）刷新延迟刷新的特感，特感种类：%d", infectedType);
+			#endif
 			getInfectedSpawnPosUsingFunction(infectedType, pinnedTarget, spawnPos);
 			L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 			delaySpawnList.Erase(0);
@@ -359,7 +416,7 @@ public void OnGameFrame()
 	if ((spawnPosList.Length >= g_hFindPosLimit.IntValue || g_bExceedFindPosTime) && !g_bPosHasSorted)
 	{
 		if (!g_bIsFirstWave && g_bGeneratedFirstWave) { generateAWaveInfected(); }
-		if (spawnPosList.Length > 0) { customSortPos(); }
+		customSortPos();
 		g_bCanFindPos = false;
 		g_bPosHasSorted = g_bCanSpawn = true;
 		#if DEBUG_ALL
@@ -372,7 +429,7 @@ public void OnGameFrame()
 		posInfectedLimit = getOnePosInfecetdLimit();
 		infectedType = spawnList.Get(0, 0);
 		// 当前特感需要延迟刷新
-		if (infectedType > -1 && g_hAllowDelaySpawn.BoolValue && g_hDelaySpawnTime.FloatValue < g_hInfectedSpawnInterval.FloatValue && g_bDelaySpawnInfected[infectedType])
+		if (g_hAllowDelaySpawn.BoolValue && g_hDelaySpawnTime.FloatValue < g_hInfectedSpawnInterval.FloatValue && g_bDelaySpawnInfected[infectedType])
 		{
 			#if DEBUG_ALL
 				PrintToConsoleAll("[INF]：将当前特感：%d 加入到延迟刷新集合中", infectedType);
@@ -391,13 +448,11 @@ public void OnGameFrame()
 			{
 				while (spawnList.Length > 0 && posInfectedLimit-- > 0)
 				{
-					infectedType = spawnList.Get(0, 0);
-					if (infectedType == -1) { spawnList.Erase(0); }
-					else
-					{
-						L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
-						spawnList.Erase(0);
-					}
+					#if DEBUG_ALL
+						PrintToConsoleAll("[INF]：正常刷新特感（使用位置集合中的位置），特感种类：%d", infectedType);
+					#endif
+					L4D2_SpawnSpecial(spawnList.Get(0, 0), spawnPos, INFECTED_SPAWN_EYE_ANGLE);
+					spawnList.Erase(0);
 				}
 				spawnPosList.Erase(0);
 			}
@@ -407,6 +462,9 @@ public void OnGameFrame()
 			while (spawnList.Length > 0 && posInfectedLimit-- > 0)
 			{
 				infectedType = spawnList.Get(0);
+				#if DEBUG_ALL
+					PrintToConsoleAll("[INF]：正常刷新特感（使用函数找到的位置），特感种类：%d", infectedType);
+				#endif
 				getInfectedSpawnPosUsingFunction(infectedType, targetSurvivor, spawnPos);
 				L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 				spawnList.Erase(0);
@@ -414,11 +472,11 @@ public void OnGameFrame()
 		}
 		return;
 	}
-	// 一波特感刷新完成
+	// 一波特感刷新完成，重置状态
 	if (g_bHasLeftSafeArea && spawnList.Length <= 0)
 	{
 		expandFrame = 0;
-		g_bCanSpawn = g_bPosHasSorted = g_bExceedFindPosTime = false;
+		g_bCanSpawn = g_bIsFirstWave = g_bPosHasSorted = g_bExceedFindPosTime = false;
 		if (delaySpawnList.Length <= 0 && spawnPosList.Length > 0)
 		{
 			delete g_hDelaySpawnTimer;
@@ -444,6 +502,7 @@ bool findSpawnPosRayFilter(int entity, int mask, any self)
 		(className[0] == 'w' && strcmp(className, "witch") == 0) || 
 		(className[0] == 'p' && strcmp(className, "prop_physics") == 0) || 
 		(className[0] == 't' && strcmp(className, "tank_rock") == 0)) { return false; }
+	if ((className[0] == 'e' && strcmp(className, "env_physics_blocker") == 0) && GetEntProp(entity, Prop_Send, "m_nBlockType") == 1) { return false; }
 	return true;
 }
 
@@ -475,12 +534,12 @@ int spawnPosSortByHeight(int index1, int index2, ArrayList array, Handle hndl)
 int spawnPosSortByDist(int index1, int index2, ArrayList array, Handle hndl)
 {
 	if (array == null) { return -1; }
-	return array.Get(index1, 3) > array.Get(index2, 3) ? 1 : array.Get(index1, 3) == array.Get(index2, 3) ? 0 : -1;
+	return FloatCompare(array.Get(index1, 3), array.Get(index2, 3));
 }
 int spawnPosSortByHeightAfterByDist(int index1, int index2, ArrayList array, Handle hndl)
 {
 	if (array == null) { return -1; }
-	return array.Get(index1, 4) > array.Get(index2, 4) ? 1 : array.Get(index1, 4) == array.Get(index2, 4) ? 0 : -1;
+	return FloatCompare(array.Get(index1, 4), array.Get(index2, 4));
 }
 
 // 查询是否有需要处死传送的特感与跑男玩家
@@ -634,7 +693,7 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 	g_bGeneratedFirstWave = false;
 	delete g_hFindPosTimer;
 	delete g_hPinnedAndTeleportTimer;
-	float interval = g_hInfectedSpawnInterval.FloatValue > 9.0 ? g_hInfectedSpawnInterval.FloatValue + SPAWN_INTERVAL_GT9_ADD_TIME : g_hInfectedSpawnInterval.FloatValue + SPAWN_INTERVAL_LT9_ADD_TIME;
+	float interval = g_hInfectedSpawnInterval.FloatValue > 9.0 ? g_hInfectedSpawnInterval.FloatValue + g_hGt9AddTime.FloatValue : g_hInfectedSpawnInterval.FloatValue + g_hLt9AddTime.FloatValue;
 	g_hFindPosTimer = CreateTimer(interval, spawnInfectedHandler, _, TIMER_REPEAT);
 	g_hPinnedAndTeleportTimer = CreateTimer(CHECK_PINNED_AND_TELEPORT_INTERVAL, checkPinnedAndTeleportHandler, _, TIMER_REPEAT);
 	return Plugin_Continue;
@@ -659,6 +718,35 @@ float calculateFindPosTime()
 	return GetGameTime() - g_fFindPosStartTime;
 }
 
+// 记录传送找位时间
+float calculateTeleportFindPosTime()
+{
+	if (!g_bHasRecordTeleportFindPosTime && teleportList.Length > 0)
+	{
+		g_fTeleportFindPosStartTime = GetGameTime();
+		g_bHasRecordTeleportFindPosTime = true;
+	}
+	return GetGameTime() - g_fTeleportFindPosStartTime;
+}
+
+void setDirectorCvars(bool set)
+{
+	if (set)
+	{
+		FindConVar("director_no_specials").SetInt(1);
+		FindConVar("z_safe_spawn_range").SetInt(1);
+		FindConVar("z_spawn_safety_range").SetInt(1);
+		FindConVar("z_finale_spawn_safety_range").SetInt(1);
+		FindConVar("z_finale_spawn_tank_safety_range").SetInt(1);
+		return;
+	}
+	FindConVar("director_no_specials").RestoreDefault();
+	FindConVar("z_safe_spawn_range").RestoreDefault();
+	FindConVar("z_spawn_safety_range").RestoreDefault();
+	FindConVar("z_finale_spawn_safety_range").RestoreDefault();
+	FindConVar("z_finale_spawn_tank_safety_range").RestoreDefault();
+}
+
 // 为感染者数量数组赋值
 // @ infectedCountArray：感染者数组
 void getInfectedCountArray()
@@ -672,13 +760,13 @@ void getInfectedCountArray()
 }
 
 // 感染者限制 Cvar 发生变动，重新调整感染者限制 Cvar
-public void infectedLimitCvarChanged (Handle convar, const char[] oldValue, const char[] newValue)
+public void infectedLimitCvarChanged(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	CreateTimer(0.1, setMaxPlayerInfectedHandler, _);
 }
 
 // 感染者数量 Cvar 发生变动，重新获取感染者数组
-public void infectedCountCvarChanged (Handle convar, const char[] oldValue, const char[] newValue)
+public void infectedCountCvarChanged(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	getInfectedCountArray();
 }
@@ -704,11 +792,26 @@ bool isValidInfectedCount(int infectedCount)
 // @ targetSurvivorPos：需要检测是否可见的目标生还者位置
 bool checkIfSpawnPosValid(float rayEndPos[3], float visiblePos[3], float targetSurvivorPos[3])
 {
-	float navDist = L4D2_NavAreaTravelDistance(rayEndPos, targetSurvivorPos, false);
+	static float navDist;
+	navDist = L4D2_NavAreaTravelDistance(rayEndPos, targetSurvivorPos, false);
+	if (!g_hAllowSpawnInSafeArea.BoolValue)
+	{
+		static Address rayEndNav;
+		rayEndNav = L4D2Direct_GetTerrorNavArea(rayEndPos);
+		rayEndNav = rayEndNav == Address_Null ? L4D_GetNearestNavArea(rayEndPos) : rayEndNav;
+		return
+			!canBeVisibleBySurvivor(visiblePos) &&
+			isOnValidMesh(rayEndPos) &&
+			GetVectorDistance(rayEndPos, targetSurvivorPos) >= g_hMinSpawnDist.FloatValue &&
+			navDist <= g_hMaxSpawnDist.FloatValue * 2.0 &&
+			!isPlayerWillStuck(rayEndPos) &&
+			L4D_GetNavArea_SpawnAttributes(rayEndNav) % CHECKPOINT != 0;
+	}
 	return
 		!canBeVisibleBySurvivor(visiblePos) &&
 		isOnValidMesh(rayEndPos) &&
-		(navDist != -1.0 && navDist >= g_hMinSpawnDist.FloatValue && navDist <= g_hMaxSpawnDist.FloatValue * 2.0) &&
+		GetVectorDistance(rayEndPos, targetSurvivorPos) >= g_hMinSpawnDist.FloatValue &&
+		navDist <= g_hMaxSpawnDist.FloatValue * 2.0 &&
 		!isPlayerWillStuck(rayEndPos);
 }
 
@@ -881,11 +984,23 @@ static void generateAWaveInfected()
 }
 
 // 调整 PreferredSpecialDirection
+// @key：需要调整的 key 值
+// @retVal：原 value 值，使用 return Plugin_Handled 覆盖
 public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal)
 {
-	if (strcmp(key, "PreferredSpecialDirection", false) == 0 && retVal != SPAWN_ANYWHERE)
+	if (strcmp(key, "MaxSpecials", false) == 0 && retVal != g_hInfectedLimit.IntValue)
 	{
-		retVal = SPAWN_ANYWHERE;
+		retVal = g_hInfectedLimit.IntValue;
+		return Plugin_Handled;
+	}
+	if ((strcmp(key, "cm_ShouldHurry", false) == 0) || (strcmp(key, "cm_AggressiveSpecials", false) == 0) || (strcmp(key, "ActiveChallenge", false) == 0) && retVal != 1)
+	{
+		retVal == 1;
+		return Plugin_Handled;
+	}
+	if (strcmp(key, "PreferredSpecialDirection", false) == 0 && retVal != preferredSpawnDirection)
+	{
+		retVal = preferredSpawnDirection;
 		return Plugin_Handled;
 	}
 	return Plugin_Continue;
@@ -903,11 +1018,9 @@ bool isOnValidMesh(float pos[3])
 bool canBeVisibleBySurvivor(float pos[3])
 {
 	static int i;
-	static float targetPos[3] = {0.0};
 	for (i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetClientTeam(i) != TEAM_SURVIVOR) { continue; }
-		GetClientAbsOrigin(i, targetPos);
 		if (L4D2_IsVisibleToPlayer(i, TEAM_SURVIVOR, TEAM_INFECTED, 0, pos)) { return true; }
 	}
 	return false;
@@ -942,7 +1055,7 @@ void getInfectedSpawnPosUsingFunction(int infectedType, int target, float spawnP
 // @pos：需要检测的坐标
 bool isPlayerWillStuck(float pos[3])
 {
-	Handle trace = TR_TraceHullFilterEx(pos, pos, STUCK_SIZE_MIN, STUCK_SIZE_MAX, MASK_PLAYERSOLID, isPlayerWillStuckRayFilter, _);
+	Handle trace = TR_TraceHullFilterEx(pos, pos, STUCK_SIZE_MIN, STUCK_SIZE_MAX, MASK_NPCSOLID_BRUSHONLY, isPlayerWillStuckRayFilter, _);
 	if (TR_DidHit(trace))
 	{
 		delete trace;
@@ -954,7 +1067,7 @@ bool isPlayerWillStuck(float pos[3])
 bool isPlayerWillStuckRayFilter(int entity, int contentMask, any self)
 {
 	// Filter self and players
-	if (entity == self || entity >= 1 && entity <= MaxClients) { return false; }
+	if (entity == self || (entity >= 1 && entity <= MaxClients)) { return false; }
 	// Filter infected，witch，prop_physics，tank_rock
 	char className[64] = {'\0'};
 	GetEntityClassname(entity, className, sizeof(className));
@@ -963,6 +1076,7 @@ bool isPlayerWillStuckRayFilter(int entity, int contentMask, any self)
 		(className[0] == 'p' && strcmp(className, "prop_physics") == 0) || 
 		(className[0] == 't' && strcmp(className, "tank_rock") == 0)) { return false; }
 	// 过滤 SolidType 为 1 的空气墙
+	if ((className[0] == 'e' && strcmp(className, "env_physics_blocker") == 0) && GetEntProp(entity, Prop_Send, "m_nBlockType") == 1) { return false; }
 	if (GetEntProp(entity, Prop_Send, "m_nSolidType") == 1) { return false; }
 	return true;
 }
@@ -975,8 +1089,9 @@ void generateRayMinAndMaxPos(float minPos[3], float maxPos[3], float targetSurvi
 {
 	if (expandFrame > g_hExpandFrame.IntValue)
 	{
-		float offset = (expandFrame - g_hExpandFrame.IntValue) * 2.0;
-		float different = offset > (g_hMaxSpawnDist.FloatValue * 3.0) ? g_hMaxSpawnDist.FloatValue * 2.0 : offset;
+		static float offset, different;
+		offset = float(expandFrame - g_hExpandFrame.IntValue);
+		different = offset > (g_hMaxSpawnDist.FloatValue * 3.0) ? g_hMaxSpawnDist.FloatValue * 3.0 : offset;
 		minPos[0] = targetSurvivorPos[0] - g_hMaxSpawnDist.FloatValue - different;
 		maxPos[0] = targetSurvivorPos[0] + g_hMaxSpawnDist.FloatValue + different;
 		minPos[1] = targetSurvivorPos[1] - g_hMaxSpawnDist.FloatValue - different;

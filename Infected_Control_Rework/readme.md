@@ -28,14 +28,18 @@
   6. 特感复活后，将会进行一次向目标生还者方向的 **加速跳跃**（request by 音理酱）**[已弃用]**
   7. 判别某个坐标是否可以进行特感刷新条件如下：<br>
      ```Java
-     // 当前位置对于生还者不可见
-     !canBeVisibleBySurvivor(visiblePos) &&
-     // 当前位置在有效 Nav Area 上
-     isOnValidMesh(rayEndPos) &&
-     // 当前位置到目标生还者的 Nav 距离不得为 -1.0（无效），同时需要大于等于最小刷新距离，小于等于最大刷新距离
-     (navDist != -1.0 && navDist >= g_hMinSpawnDist.FloatValue && navDist <= g_hMaxSpawnDist.FloatValue * 2.0) &&
-     // 当前位置不会令任何客户端卡住
-     !isPlayerWillStuck(rayEndPos);
+      // 当前位置对生还者不可见
+      !canBeVisibleBySurvivor(visiblePos)
+      // 当前位置在有效 Nav Area 上
+      isOnValidMesh(rayEndPos)
+      // 当前位置距离生还者的距离大于最小特感生成距离
+      GetVectorDistance(rayEndPos, targetSurvivorPos) >= g_hMinSpawnDist.FloatValue
+      // 当前位置到生还者的 Nav 距离小于最大特感生成距离（不判断 -1.0 有效性，否则会导致某些地方，如 c2m2 开局安全屋房顶无法刷新特感）
+      navDist <= g_hMaxSpawnDist.FloatValue * 2.0 &&
+      // 当前位置不会卡住即将刷出的特感
+      !isPlayerWillStuck(rayEndPos);
+      // 如果开启禁止特感刷新在安全区域内则会增加以下判断
+      L4D_GetNavArea_SpawnAttributes(rayEndNav) % CHECKPOINT（2048） != 0;
      ```
   8. 判断玩家是否可见某个坐标的检测高度更改为 72，降低特感脸刷概率（11-28 插件为 20）
 
@@ -53,11 +57,15 @@ inf_min_spawn_dist 250
 // 最大刷新距离
 inf_max_spawn_dist 500
 // 以当前生还者作为中心点进行找位的帧数
-inf_evert_target_frame 8
-// 发射了多少次找位射线后每帧扩大 2 单位找位范围
-inf_expand_frame 10
+inf_evert_target_frame 15
+// 发射了多少次找位射线后每帧扩大 1 单位找位范围
+inf_expand_frame 50
 // 最大允许找位时间（秒）
 inf_max_find_pos_time 2
+// 特感刷新时间超过 9 秒的加时（原本 8 秒）
+inf_gt9_add_time 6
+// 特感刷新时间未超过 9 秒的加时（原本 4 秒）
+inf_lt9_add_time 1
 // 特感满足传送条件（距离大于传送距离且无视野）多少秒后允许传送
 inf_pre_teleport_count 3
 // 特感传送距离
@@ -87,4 +95,16 @@ inf_enable_log 1
 ## 插件更新日志：
 
 - 2022-12-12：上传第一版本，添加 readme 文件
-- 2022-12-13：将特感生成时向生还者方向推动功能更改为使用单独插件 Infected Push When Spawn 管理，本刷特插件不再提供这一功能
+- 2022-12-13：将特感生成时向生还者方向推动功能更改为使用单独插件 [Infected Push When Spawn](https://github.com/GlowingTree880/L4D2_LittlePlugins/tree/main/InfectedPushWhenSpawn) 管理，本刷特插件不再提供这一功能
+<details>
+<summary>2022-12-15：</summary>
+<pre>
+
+1. 增加设置导演系统 Cvar
+2. 去除口水死亡立刻踢出导致无声口水的 Bug
+3. 修复第一波特感未完全使用射线刷出导致第二波无法生成特感的 Bug
+4. 修复待传送特感找不到位置而导致长时间特感不刷新的 Bug
+5. 增加每次传送射线找位时间为最大允许找位时间，超过则使用函数刷新待传送特感
+6. 增加是否在安全屋内刷新特感的选项
+</pre>
+</details>
