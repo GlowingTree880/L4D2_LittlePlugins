@@ -26,6 +26,8 @@
   <br>（当只有爆头丧尸才会使其死亡，近战武器也相同）
 - **DefibrillatorHealingField：** In the case of holding the defibrillator, you can aim at one survivor who is not full of blood, then press the E (USE) key. A treatment field (range) will be triggered to treat the target (not dead/incapacitated) Multiple survivors within the range (recovery of permanent health + temporary health) can be restored.
   <br>（手持电击器的情况下，可以将目标对准未满血的生还者按住 E（USE）键，将会触发一个治疗场（范围），对需要治疗的对象（未死亡/未倒地）进行治疗（回复实血+虚血）范围内的多个对象皆可受到治疗）
+- **ErrorFileDeleter：** A plugin which will delete the error log like error_XXXX.log and LXXXX.log in `sourcemod\logs` folder automatically.
+  <br>（自动删除 `sourcemod\logs` 目录下的 error_XXXX.log 与 LXXXX.log 文件，防止错误日志文件堆积过多）
 - **TankAnnounce：** In any gamemode, The plugin will announce a message when Tank spawn. The message type can be selected (chat/hint text/central text. Compared with l4d_tank_announce in ZoneMod, the depend to the l4d_tank_control_eq plug-in is deleted.
   <br>（任意模式下，Tank 刷新将会进行提示的插件，提示类型：聊天框/中央文本框提示/中央文字提示，相比 ZoneMod 中的 TankAnnounce 删除了对 l4d_tank_control_eq 插件的调用）
 - **JockeyRideSpeed：** A plugin that can customize the movement speed of the survivors after jockeys ride on them (also can customize the movement speed of the survivors after jockeys ride end)
@@ -38,8 +40,8 @@
   <br>（参考国内主流药役插件 AnneServer （7-7 与 2 月 15 日版本）中核心插件 infected_control.smx 反编译修复编写，添加了一些其他功能的射线找位刷特，传送特感的插件，注：请修改游戏模式为 versus，否则只能刷 3 特，具体原因目前还在研究中）
 - **Infected_Control_Rework：** A rework version of Infected Control
   <br>（2022-12-12 日对原 Infected Control 刷特插件的优化及增强插件，原 Infected Control 刷特插件将不再维护，转而维护本刷特插件）
-- **InfectedPushWhenSpawn：** 
-A plugin that makes special infected jump and gives it an acceleration towards the survivor after special infected spawning
+- **InfectedPushWhenSpawn：**
+  A plugin that makes special infected jump and gives it an acceleration towards the survivor after special infected spawning
   <br>（特感刷新时令其跳跃并给予其一个朝向生还者方向的加速度）
 - **Text：** Use with Infected_Control.smx, Auto start spawn when the first survivor leave safe area, and indicates the current difficulty
   <br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！参考国内主流药役插件 AnneServer （2 月 15 日版本）中核心插件 text.smx 反编译并修复编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
