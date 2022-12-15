@@ -17,7 +17,7 @@ public Plugin myinfo =
 }
 
 static char logPath[PLATFORM_MAX_PATH], pluginLogPath[PLATFORM_MAX_PATH], fileName[PLATFORM_MAX_PATH];
-static DirectoryListing listing = null;
+static DirectoryListing listing;
 static FileType fileType;
 static File pluginLogFile;
 static int monthDay[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -52,6 +52,7 @@ public void OnPluginStart()
 }
 public void OnPluginEnd()
 {
+	delete listing;
 	delete pluginLogFile;
 }
 
@@ -66,7 +67,7 @@ public Action cmdDeleteFile(int client, int args)
 	return Plugin_Continue;
 }
 
-public void OnMapStart()
+public void OnConfigsExecuted()
 {
 	prepareDeleteFile();
 }
@@ -93,8 +94,8 @@ int prepareDeleteFile()
 		TrimString(fileName);
 		char timeStr[32] = {'\0'}, nowTimeStr[32] = {'\0'};
 		FormatTime(nowTimeStr, sizeof(nowTimeStr), "%Y%m%d");
-		if (fileName[0] == 'e' && StrContains(fileName, "errors_", false) > -1 && StrContains(fileName, ".log", false) > -1) { strcopy(timeStr, sizeof(timeStr), subString(fileName, 8, 8)); }
-		else if (fileName[0] == 'L' && StrContains(fileName, ".log", false) > -1) { strcopy(timeStr, sizeof(timeStr), subString(fileName, 2, 8)); }
+		if (fileName[0] == 'e' && strcmp(fileName[16], "log") == 0) { strcopy(timeStr, sizeof(timeStr), subString(fileName, 8, 8)); }
+		else if (fileName[0] == 'L' && strcmp(fileName[10], "log") == 0) { strcopy(timeStr, sizeof(timeStr), subString(fileName, 2, 8)); }
 		else { continue; }
 		int year = getYear(timeStr), month = getMonth(timeStr), day = getDay(timeStr), sumYearDay = sumDay(month, day);
 		int nowYear = getYear(nowTimeStr), nowMonth = getMonth(nowTimeStr), nowDay = getDay(nowTimeStr), sumNowYearDay = sumDay(nowMonth, nowDay), yearInterval = yearDayDiff(year, nowYear);
@@ -115,6 +116,7 @@ int prepareDeleteFile()
 		}
 	}
 	if (deleteCount > 0) { WriteFileLine(pluginLogFile, "[错误文件删除]：本次共删除：%d 个超过：%d 天的错误日志文件\n", deleteCount, g_hDeleteTimeDiff.IntValue); }
+	delete listing;
 	// 关闭日志文件句柄
 	delete pluginLogFile;
 	return deleteCount;
