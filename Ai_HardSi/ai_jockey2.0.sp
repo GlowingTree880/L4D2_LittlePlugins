@@ -12,7 +12,7 @@
 #define BACK_JUMP_DIST 70.0
 #define FREEZE_MAX_TIME 0.8
 #define SHOVE_INTERVAL 1.0
-#define DEBUG_ALL 1
+#define DEBUG_ALL 0
 
 enum AimType
 {
@@ -281,10 +281,8 @@ public Action setMoveTypeToCustomHandler(Handle timer, int client)
 	if (!IsAiJockey(client)) { return Plugin_Continue; }
 	SetEntityMoveType(client, MOVETYPE_CUSTOM);
 	g_fNoActionTime[client][0] = g_fNoActionTime[client][1] = 0.0;
-	#if (DEBUG_ALL)
-	{
+	#if DEBUG_ALL
 		PrintToConsoleAll("[Ai-Jockey]：解冻 Jockey，时间戳：%.2f", GetGameTime());
-	}
 	#endif
 	return Plugin_Continue;
 }
