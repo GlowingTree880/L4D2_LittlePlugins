@@ -208,6 +208,7 @@ public void OnPluginEnd()
 public void OnMapStart()
 {
 	clearAllStuff();
+	CreateTimer(0.5, setDirectorCvarsHandler, _);
 	CreateTimer(0.5, setMaxPlayerInfectedHandler, _);
 }
 
@@ -217,6 +218,7 @@ public void OnMapStart()
 public void roundStartHandler(Event event, const char[] name, bool dontBroadcast)
 {
 	clearAllStuff();
+	CreateTimer(0.5, setDirectorCvarsHandler, _);
 	CreateTimer(0.5, setMaxPlayerInfectedHandler, _);
 }
 public void roundEndHandler(Event event, const char[] name, bool dontBroadcast)
@@ -253,6 +255,12 @@ public Action kickBotHandler(Handle timer, int client)
 public Action setMaxPlayerInfectedHandler(Handle timer)
 {
 	g_hPlayerInfectedLimit.SetInt(g_hInfectedLimit.IntValue);
+	return Plugin_Continue;
+}
+public Action setDirectorCvarsHandler(Handle timer)
+{
+	if (g_hAllowEasyMode.BoolValue) { setDirectorCvars(false); }
+	else { setDirectorCvars(true); }
 	return Plugin_Continue;
 }
 
@@ -482,7 +490,7 @@ public void OnGameFrame()
 	if (g_bHasLeftSafeArea && spawnList.Length <= 0)
 	{
 		expandFrame = 0;
-		g_bCanSpawn = g_bCanEasyModeSpawn = g_bIsFirstWave = g_bPosHasSorted = g_bExceedFindPosTime = false;
+		g_bCanSpawn = g_bCanEasyModeSpawn = g_bIsFirstWave = g_bPosHasSorted = g_bExceedFindPosTime = g_bHasRecordTime = false;
 		if (delaySpawnList.Length <= 0 && spawnPosList.Length > 0)
 		{
 			delete g_hDelaySpawnTimer;
@@ -714,13 +722,9 @@ float calculateFindPosTime()
 {
 	if (g_bCanFindPos && !g_bHasRecordTime)
 	{
-		#if DEBUG_ALL
-			PrintToConsoleAll("[INF]：开始记录找位时间");
-		#endif
 		g_fFindPosStartTime = GetGameTime();
 		g_bHasRecordTime = true;
 	}
-	else if (!g_bCanFindPos) { g_bHasRecordTime = false; }
 	return GetGameTime() - g_fFindPosStartTime;
 }
 
