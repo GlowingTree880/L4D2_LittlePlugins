@@ -47,6 +47,8 @@
   <br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！参考国内主流药役插件 AnneServer （2 月 15 日版本）中核心插件 text.smx 反编译并修复编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
 - **ServerFunction：** A simple plugin which provides base server functions
   <br>（参考国内主流药役服务器 AnneServer （2 月 15 日版本）中核心插件 server.smx 反编译修复编写，主要提供 !jg !away !ip !restart !restartmap 指令的功能以及玩家加入退出显示，出门物资发放，秒妹回血，motd 页面标题，链接控制等功能，增加安全屋内无限子弹&无敌，生还者团队未满情况下可通过 !jg 指令选择喜欢的人物功能）
+- **ServerNamer** A simple plugin which provides server name setting function
+  <br>（服务器名称设置插件）
 - **AsiAi：** Advanced Special Infected Ai
   <br>（参考国内主流药役服务器 AnneServer （2 月 15 日版本）中 l4d2_tank_throw.smx 反编译修复编写，实际为 def075 Asiai 0.4 版本，增强特感攻击性）
 - **ZhenduiMode：** Target mode, the admin can type !zhendui in chat to turn it on and off. After turning on and selecting a player as the target, the special infected on spot and subsequent resurrection will preferentially target this player until the player is pinned or the mode is turned off
