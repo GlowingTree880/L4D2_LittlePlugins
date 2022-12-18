@@ -66,6 +66,8 @@ inf_max_find_pos_time 2
 inf_gt9_add_time 6
 // 特感刷新时间未超过 9 秒的加时（原本 4 秒）
 inf_lt9_add_time 1
+// 是否开启简单模式（单纯使用函数找位，适合三方图）
+inf_allow_easy_mode 0
 // 特感满足传送条件（距离大于传送距离且无视野）多少秒后允许传送
 inf_pre_teleport_count 3
 // 特感传送距离
@@ -106,5 +108,12 @@ inf_enable_log 1
 4. 修复待传送特感找不到位置而导致长时间特感不刷新的 Bug
 5. 增加每次传送射线找位时间为最大允许找位时间，超过则使用函数刷新待传送特感
 6. 增加是否在安全屋内刷新特感的选项
+</pre>
+</details>
+<details>
+<summary>2022-12-18：</summary>
+<pre>
+1. 增加简单模式
+2. 修复插件长时间运行由于未判断生还者出门后执行 `OnGameFrame()` 函数内逻辑导致创建过多句柄内存溢出最后炸服的错误
 </pre>
 </details>

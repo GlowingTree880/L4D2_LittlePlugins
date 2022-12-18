@@ -65,6 +65,7 @@ ConVar
 	g_hPreTeleportCount,
 	g_hAheadTargetDist,
 	g_hAllowSpawnInSafeArea,
+	g_hAllowEasyMode,
 	g_hEnableLog;
 // 感染者在队列中的位置 Cvar
 ConVar g_hInfectedInQueuePos[6];
@@ -98,6 +99,7 @@ bool
 	g_bExceedFindPosTime = false,
 	g_bHasRecordTime = false,
 	g_bHasRecordTeleportFindPosTime = false,
+	g_bCanEasyModeSpawn = false,
 	g_bDelaySpawnInfected[7] = { false };
 float
 	g_fFindPosStartTime = 0.0,
@@ -128,6 +130,7 @@ public void OnPluginStart()
 	g_hMaxFindPosTime = CreateConVar("inf_max_find_pos_time", "2", "每次找位最大找位时间，超过这个时间会强制刷新", CVAR_FLAG, true, 0.0);
 	g_hGt9AddTime = CreateConVar("inf_gt9_add_time", "6", "特感刷新间隔超过 9 秒时的加时", CVAR_FLAG, true, 0.0);
 	g_hLt9AddTime = CreateConVar("inf_lt9_add_time", "1", "特感刷新间隔未超过 9 秒时的加时", CVAR_FLAG, true, 0.0);
+	g_hAllowEasyMode = CreateConVar("inf_allow_easy_mode", "0", "是否开启简单模式（不会使用射线找位，适合三方图开黑）", CVAR_FLAG, true, 0.0, true, 1.0);
 	// 特感传送
 	g_hPreTeleportCount = CreateConVar("inf_pre_teleport_count", "3", "特感无视野且满足传送条件多少秒后踢出重新刷新", CVAR_FLAG, true, 0.0);
 	g_hTeleportDist = CreateConVar("inf_teleport_distance", "250", "特感无视野且距离生还者多远将会踢出重新刷新", CVAR_FLAG, true, 0.0);
@@ -173,6 +176,7 @@ public void OnPluginStart()
 	g_hSpitterCount.AddChangeHook(infectedCountCvarChanged);
 	g_hJockeyCount.AddChangeHook(infectedCountCvarChanged);
 	g_hChargerCount.AddChangeHook(infectedCountCvarChanged);
+	g_hAllowEasyMode.AddChangeHook(easyModeCvarChanged);
 	getInfectedCountArray();
 	// 获取特感在队列中的设置位置
 	getInfectedInQueuePos();
@@ -221,7 +225,7 @@ public void roundEndHandler(Event event, const char[] name, bool dontBroadcast)
 }
 void clearAllStuff()
 {
-	g_bCanFindPos = g_bCanTeleportFindPos = g_bHasLeftSafeArea = g_bCanSpawn = g_bIsFirstWave = g_bGeneratedFirstWave = g_bPosHasSorted = g_bExceedFindPosTime
+	g_bCanFindPos = g_bCanTeleportFindPos = g_bHasLeftSafeArea = g_bCanSpawn = g_bCanEasyModeSpawn = g_bIsFirstWave = g_bGeneratedFirstWave = g_bPosHasSorted = g_bExceedFindPosTime
 	= g_bHasRecordTime = g_bHasRecordTeleportFindPosTime = false;
 	g_fFindPosStartTime = g_fTeleportFindPosStartTime = 0.0;
 	preferredSpawnDirection = SPAWN_ANYWHERE;
@@ -237,13 +241,14 @@ public void playerDeathHandler(Event event, const char[] name, bool dontBroadcas
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client) || GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_SPITTER) { return; }
-	RequestFrame(nextFrameKickBotHandler, client);
+	CreateTimer(0.5, kickBotHandler, client);
 }
-public void nextFrameKickBotHandler(int client)
+public Action kickBotHandler(Handle timer, int client)
 {
-	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client)) { return; }
+	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client)) { return Plugin_Continue; }
 	KickClientEx(client, "踢出死亡感染者");
 	preTeleportCount[client] = 0;
+	return Plugin_Continue;
 }
 public Action setMaxPlayerInfectedHandler(Handle timer)
 {
@@ -253,6 +258,7 @@ public Action setMaxPlayerInfectedHandler(Handle timer)
 
 public void OnGameFrame()
 {
+	if (!g_bHasLeftSafeArea) { return; }
 	static Handle trace;
 	static int posIndex, posInfectedLimit, infectedType, nowInfectedCount;
 	static float rayMinPos[3], rayMaxPos[3], rayStartPos[3], rayEndPos[3], visiblePos[3], targetSurvivorPos[3], spawnPos[3];
@@ -260,7 +266,7 @@ public void OnGameFrame()
 	getTargetSurvivor(targetSurvivor);
 	if (!IsValidSurvivor(targetSurvivor) || !IsPlayerAlive(targetSurvivor)) { return; }
 	// 刷特射线找位
-	if (spawnPosList.Length < g_hFindPosLimit.IntValue && (g_bCanFindPos || g_bCanTeleportFindPos))
+	if (!g_hAllowEasyMode.BoolValue && spawnPosList.Length < g_hFindPosLimit.IntValue && (g_bCanFindPos || g_bCanTeleportFindPos))
 	{
 		// 统计非传送找位和传送找位的时间
 		if (!g_bCanTeleportFindPos && calculateFindPosTime() > g_hMaxFindPosTime.FloatValue)
@@ -358,7 +364,7 @@ public void OnGameFrame()
 		return;
 	}
 	// 超过了最大找位时间，仍有待传送的特感未刷出，使用函数刷出
-	if (!g_bCanTeleportFindPos && teleportList.Length > 0)
+	if ((!g_bCanTeleportFindPos || g_hAllowEasyMode.BoolValue) && teleportList.Length > 0)
 	{
 		if (getNowInfectedCount() < g_hInfectedLimit.IntValue)
 		{
@@ -413,9 +419,9 @@ public void OnGameFrame()
 		return;
 	}
 	// 找位完成，对位置进行排序
-	if ((spawnPosList.Length >= g_hFindPosLimit.IntValue || g_bExceedFindPosTime) && !g_bPosHasSorted)
+	if ((spawnPosList.Length >= g_hFindPosLimit.IntValue || g_bExceedFindPosTime || (g_hAllowEasyMode.BoolValue && g_bCanEasyModeSpawn)) && !g_bPosHasSorted)
 	{
-		if (!g_bIsFirstWave && g_bGeneratedFirstWave) { generateAWaveInfected(); }
+		if (!g_bIsFirstWave && g_bGeneratedFirstWave || g_hAllowEasyMode.BoolValue) { generateAWaveInfected(); }
 		customSortPos();
 		g_bCanFindPos = false;
 		g_bPosHasSorted = g_bCanSpawn = true;
@@ -424,7 +430,7 @@ public void OnGameFrame()
 		#endif
 	}
 	// 正常刷新特感
-	if (g_bCanSpawn && g_bPosHasSorted && spawnList.Length > 0)
+	if (g_bHasLeftSafeArea && g_bCanSpawn && g_bPosHasSorted && spawnList.Length > 0)
 	{
 		posInfectedLimit = getOnePosInfecetdLimit();
 		infectedType = spawnList.Get(0, 0);
@@ -476,7 +482,7 @@ public void OnGameFrame()
 	if (g_bHasLeftSafeArea && spawnList.Length <= 0)
 	{
 		expandFrame = 0;
-		g_bCanSpawn = g_bIsFirstWave = g_bPosHasSorted = g_bExceedFindPosTime = false;
+		g_bCanSpawn = g_bCanEasyModeSpawn = g_bIsFirstWave = g_bPosHasSorted = g_bExceedFindPosTime = false;
 		if (delaySpawnList.Length <= 0 && spawnPosList.Length > 0)
 		{
 			delete g_hDelaySpawnTimer;
@@ -678,7 +684,7 @@ public Action spawnInfectedHandler(Handle timer)
 	#if DEBUG_ALL
 		PrintToConsoleAll("[INF]：触发一个找位时钟周期，开始找位");
 	#endif
-	g_bCanFindPos = true;
+	g_bCanFindPos = g_bCanEasyModeSpawn = true;
 	return Plugin_Continue;
 }
 
@@ -769,6 +775,21 @@ public void infectedLimitCvarChanged(Handle convar, const char[] oldValue, const
 public void infectedCountCvarChanged(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	getInfectedCountArray();
+}
+
+// 简单模式 Cvar 发生变动，设置导演系统刷出特感 Cvar
+public void easyModeCvarChanged(Handle convar, const char[] oldValue, const char[] newValue)
+{
+	if (StringToInt(newValue)) { setDirectorCvars(false); }
+	else
+	{
+		if (g_bHasLeftSafeArea)
+		{
+			g_bGeneratedFirstWave = true;
+			g_bIsFirstWave = g_bCanTeleportFindPos = false;
+		}
+		setDirectorCvars(true);
+	}
 }
 
 // 返回特感数量数组中对应特感的数量
