@@ -61,6 +61,8 @@
   <br>（令人快乐的 DPS 特感（Spitter，Boomer）插件，控制近战对 DPS 特感的伤害同时令 DPS 特感免受除了近战伤害外的其他武器伤害，并且能控制是否在场上还有 Tank 存在时禁止开关终点安全门，阳间服必备）
 - **SpecVote：** Vote to move a player who were not originally in the spectator team to the spectator team
   <br>（任意或指定团队成员可发起投票，将当前不在旁观者团队内的玩家移动至旁观者团队，防止出现演员）
+- **SurvivorMVP：** Display survivors' data such as  killing SI, CI, FF done to teammates
+  <br>（生还者 MVP 数据显示，可显示生还者击杀特感、丧尸、友伤等数据）
 - **TankDamageAnnounce：** When the last spawned tank dies, print survivor's damage to this tank and survivor's injuries amount
   <br>（当最后一个刷新的 Tank 死亡时，打印生还者对该 Tank 的伤害及吃拳/石/铁的数量及生还者受到该 Tank 的伤害情况）
 - **UnsilentHunterJockey：** After hunter or jockey spawning and they are not pinning someone, then make them emit an alert sound at regular intervals
