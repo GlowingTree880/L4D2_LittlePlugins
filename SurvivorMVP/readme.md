@@ -28,7 +28,7 @@ mvp_show_details 1
 ```
 
 # 效果图示
-![生还者 MVP 效果图示](/survivor_mvp.png)
+![生还者 MVP 效果图示](/SurvivorMVP/survivor_mvp.png)
 
 # 更新日志
 - 2022-12-21：上传插件与 readme 文件
