@@ -349,33 +349,15 @@ stock int GetClosetSurvivor(int client, int exclude_client = -1)
 // 获取某玩家到最近或指定生还者的距离，如果存在有效最近或指定生还者则返回距离，无则返回 -1
 stock int GetClosetSurvivorDistance(int client, int specific_survivor = -1)
 {
-	if (IsValidClient(client))
-	{
-		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
-		int target_survivor = -1;
-		GetClientAbsOrigin(client, self_pos);
-		if (IsValidSurvivor(specific_survivor))
-		{
-			target_survivor = specific_survivor;
-		}
-		else
-		{
-			target_survivor = GetClosetMobileSurvivor(client);
-		}
-		if (IsValidSurvivor(target_survivor))
-		{
-			GetEntPropVector(target_survivor, Prop_Send, "m_vecOrigin", target_pos);
-			return RoundToNearest(GetVectorDistance(self_pos, target_pos));
-		}
-		else
-		{
-			return -1;
-		}
-	}
-	else
-	{
-		return -1;
-	}
+	if (!IsValidClient(client)) { return -1; }
+	float selfPos[3] = {0.0}, targetPos[3] = {0.0};
+	int target = -1;
+	GetClientAbsOrigin(client, selfPos);
+	if (IsValidSurvivor(specific_survivor)) { target = specific_survivor; }
+	else { target = GetClosetMobileSurvivor(client); }
+	if (!IsValidSurvivor(target)) { return -1; }
+	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
+	return RoundToNearest(GetVectorDistance(selfPos, targetPos));
 }
 
 // *************************

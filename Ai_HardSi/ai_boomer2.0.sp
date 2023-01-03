@@ -214,7 +214,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) { continue; }
 				GetClientEyePosition(i, target_eye_pos);
 				Handle trace = TR_TraceRayFilterEx(self_eye_pos, target_eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
-				if (TR_DidHit(trace) || TR_GetEntityIndex(trace) != i)
+				if (TR_DidHit(trace) && TR_GetEntityIndex(trace) != i)
 				{
 					delete trace;
 					continue;
