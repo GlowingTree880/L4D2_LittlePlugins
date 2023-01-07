@@ -13,6 +13,7 @@
 #define FALL_DETECT_HEIGHT 120.0
 #define COMMAND_INTERVAL 1.0
 #define PLAYER_HEIGHT 72.0
+#define DEBUG_ALL 0
 
 enum AimType
 {
@@ -153,6 +154,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				// 第一个目标是否强行被喷
 				if (g_hAllowInDegreeForceBile.BoolValue && isInAimOffset(client, target, g_hAllowInDegreeForceBile.FloatValue) && !isInBileState[target] && isAbilityUsing)
 				{
+					#if DEBUG_ALL
+						PrintToConsoleAll("[Ai-Boomer]：%N 的第一个目标是：%N，强制被喷", client, target);
+					#endif
 					L4D_CTerrorPlayer_OnVomitedUpon(target, client);
 					isInBileState[target] = true;
 				}
@@ -176,6 +180,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				// 其他在范围内的目标是否强行被喷
 				if (g_hAllowInDegreeForceBile.BoolValue && isInAimOffset(client, turnTarget, g_hAllowInDegreeForceBile.FloatValue) && !isInBileState[turnTarget] && isAbilityUsing)
 				{
+					#if DEBUG_ALL
+						PrintToConsoleAll("[Ai-Boomer]：%N 当前目标是：%N，强制被喷", client, turnTarget);
+					#endif
 					L4D_CTerrorPlayer_OnVomitedUpon(turnTarget, client);
 					isInBileState[turnTarget] = true;
 				}
@@ -225,6 +232,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					continue;
 				}
 				delete trace;
+				#if DEBUG_ALL
+					PrintToConsoleAll("[Ai-Boomer]：开启强制被喷：目标：%N，强制被喷", i);
+				#endif
 				L4D_CTerrorPlayer_OnVomitedUpon(i, client);
 			}
 			CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);

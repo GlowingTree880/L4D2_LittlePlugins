@@ -110,6 +110,7 @@ inf_enable_log 1
 6. 增加是否在安全屋内刷新特感的选项
 </pre>
 </details>
+
 <details>
 <summary>2022-12-18：</summary>
 <pre>
@@ -118,5 +119,13 @@ inf_enable_log 1
 3. 修复特感死亡立刻踢出而导致的特感死亡无声问题，更改为延时踢出
 4. 更改设置导演系统 Cvar 时间，使插件能够正常设置导演系统 Cvar
 5. 修复非第一波刷特无法准确记录找位时间的问题
+</pre>
+</details>
+
+<details>
+<summary>2023-1-7：</summary>
+<pre>
+1. 优化随机数生成算法，使特感生成的更平均，同时增加 Ht 生成概率
+2. 优化特感队列生成逻辑，修复特感生成超出 Cvar 数量问题
 </pre>
 </details>

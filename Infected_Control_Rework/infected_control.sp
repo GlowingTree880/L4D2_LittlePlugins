@@ -7,7 +7,7 @@
 #include <left4dhooks>
 #include "treeutil/treeutil.sp"
 
-#define DEBUG_ALL 1
+#define DEBUG_ALL 0
 #define CVAR_FLAG FCVAR_NOTIFY
 // NAV 高度和检测可视的高度
 #define NAV_HEIGHT 20.0
@@ -25,6 +25,20 @@
 #define STUCK_SIZE_MIN view_as<float>({-16.0, -16.0, 0.0})
 #define STUCK_SIZE_MAX view_as<float>({16.0, 16.0, 72.0})
 #define INFECTED_SPAWN_EYE_ANGLE view_as<float>({0.0, 0.0, 0.0})
+#define INTEGER_MAX_VALUE 2147483647
+
+static const char infectedName[9][] =
+{
+	"",
+	"Smoker",
+	"Boomer",
+	"Hunter",
+	"Spitter",
+	"Jockey",
+	"Charger",
+	"Witch",
+	"Tank"
+};
 
 // 刷新策略：1.按照距离升序刷新，2.按照高度降序刷新
 enum
@@ -80,6 +94,7 @@ ConVar
 	g_hPlayerInfectedLimit;
 int
 	infectedCountArray[7] = { 0 },
+	infectedOnSoptArray[7] = { 0 },
 	infectedInQueuePos[6][2],
 	preTeleportCount[MAXPLAYERS + 1] = { 0 },
 	targetFrame = 0,
@@ -87,7 +102,8 @@ int
 	targetSurvivor = -1,
 	pinnedTarget = -1,
 	aheadTarget = -1,
-	preferredSpawnDirection = 0;
+	preferredSpawnDirection = 0,
+	spawnCount = 0;
 bool
 	g_bCanFindPos = false,
 	g_bCanTeleportFindPos = false,
@@ -136,12 +152,12 @@ public void OnPluginStart()
 	g_hTeleportDist = CreateConVar("inf_teleport_distance", "250", "特感无视野且距离生还者多远将会踢出重新刷新", CVAR_FLAG, true, 0.0);
 	g_hAheadTargetDist = CreateConVar("inf_ahead_target_distance", "1500", "某个生还者离其他生还者多远将会被视为跑男", CVAR_FLAG, true, 0.0);
 	// 刷新队列设置
-	g_hInfectedInQueuePos[0] = CreateConVar("inf_in_queue_pos_smoker", "0,80", "Smoker 将会允许在队列的什么百分比刷新（队列长度 100%）", CVAR_FLAG);
+	g_hInfectedInQueuePos[0] = CreateConVar("inf_in_queue_pos_smoker", "40,80", "Smoker 将会允许在队列的什么百分比刷新（队列长度 100%）", CVAR_FLAG);
 	g_hInfectedInQueuePos[1] = CreateConVar("inf_in_queue_pos_boomer", "90,100", "Boomer 将会允许在队列的什么百分比刷新", CVAR_FLAG);
 	g_hInfectedInQueuePos[2] = CreateConVar("inf_in_queue_pos_hunter", "0,40", "Hunter 将会允许在队列的什么百分比刷新", CVAR_FLAG);
 	g_hInfectedInQueuePos[3] = CreateConVar("inf_in_queue_pos_spitter", "90,100", "Spitter 将会允许在队列的什么百分比刷新", CVAR_FLAG);
-	g_hInfectedInQueuePos[4] = CreateConVar("inf_in_queue_pos_jockey", "0,80", "Jockey 将会允许在队列的什么百分比刷新", CVAR_FLAG);
-	g_hInfectedInQueuePos[5] = CreateConVar("inf_in_queue_pos_charger", "0,80", "Charger 将会允许在队列的什么百分比刷新", CVAR_FLAG);
+	g_hInfectedInQueuePos[4] = CreateConVar("inf_in_queue_pos_jockey", "40,80", "Jockey 将会允许在队列的什么百分比刷新", CVAR_FLAG);
+	g_hInfectedInQueuePos[5] = CreateConVar("inf_in_queue_pos_charger", "50,80", "Charger 将会允许在队列的什么百分比刷新", CVAR_FLAG);
 	// 找位策略
 	g_hSpawnStratergy = CreateConVar("inf_spawn_stratergy", "2", "特感刷新策略", CVAR_FLAG, true, (SPAWN_BY_DISTANCE * 1.0), true, (SPAWN_STRATERGY_COUNT - 1) * 1.0);
 	g_hOnePosInfectedLimit = CreateConVar("inf_one_pos_limit", "2", "找到一个位置允许刷新多少个特感", CVAR_FLAG, true, 0.0);
@@ -231,18 +247,23 @@ void clearAllStuff()
 	= g_bHasRecordTime = g_bHasRecordTeleportFindPosTime = false;
 	g_fFindPosStartTime = g_fTeleportFindPosStartTime = 0.0;
 	preferredSpawnDirection = SPAWN_ANYWHERE;
+	spawnCount = 0;
 	spawnPosList.Clear();
 	spawnList.Clear();
 	delaySpawnList.Clear();
 	teleportList.Clear();
 	clearPreTeleportCount();
+	clearInfectedOnSpotArray();
 	delete g_hFindPosTimer;
 	delete g_hDelaySpawnTimer;
 }
 public void playerDeathHandler(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client) || GetEntProp(client, Prop_Send, "m_zombieClass") == ZC_SPITTER) { return; }
+	if (!IsValidInfected(client) || !IsFakeClient(client) || IsClientInKickQueue(client)) { return; }
+	int infectedType = GetEntProp(client, Prop_Send, "m_zombieClass");
+	--infectedOnSoptArray[infectedType];
+	if (infectedType == ZC_SPITTER) { return; }
 	CreateTimer(0.5, kickBotHandler, client);
 }
 public Action kickBotHandler(Handle timer, int client)
@@ -280,7 +301,7 @@ public void OnGameFrame()
 		if (!g_bCanTeleportFindPos && calculateFindPosTime() > g_hMaxFindPosTime.FloatValue)
 		{
 			#if DEBUG_ALL
-				PrintToConsoleAll("[INF]：本次找位超过了最大找位时间，目前时间：%.2f 秒", calculateFindPosTime());
+				PrintToConsoleAll("---------- [INF]：本次找位超过了最大找位时间，当前找位时间：%.2f 秒，停止找位 ----------", calculateFindPosTime());
 			#endif
 			g_bExceedFindPosTime = true;
 			g_bCanFindPos = false;
@@ -289,7 +310,7 @@ public void OnGameFrame()
 		if (g_bCanTeleportFindPos && calculateTeleportFindPosTime() > g_hMaxFindPosTime.FloatValue)
 		{
 			#if DEBUG_ALL
-				PrintToConsoleAll("[INF]：本次传送找位超过了最大找位时间，目前时间：%.2f 秒", calculateTeleportFindPosTime());
+				PrintToConsoleAll("[INF]：本次传送找位超过了最大找位时间，当前找位时间：%.2f 秒", calculateTeleportFindPosTime());
 			#endif
 			g_bExceedFindPosTime = true;
 			g_bCanTeleportFindPos = false;
@@ -299,7 +320,7 @@ public void OnGameFrame()
 		if (g_bIsFirstWave && !g_bGeneratedFirstWave && spawnList.Length < g_hInfectedLimit.IntValue)
 		{
 			#if DEBUG_ALL
-				PrintToConsoleAll("[INF]：开始生成第一波特感");
+				PrintToConsoleAll("[INF]：开始第：%d 波特感刷新找位", ++spawnCount);
 			#endif
 			generateAWaveInfected();
 			g_bGeneratedFirstWave = true;
@@ -328,7 +349,7 @@ public void OnGameFrame()
 			while (spawnList.Length > 0 && posInfectedLimit-- > 0)
 			{
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：开始第一波特感刷新（射线找到位置），特感种类：%d", spawnList.Get(0));
+					PrintToConsoleAll("[INF]：目前是第一波特感刷新，使用射线找到位置，刷新一只 %s，当前 %s 数量 %d", infectedName[spawnList.Get(0)], infectedName[spawnList.Get(0)], ++infectedOnSoptArray[spawnList.Get(0)]);
 				#endif
 				L4D2_SpawnSpecial(spawnList.Get(0), rayEndPos, INFECTED_SPAWN_EYE_ANGLE);
 				spawnList.Erase(0);
@@ -343,7 +364,7 @@ public void OnGameFrame()
 			if (teleportList.Length > 0 && nowInfectedCount < g_hInfectedLimit.IntValue)
 			{
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：开始刷新落后特感（射线找到位置），特感种类：%d", teleportList.Get(0));
+					PrintToConsoleAll("[INF]：使用射线找到位置，刷新一只落后特感 %s，当前 %s 数量 %d", infectedName[teleportList.Get(0)], infectedName[teleportList.Get(0)], ++infectedOnSoptArray[teleportList.Get(0)]);
 				#endif
 				L4D2_SpawnSpecial(teleportList.Get(0), rayEndPos, INFECTED_SPAWN_EYE_ANGLE);
 				teleportList.Erase(0);
@@ -408,7 +429,7 @@ public void OnGameFrame()
 			else
 			{
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：有生还者被控（射线找到位置）刷新延迟刷新的特感，特感种类：%d", infectedType);
+					PrintToConsoleAll("[INF]：有生还者被控并使用射线找到位置，刷新一只延迟刷新的特感 %s，当前 %s 数量 %d", infectedName[infectedType], infectedName[infectedType], ++infectedOnSoptArray[infectedType]);
 				#endif
 				L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 				spawnPosList.Erase(posIndex);
@@ -418,7 +439,7 @@ public void OnGameFrame()
 		else
 		{
 			#if DEBUG_ALL
-				PrintToConsoleAll("[INF]：有生还者被控（函数找到位置）刷新延迟刷新的特感，特感种类：%d", infectedType);
+				PrintToConsoleAll("[INF]：有生还者被控并使用函数找到位置，刷新一只延迟刷新的特感 %s，当前 %s 数量 %d", infectedName[infectedType], infectedName[infectedType], ++infectedOnSoptArray[infectedType]);
 			#endif
 			getInfectedSpawnPosUsingFunction(infectedType, pinnedTarget, spawnPos);
 			L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
@@ -434,7 +455,7 @@ public void OnGameFrame()
 		g_bCanFindPos = false;
 		g_bPosHasSorted = g_bCanSpawn = true;
 		#if DEBUG_ALL
-			PrintToConsoleAll("[INF]：本次找位完成，共找到：%d 个位置，共用时：%.2f 秒", spawnPosList.Length, calculateFindPosTime());
+			PrintToConsoleAll("---------- [INF]：第：%d 波刷特找位完成，共：%d 个位置，用时：%.2f 秒 ----------", spawnCount, spawnPosList.Length, calculateFindPosTime());
 		#endif
 	}
 	// 正常刷新特感
@@ -446,7 +467,7 @@ public void OnGameFrame()
 		if (g_hAllowDelaySpawn.BoolValue && g_hDelaySpawnTime.FloatValue < g_hInfectedSpawnInterval.FloatValue && g_bDelaySpawnInfected[infectedType])
 		{
 			#if DEBUG_ALL
-				PrintToConsoleAll("[INF]：将当前特感：%d 加入到延迟刷新集合中", infectedType);
+				PrintToConsoleAll("[INF]：将特感：%s 加入到延迟刷新集合中", infectedName[infectedType]);
 			#endif
 			delaySpawnList.Push(infectedType);
 			spawnList.Erase(0);
@@ -463,7 +484,7 @@ public void OnGameFrame()
 				while (spawnList.Length > 0 && posInfectedLimit-- > 0)
 				{
 					#if DEBUG_ALL
-						PrintToConsoleAll("[INF]：正常刷新特感（使用位置集合中的位置），特感种类：%d", infectedType);
+						PrintToConsoleAll("[INF]：目前非第一波特感刷新且位置集合中有位置，刷新一只 %s，当前 %s 数量 %d", infectedName[spawnList.Get(0, 0)], infectedName[spawnList.Get(0, 0)], ++infectedOnSoptArray[spawnList.Get(0, 0)]);
 					#endif
 					L4D2_SpawnSpecial(spawnList.Get(0, 0), spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 					spawnList.Erase(0);
@@ -477,7 +498,7 @@ public void OnGameFrame()
 			{
 				infectedType = spawnList.Get(0);
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：正常刷新特感（使用函数找到的位置），特感种类：%d", infectedType);
+					PrintToConsoleAll("[INF]：目前非第一波特感刷新且使用函数找到位置，刷新一只 %s，当前 %s 数量 %d", infectedName[infectedType], infectedName[infectedType], ++infectedOnSoptArray[infectedType]);
 				#endif
 				getInfectedSpawnPosUsingFunction(infectedType, targetSurvivor, spawnPos);
 				L4D2_SpawnSpecial(infectedType, spawnPos, INFECTED_SPAWN_EYE_ANGLE);
@@ -610,6 +631,7 @@ public Action checkPinnedAndTeleportHandler(Handle timer)
 						PrintToConsoleAll("[INF]：踢出落后感染者：%N", i);
 					#endif
 					preTeleportCount[i] = 0;
+					--infectedOnSoptArray[infectedType];
 					KickClientEx(i, "踢出落后感染者并重新刷新");
 					teleportList.Push(GetEntProp(i, Prop_Send, "m_zombieClass"));
 					g_bCanTeleportFindPos = true;
@@ -659,7 +681,7 @@ public Action delaySpawnHandler(Handle timer)
 			else
 			{
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：位置集合中有位置，时钟回调函数内延迟刷新特感：%d", delaySpawnList.Get(0));
+					PrintToConsoleAll("[INF]：使用位置集合中的位置刷新一只延迟刷新的特感 %s，当前 %s 数量 %d", infectedName[delaySpawnList.Get(0)], infectedName[delaySpawnList.Get(0)], ++infectedOnSoptArray[delaySpawnList.Get(0)]);
 				#endif
 				L4D2_SpawnSpecial(delaySpawnList.Get(0), spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 				delaySpawnList.Erase(0);
@@ -672,7 +694,7 @@ public Action delaySpawnHandler(Handle timer)
 			while (delaySpawnList.Length > 0 && posInfectedLimit-- > 0)
 			{
 				#if DEBUG_ALL
-					PrintToConsoleAll("[INF]：位置集合中没有位置，时钟回调函数内使用函数延迟刷新特感：%d", delaySpawnList.Get(0));
+					PrintToConsoleAll("[INF]：使用函数刷新一只需要延迟刷新的特感 %s，当前 %s 数量 %d", infectedName[delaySpawnList.Get(0)], infectedName[delaySpawnList.Get(0)], ++infectedOnSoptArray[delaySpawnList.Get(0)]);
 				#endif
 				L4D2_SpawnSpecial(delaySpawnList.Get(0), spawnPos, INFECTED_SPAWN_EYE_ANGLE);
 				delaySpawnList.Erase(0);
@@ -690,7 +712,7 @@ public Action delaySpawnHandler(Handle timer)
 public Action spawnInfectedHandler(Handle timer)
 {
 	#if DEBUG_ALL
-		PrintToConsoleAll("[INF]：触发一个找位时钟周期，开始找位");
+		PrintToConsoleAll("[INF]：开始第：%d 波特感刷新找位", ++spawnCount);
 	#endif
 	g_bCanFindPos = g_bCanEasyModeSpawn = true;
 	return Plugin_Continue;
@@ -767,6 +789,11 @@ void getInfectedCountArray()
 	infectedCountArray[ZC_SPITTER] = g_hSpitterCount.IntValue;
 	infectedCountArray[ZC_JOCKEY] = g_hJockeyCount.IntValue;
 	infectedCountArray[ZC_CHARGER] = g_hChargerCount.IntValue;
+}
+
+stock void clearInfectedOnSpotArray()
+{
+	for (int i = 0; i < 7; i++) { infectedOnSoptArray[i] = 0; }
 }
 
 // 感染者限制 Cvar 发生变动，重新调整感染者限制 Cvar
@@ -934,7 +961,8 @@ static void generateAWaveInfected()
 		{
 			min = RoundToFloor(g_hInfectedLimit.FloatValue * (float(infectedInQueuePos[j][0]) * 0.01)), 
 			max = RoundToFloor(g_hInfectedLimit.FloatValue * (float(infectedInQueuePos[j][1]) * 0.01));
-			if (isIntegerInRange(spawnList.Length + 1, min, max) && infectedCountArray[j + 1] > 0) { allowInfectedList.Set(allowInfectedList.Push(j + 1), 0, 1); }
+			if (isIntegerInRange(spawnList.Length + 1, min, max) && infectedCountArray[j + 1] > 0) { 
+			allowInfectedList.Set(allowInfectedList.Push(j + 1), 0, 1); }
 		}
 		if (allowInfectedList.Length > 0)
 		{
@@ -961,51 +989,64 @@ static void generateAWaveInfected()
 		}
 	}
 	delete allowInfectedList;
-	// 循环在场的特感，刷新集合中有同种类型的，移除，没有则判断是否强控或 DPS，刷新集合中移除对应类型特感
+	// 循环在场的特感，刷新集合或传送集合中有同种类型的，移除，没有则判断是否强控或 DPS，刷新集合中移除对应类型特感
 	for (i = 1; i <= MaxClients; i++)
 	{
 		if (!IsValidInfected(i) || !IsPlayerAlive(i)) { continue; }
 		infectedType = GetEntProp(i, Prop_Send, "m_zombieClass");
 		if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) { continue; }
 		infectedIndex = spawnList.FindValue(infectedType);
-		if (infectedIndex > -1)
+		findAndEraseInfected(infectedType, infectedIndex);
+	}
+	// 在传送集合中找到了这个特感，将刷新集合中的特感移除，没有则判断类型移除刷新集合中对应的特感
+	for (i = 0; i < teleportList.Length; i++)
+	{
+		infectedType = teleportList.Get(i, 0);
+		infectedIndex = spawnList.FindValue(infectedType);
+		findAndEraseInfected(infectedType, infectedIndex);
+	}
+	#if DEBUG_ALL
+		for (i = 0; i < spawnList.Length; i++) { PrintToConsoleAll("[INF]：向刷新队列中加入一只：%s，当前刷新位置：%d", infectedName[spawnList.Get(i, 0)], i + 1); }
+	#endif
+}
+
+void findAndEraseInfected(int infectedType, int infectedIndex)
+{
+	static int i;
+	if (infectedIndex > -1)
+	{
+		spawnList.Erase(infectedIndex);
+		return;
+	}
+	switch (infectedType)
+	{
+		case ZC_SMOKER, ZC_HUNTER, ZC_JOCKEY, ZC_CHARGER:
 		{
-			spawnList.Erase(infectedIndex);
-			continue;
-		}
-		switch (infectedType)
-		{
-			case ZC_SMOKER, ZC_HUNTER, ZC_JOCKEY, ZC_CHARGER:
+			for (i = ZC_SMOKER; i <= ZC_CHARGER; i++)
 			{
-				for (j = ZC_SMOKER; j <= ZC_CHARGER; j++)
+				if (i == ZC_BOOMER || i == ZC_SPITTER) { continue; }
+				infectedIndex = spawnList.FindValue(i);
+				if (infectedIndex > -1)
 				{
-					if (j == ZC_BOOMER || j == ZC_SPITTER) { continue; }
-					infectedIndex = spawnList.FindValue(j);
-					if (infectedIndex > -1)
-					{
-						spawnList.Erase(infectedIndex);
-						break;
-					}
+					spawnList.Erase(infectedIndex);
+					break;
 				}
 			}
-			case ZC_BOOMER, ZC_SPITTER:
+		}
+		case ZC_BOOMER, ZC_SPITTER:
+		{
+			for (i = ZC_BOOMER; i <= ZC_SPITTER; i++)
 			{
-				for (j = ZC_BOOMER; j <= ZC_SPITTER; j++)
+				if (i == ZC_HUNTER) { continue; }
+				infectedIndex = spawnList.FindValue(i);
+				if (infectedIndex > -1)
 				{
-					if (j == ZC_HUNTER) { continue; }
-					infectedIndex = spawnList.FindValue(j);
-					if (infectedIndex > -1)
-					{
-						spawnList.Erase(infectedIndex);
-						break;
-					}
+					spawnList.Erase(infectedIndex);
+					break;
 				}
 			}
 		}
 	}
-	#if DEBUG_ALL
-		for (i = 0; i < spawnList.Length; i++) { PrintToConsoleAll("[INF]：当前刷新位置：%d，特感编号：%d", i + 1, spawnList.Get(i, 0)); }
-	#endif
 }
 
 // 调整 PreferredSpecialDirection
@@ -1148,7 +1189,9 @@ void getDelaySpawnInfected()
 // @max 最大范围
 int getRandomIntInRange(int min, int max)
 {
-	return (GetURandomInt() % (max - min + 1)) + min;
+	int random = GetURandomInt();
+	if (random == 0) { random++; }
+	return RoundToCeil(float(random) / (float(INTEGER_MAX_VALUE) / float(max - min + 1))) + min - 1;
 }
 
 // 获取 min - max 的随机浮点数
