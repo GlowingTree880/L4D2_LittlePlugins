@@ -27,7 +27,7 @@ public Plugin myinfo =
 	name 			= "Ai Boomer 2.0",
 	author 			= "夜羽真白",
 	description 	= "Ai Boomer 增强 2.0 版本",
-	version 		= "2022-12-31",
+	version 		= "2023/1/14",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -49,11 +49,12 @@ bool
 	in_bile_interval[MAXPLAYERS + 1] = { false },
 	isInBileState[MAXPLAYERS + 1] = { false };
 // Ints，bile_frame 0 位：当前目标索引，1 位：循环次数
-int bile_frame[MAXPLAYERS + 1][2];
-// Handles
-Handle bile_interval_timer[MAXPLAYERS + 1] = { null };
+int
+	bile_frame[MAXPLAYERS + 1][2],
+	secondCheckFrame[MAXPLAYERS + 1] = { 0 };
 // Lists
-ArrayList targetList[MAXPLAYERS + 1] = { null };
+ArrayList
+	targetList[MAXPLAYERS + 1] = { null };
 
 public void OnPluginStart()
 {
@@ -64,9 +65,10 @@ public void OnPluginStart()
 	g_hTurnVision = CreateConVar("ai_BoomerTurnVision", "1", "Boomer 喷吐时是否旋转视角", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hForceBile = CreateConVar("ai_BoomerForceBile", "0", "是否开启生还者到 Boomer 喷吐范围内强制被喷", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hBileFindRange = CreateConVar("ai_BoomerBileFindRange", "300", "在这个距离内有被控或倒地的生还 Boomer 会优先攻击，0 = 禁用", CVAR_FLAG, true, 0.0);
-	g_hTurnInterval = CreateConVar("ai_BoomerTurnInterval", "5", "Boomer 喷吐旋转视角时每隔多少帧转移一个目标", CVAR_FLAG, true, 0.0);
+	g_hTurnInterval = CreateConVar("ai_BoomerTurnInterval", "15", "Boomer 喷吐旋转视角时每隔多少帧转移一个目标", CVAR_FLAG, true, 0.0);
 	// 在角度内是否允许强制喷吐
 	g_hAllowInDegreeForceBile = CreateConVar("ai_BoomerDegreeForceBile", "10", "是否允许目标和 Boomer 视角处在这个角度内且能看到目标头部强制喷吐，0 = 禁用", CVAR_FLAG, true, 0.0);
+	/* 其他 Cvar */
 	g_hVomitRange = FindConVar("z_vomit_range");
 	g_hVomitDuration = FindConVar("z_vomit_duration");
 	g_hVomitInterval = FindConVar("z_vomit_interval");
@@ -74,44 +76,52 @@ public void OnPluginStart()
 	HookEvent("player_spawn", evt_PlayerSpawn);
 	HookEvent("player_shoved", evt_PlayerShoved);
 	HookEvent("player_now_it", evt_PlayerNowIt);
+	HookEvent("round_start", evt_RoundStart);
 	// SetConVars
 	SetConVarFloat(FindConVar("boomer_exposed_time_tolerance"), 10000.0);
 	SetConVarFloat(FindConVar("boomer_vomit_delay"), 0.1);
 }
 public void OnPluginEnd()
 {
-	ResetConVar(FindConVar("boomer_exposed_time_tolerance"));
-	ResetConVar(FindConVar("boomer_vomit_delay"));
-	for (int i = 0; i < MAXPLAYERS + 1; i++) { delete targetList[i]; }
+	FindConVar("boomer_exposed_time_tolerance").RestoreDefault();
+	FindConVar("boomer_vomit_delay").RestoreDefault();
+	for (int i = 0; i < MAXPLAYERS + 1; i++)
+	{
+		delete targetList[i];
+		targetList[i] = null;
+	}
+}
+
+/* 回合开始，每个玩家的二次检测帧数为 0 */
+public void evt_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int i = 0; i < MAXPLAYERS + 1; i++) { secondCheckFrame[i] = 0; }
 }
 
 public void evt_PlayerShoved(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsBoomer(client))
-	{
-		in_bile_interval[client] = true;
-		CreateTimer(1.5, Timer_ResetAbility, client);
-	}
+	if (!IsBoomer(client)) { return; }
+	in_bile_interval[client] = true;
+	CreateTimer(1.5, Timer_ResetAbility, client);
 }
 public void evt_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsBoomer(client))
-	{
-		can_bile[client] = true;
-		in_bile_interval[client] = false;
-		bile_frame[client][0] = bile_frame[client][1] = 0;
-		delete bile_interval_timer[client];
-		// Build ArrayList
-		if (targetList[client] != null) { targetList[client].Clear(); }
-		else { targetList[client] = new ArrayList(2); }
-	}
+	if (!IsBoomer(client)) { return; }
+	can_bile[client] = true;
+	in_bile_interval[client] = false;
+	bile_frame[client][0] = bile_frame[client][1] = 0;
+	// Build ArrayList
+	if (targetList[client] != null) { targetList[client].Clear(); }
+	else { targetList[client] = new ArrayList(2); }
 }
+/* 玩家被喷，不重复给他上喷吐效果，当玩家胆汁效果过后，将被喷状态设置为 false，后续可以继续上喷吐效果 */
 public void evt_PlayerNowIt(Event event, const char[] name, bool dontBroadcast)
 {
 	int attacker = GetClientOfUserId(event.GetInt("attacker")), victim = GetClientOfUserId(event.GetInt("userid"));
 	if (!IsBoomer(attacker) || !IsPlayerAlive(attacker) || !IsValidSurvivor(victim) || !IsPlayerAlive(victim)) { return; }
+	isInBileState[victim] = true;
 	CreateTimer(FindConVar("sb_vomit_blind_time").FloatValue, resetBileStateHandler, victim);
 }
 public Action resetBileStateHandler(Handle timer, int client)
@@ -122,145 +132,178 @@ public Action resetBileStateHandler(Handle timer, int client)
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3])
 {
-	if (IsBoomer(client))
+	if (!IsBoomer(client)) { return Plugin_Continue; }
+	float self_pos[3], self_eye_pos[3], targetPos[3], target_eye_pos[3], vec_speed[3], aim_angles[3], vel_buffer[3], cur_speed, dist, height;
+	int flags, target, closet_survivor_dist, ability, isAbilityUsing, i;
+	bool has_sight;
+	flags = GetEntityFlags(client);
+	target = GetClosetSurvivor(client);
+	closet_survivor_dist = GetClosetSurvivorDistance(client);
+	ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
+	if (!IsValidEntity(ability)) { return Plugin_Continue; }
+	has_sight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
+	isAbilityUsing = GetEntProp(ability, Prop_Send, "m_isSpraying");
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vec_speed);
+	cur_speed = SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0));
+	GetClientAbsOrigin(client, self_pos);
+	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
+	GetClientEyePosition(client, self_eye_pos);
+	if (has_sight && IsValidSurvivor(target) && !in_bile_interval[client] && targetList[client].Length < 1)
 	{
-		static float self_pos[3], self_eye_pos[3], targetPos[3], target_eye_pos[3], vec_speed[3], aim_angles[3], vel_buffer[3], cur_speed, dist, height;
-		static int flags, target, closet_survivor_dist, ability, isAbilityUsing, i;
-		static bool has_sight;
-		flags = GetEntityFlags(client);
-		target = GetClosetSurvivor(client);
-		closet_survivor_dist = GetClosetSurvivorDistance(client);
-		ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
-		if (!IsValidEntity(ability)) { return Plugin_Continue; }
-		has_sight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
-		isAbilityUsing = GetEntProp(ability, Prop_Send, "m_isSpraying");
-		GetEntPropVector(client, Prop_Data, "m_vecVelocity", vec_speed);
-		cur_speed = SquareRoot(Pow(vec_speed[0], 2.0) + Pow(vec_speed[1], 2.0));
-		GetClientAbsOrigin(client, self_pos);
-		GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
-		GetClientEyePosition(client, self_eye_pos);
-		if (has_sight && IsValidSurvivor(target) && !in_bile_interval[client] && targetList[client].Length < 1)
+		dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
+		if (dist <= g_hVomitRange.FloatValue)
 		{
-			dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
-			if (dist <= g_hVomitRange.FloatValue)
+			ComputeAimAngles(client, target, aim_angles, AimEye);
+			if (g_hUpVision.BoolValue)
 			{
-				ComputeAimAngles(client, target, aim_angles, AimEye);
-				if (g_hUpVision.BoolValue)
-				{
-					if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
-					else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
-				}
-				TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
-				// 第一个目标是否强行被喷
-				if (g_hAllowInDegreeForceBile.BoolValue && isInAimOffset(client, target, g_hAllowInDegreeForceBile.FloatValue) && !isInBileState[target] && isAbilityUsing)
+				if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
+				else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
+			}
+			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
+			/* 判断第一个目标是否需要强行被喷，boomer 能力使用后过一个目标帧数延时再做一次检测，避免生还者立刻躲起来还是被喷到 */
+			if (g_hAllowInDegreeForceBile.BoolValue && isInAimOffset(client, target, g_hAllowInDegreeForceBile.FloatValue) && !isInBileState[target] && isAbilityUsing)
+			{
+				if (secondCheckFrame[target] < g_hTurnInterval.IntValue && !isInBileState[target]) { secondCheckFrame[target]++; }
+				else if (!isInBileState[target] && secondCheck(client, target))
 				{
 					#if DEBUG_ALL
-						PrintToConsoleAll("[Ai-Boomer]：%N 的第一个目标是：%N，强制被喷", client, target);
+						PrintToConsoleAll("[Ai-Boomer]：%N 第一个目标是：%N 二次检测通过，强制被喷", client, target);
 					#endif
+					/* 再次检测距离，可视，角度，都通过就强制被喷 */
 					L4D_CTerrorPlayer_OnVomitedUpon(target, client);
 					isInBileState[target] = true;
+					secondCheckFrame[target] = 0;
 				}
 			}
 		}
-		if (targetList[client].Length >= 1 && !in_bile_interval[client] && g_hTurnVision.BoolValue)
+	}
+	if (targetList[client].Length >= 1 && !in_bile_interval[client] && g_hTurnVision.BoolValue)
+	{
+		if (bile_frame[client][0] < targetList[client].Length && bile_frame[client][1] < (g_hAllowInDegreeForceBile.BoolValue ? 2 * g_hTurnInterval.IntValue : g_hTurnInterval.IntValue))
 		{
-			if (bile_frame[client][0] < targetList[client].Length && bile_frame[client][1] < g_hTurnInterval.IntValue)
+			int turnTarget;
+			dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
+			/* 获得下一个要转向的目标 */
+			turnTarget = targetList[client].Get(bile_frame[client][0], 1);
+			ComputeAimAngles(client, turnTarget, aim_angles, AimEye);
+			/* 视野转向 & 上抬 */
+			if (g_hUpVision.BoolValue)
 			{
-				dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
-				static int turnTarget;
-				turnTarget = targetList[client].Get(bile_frame[client][0], 1);
-				ComputeAimAngles(client, turnTarget, aim_angles, AimEye);
-				if (g_hUpVision.BoolValue)
-				{
-					if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
-					else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
-				}
-				TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
-				bile_frame[client][1] += 1;
-				// 其他在范围内的目标是否强行被喷
-				if (g_hAllowInDegreeForceBile.BoolValue && isInAimOffset(client, turnTarget, g_hAllowInDegreeForceBile.FloatValue) && !isInBileState[turnTarget] && isAbilityUsing)
+				if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
+				else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
+			}
+			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
+			/* 允许在角度内强制喷吐，才进入二次检测，否则默认转视角即可 */
+			if (g_hAllowInDegreeForceBile.BoolValue)
+			{
+				if (secondCheckFrame[turnTarget] < g_hTurnInterval.IntValue && !isInBileState[turnTarget]) { secondCheckFrame[turnTarget]++; }
+				else if (!isInBileState[turnTarget] && secondCheck(client, turnTarget))
 				{
 					#if DEBUG_ALL
-						PrintToConsoleAll("[Ai-Boomer]：%N 当前目标是：%N，强制被喷", client, turnTarget);
+						PrintToConsoleAll("[Ai-Boomer]：%N 当前目标是：%N，二次检测通过，强制被喷", client, turnTarget);
 					#endif
 					L4D_CTerrorPlayer_OnVomitedUpon(turnTarget, client);
 					isInBileState[turnTarget] = true;
+					secondCheckFrame[turnTarget] = 0;
+					bile_frame[client][1] = 2 * g_hTurnInterval.IntValue;
 				}
 			}
-			else if (bile_frame[client][0] >= targetList[client].Length)
-			{
-				targetList[client].Clear();
-				bile_frame[client][0] = bile_frame[client][1] = 0;
-			}
-			else
-			{
-				bile_frame[client][0] += 1;
-				bile_frame[client][1] = 0;
-			}
+			bile_frame[client][1] += 1;
 		}
-		// 靠近生还者，立即喷吐
-		if ((flags & FL_ONGROUND) && IsValidSurvivor(target) && has_sight && closet_survivor_dist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client] && Player_IsVisible_To(target, client))
+		else if (bile_frame[client][0] >= targetList[client].Length)
 		{
-			buttons |= IN_FORWARD;
-			buttons |= IN_ATTACK;
-			if (can_bile[client]) { CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client); }
-			can_bile[client] = false;
+			targetList[client].Clear();
+			bile_frame[client][0] = bile_frame[client][1] = 0;
 		}
-		// 目标是被控或者倒地的生还，则令其蹲下攻击
-		if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target)))
+		else
 		{
-			buttons |= IN_DUCK;
-			buttons |= IN_ATTACK2;
+			bile_frame[client][0] += 1;
+			bile_frame[client][1] = 0;
 		}
-		// 强行被喷
-		if (g_hForceBile.BoolValue && (buttons & IN_ATTACK) && !in_bile_interval[client] && IsValidSurvivor(target))
+	}
+	// 靠近生还者，立即喷吐
+	if ((flags & FL_ONGROUND) && IsValidSurvivor(target) && has_sight && closet_survivor_dist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client] && Player_IsVisible_To(target, client))
+	{
+		buttons |= IN_FORWARD;
+		buttons |= IN_ATTACK;
+		if (can_bile[client]) { CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client); }
+		can_bile[client] = false;
+	}
+	// 目标是被控或者倒地的生还，则令其蹲下攻击
+	if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target)))
+	{
+		buttons |= IN_DUCK;
+		buttons |= IN_ATTACK2;
+	}
+	// 强行被喷
+	if (g_hForceBile.BoolValue && (buttons & IN_ATTACK) && !in_bile_interval[client] && IsValidSurvivor(target))
+	{
+		in_bile_interval[client] = true;
+		for (i = 1; i <= MaxClients; i++)
 		{
-			in_bile_interval[client] = true;
-			for (i = 1; i <= MaxClients; i++)
+			if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) { continue; }
+			GetClientEyePosition(i, target_eye_pos);
+			if (GetVectorDistance(self_eye_pos, target_eye_pos) > g_hVomitRange.FloatValue) { continue; }
+			Handle trace = TR_TraceRayFilterEx(self_eye_pos, target_eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_VomitClientFilter, client);
+			if (!TR_DidHit(trace) || TR_GetEntityIndex(trace) == i)
 			{
-				if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) { continue; }
-				GetClientEyePosition(i, target_eye_pos);
-				Handle trace = TR_TraceRayFilterEx(self_eye_pos, target_eye_pos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, client);
-				if (TR_DidHit(trace) && TR_GetEntityIndex(trace) != i)
-				{
-					delete trace;
-					continue;
-				}
-				if (!(GetVectorDistance(self_eye_pos, target_eye_pos) <= g_hVomitRange.FloatValue))
-				{
-					delete trace;
-					continue;
-				}
-				delete trace;
 				#if DEBUG_ALL
 					PrintToConsoleAll("[Ai-Boomer]：开启强制被喷：目标：%N，强制被喷", i);
 				#endif
-				L4D_CTerrorPlayer_OnVomitedUpon(i, client);
+				delete trace;
+				L4D_CTerrorPlayer_OnVomitedUpon(i, client);	
+				isInBileState[target] = true;
 			}
-			CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);
+			delete trace;
 		}
-		// 连跳
-		if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && 0.5 * g_hVomitRange.FloatValue < closet_survivor_dist < 10000.0 && cur_speed > 160.0 && IsValidSurvivor(target))
-		{
-			vel_buffer = CalculateVel(self_pos, targetPos, g_hBhopSpeed.FloatValue);
-			buttons |= IN_JUMP;
-			buttons |= IN_DUCK;
-			if (Do_Bhop(client, buttons, vel_buffer))
-			{
-				return Plugin_Changed;
-			}
-		}
-		// 爬梯时，禁止连跳
-		if (GetEntityMoveType(client) & MOVETYPE_LADDER)
-		{
-			buttons &= ~IN_ATTACK;
-			buttons &= ~IN_ATTACK2;
-			buttons &= ~IN_JUMP;
-			buttons &= ~IN_DUCK;
-		}
+		CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);
+	}
+	// 连跳
+	if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && 0.5 * g_hVomitRange.FloatValue < closet_survivor_dist < 1000.0 && cur_speed > 160.0 && IsValidSurvivor(target))
+	{
+		vel_buffer = CalculateVel(self_pos, targetPos, g_hBhopSpeed.FloatValue);
+		buttons |= IN_JUMP;
+		buttons |= IN_DUCK;
+		if (Do_Bhop(client, buttons, vel_buffer)) { return Plugin_Changed; }
+	}
+	/* 爬梯子时，禁止连跳，蹲下与喷吐 */
+	if (GetEntityMoveType(client) & MOVETYPE_LADDER)
+	{
+		buttons &= ~IN_ATTACK;
+		buttons &= ~IN_ATTACK2;
+		buttons &= ~IN_JUMP;
+		buttons &= ~IN_DUCK;
 	}
 	return Plugin_Continue;
 }
+
+bool secondCheck(int client, int target)
+{
+	if (!IsBoomer(client) || !IsPlayerAlive(client) || !IsValidSurvivor(target) || !IsPlayerAlive(target)) { return false; }
+	/* 目标有效，检测角度，可见性，距离 */
+	float selfPos[3] = {0.0}, targetPos[3] = {0.0}, dist;
+	GetClientEyePosition(client, selfPos);
+	GetClientEyePosition(target, targetPos);
+	dist = GetVectorDistance(selfPos, targetPos);
+	if (dist > g_hVomitRange.FloatValue || !isInAimOffset(client, target, g_hAllowInDegreeForceBile.FloatValue) || isInBileState[target]) { return false; }
+	Handle trace = TR_TraceRayFilterEx(selfPos, targetPos, MASK_VISIBLE, RayType_EndPoint, TR_VomitClientFilter, client);
+	if (!TR_DidHit(trace) || TR_GetEntityIndex(trace) == target)
+	{
+		/* 距离还是小于喷吐距离，可以看见，且还在 aimOffset 中，强制被喷 */
+		delete trace;
+		return true;
+	}
+	delete trace;
+	return false;
+}
+
+bool TR_VomitClientFilter(int entity, int contentsMask, int self)
+{
+	/* 被喷的玩家，射线可以通过 */
+	if (entity > 0 && entity <= MaxClients && isInBileState[entity]) { return false; }
+	return entity != self;
+}
+
 // 重置胖子能力使用限制
 public Action Timer_ResetAbility(Handle timer, int client)
 {
@@ -304,7 +347,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 				dist = GetVectorDistance(eyePos, targetEyePos);
 				if (g_hBileFindRange.FloatValue > 0.0 && dist <= g_hBileFindRange.FloatValue)
 				{
-					Handle hTrace = TR_TraceRayFilterEx(eyePos, targetEyePos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, specialInfected);
+					Handle hTrace = TR_TraceRayFilterEx(eyePos, targetEyePos, MASK_VISIBLE, RayType_EndPoint, TR_VomitClientFilter, specialInfected);
 					if (!TR_DidHit(hTrace) || TR_GetEntityIndex(hTrace) == i)
 					{
 						curTarget = i;
@@ -321,42 +364,29 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 // 当生还被胖子喷中时，开始计算范围内的玩家
 public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion)
 {
-	if (!IsBoomer(attacker) && targetList[attacker].Length > 1) { return Plugin_Continue; }
+	isInBileState[victim] = true;
+	/* 一次检测，胖子目标集合长度大于 1 就不再做后面喷中的检测，否则多次触发导致无法喷中所有目标 */
+	if (!IsBoomer(attacker) || targetList[attacker].Length > 1) { return Plugin_Continue; }
 	// 当前 Boomer 目标集合中没有目标，开始获取目标
-	static int i;
-	static float eyePos[3], targetEyePos[3], dist, angle;
+	int i;
+	float eyePos[3] = {0.0}, targetEyePos[3] = {0.0}, dist, angle;
 	GetClientEyePosition(attacker, eyePos);
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i) || i == victim) { continue; }
+		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i) || isInBileState[i]) { continue; }
 		GetClientEyePosition(i, targetEyePos);
 		dist = GetVectorDistance(eyePos, targetEyePos);
 		if (dist > g_hVomitRange.FloatValue) { continue; }
-		Handle trace = TR_TraceRayFilterEx(eyePos, targetEyePos, MASK_VISIBLE, RayType_EndPoint, TR_RayFilter, attacker);
+		Handle trace = TR_TraceRayFilterEx(eyePos, targetEyePos, MASK_VISIBLE, RayType_EndPoint, TR_VomitClientFilter, attacker);
 		// 按照与当前胖子眼睛视线的角度大小来定位玩家
 		if (!TR_DidHit(trace) || TR_GetEntityIndex(trace) == i)
 		{
 			angle = getSelfTargetAngle(attacker, i);
-			#if DEBUG_ALL
-				PrintToConsoleAll("[Ai-Boomer]：%N 的视角与目标 %N 的角度是：%.2f 度", attacker, i, angle);
-			#endif
 			targetList[attacker].Set(targetList[attacker].Push(angle), i, 1);
 		}
 		delete trace;
 	}
-	if (targetList[attacker].Length > 1)
-	{
-		targetList[attacker].Sort(Sort_Ascending, Sort_Float);
-		#if DEBUG_ALL
-			PrintToConsoleAll("[Ai-Boomer]：开始按顺序输出 %N 的目标", attacker);
-		#endif
-		for (i = 0; i < targetList[attacker].Length; i++)
-		{
-			#if DEBUG_ALL
-				PrintToConsoleAll("[Ai-Boomer]：%N 的下一个目标是：%N，角度是：%.2f 度", attacker, targetList[attacker].Get(i, 1), targetList[attacker].Get(i, 0));
-			#endif
-		}
-	}
+	if (targetList[attacker].Length > 1) { targetList[attacker].Sort(Sort_Ascending, Sort_Float); }
 	return Plugin_Continue;
 }
 
@@ -433,31 +463,19 @@ bool Dont_HitWall_Or_Fall(int client, float vel[3])
 }
 bool TR_EntityFilter(int entity, int mask)
 {
-	if (entity <= MaxClients)
+	if (entity > 0 && entity <= MaxClients) { return false; }
+	else
 	{
-		return false;
-	}
-	else if (entity > MaxClients)
-	{
-		char classname[16] = {'\0'};
+		char classname[32] = {'\0'};
 		GetEdictClassname(entity, classname, sizeof(classname));
-		if (strcmp(classname, "infected") == 0 || strcmp(classname, "witch") == 0 || strcmp(classname, "prop_physics") == 0 || strcmp(classname, "tank_rock") == 0)
-		{
-			return false;
-		}
+		if (strcmp(classname, "infected") == 0 || strcmp(classname, "witch") == 0 || strcmp(classname, "prop_physics") == 0 || strcmp(classname, "tank_rock") == 0) { return false; }
 	}
 	return true;
 }
 // 胖子连跳
 bool Do_Bhop(int client, int &buttons, float vec[3])
 {
-	if (buttons & IN_FORWARD || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT)
-	{
-		if (ClientPush(client, vec))
-		{
-			return true;
-		}
-	}
+	if (buttons & IN_FORWARD || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT) { if (ClientPush(client, vec)) { return true; } }
 	return false;
 }
 bool ClientPush(int client, float vec[3])
@@ -484,14 +502,8 @@ void ComputeAimAngles(int client, int target, float angles[3], AimType type = Ai
 	GetClientEyePosition(client, selfpos);
 	switch (type)
 	{
-		case AimEye:
-		{
-			GetClientEyePosition(target, targetpos);
-		}
-		case AimBody:
-		{
-			GetClientAbsOrigin(target, targetpos);
-		}
+		case AimEye: { GetClientEyePosition(target, targetpos); }
+		case AimBody: { GetClientAbsOrigin(target, targetpos); }
 		case AimChest:
 		{
 			GetClientAbsOrigin(target, targetpos);
