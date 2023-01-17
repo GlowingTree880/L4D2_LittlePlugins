@@ -202,7 +202,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			}
 			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
 			/* 强制喷吐检测，帧数确认 */
-			targetFrame = g_hAllowInDegreeForceBile.BoolValue && g_hAllowAutoFrame.BoolValue ? RoundToNearest(turnAngle / TURN_ANGLE_DIVIDE) : g_hTurnInterval.IntValue;
+			targetFrame = g_hAllowAutoFrame.BoolValue ? RoundToNearest(turnAngle / TURN_ANGLE_DIVIDE) : g_hTurnInterval.IntValue;
 			#if DEBUG_ALL
 				PrintToConsoleAll("[Ai-Boomer]：下一个目标是：%N，角度是：%.2f 度，检测帧数为：%d 帧", turnTarget, turnAngle, targetFrame);
 			#endif
@@ -217,7 +217,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			}
 			if (bile_frame[client][1] < targetFrame)
 			{
-				if (g_hAllowInDegreeForceBile.BoolValue && g_hAllowAutoFrame.BoolValue)
+				/* 动态目标帧数，强制喷吐 */
+				if (g_hAllowInDegreeForceBile.BoolValue)
 				{
 					if (secondCheckFrame[turnTarget] < targetFrame && !isInBileState[turnTarget])
 					{
