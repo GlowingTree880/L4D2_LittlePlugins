@@ -13,3 +13,22 @@ l4d_tankdamage_enable_healthset：1 是否在坦克刷新时将坦克的生命�
            删除生还者受伤时只记录未倒地受到的伤害，导致被车压，被一拳打倒等情况无法记录的问题
 
 正在尝试将插件修改为兼容多坦克的情况
+
+
+
+Tank Damage Announce 2.0
+2023/1/17 日重写，支持显示真正吃铁的情况
+
+Cvars：
+tank_damage_enable：1 是否开启坦克伤害统计
+tank_damage_force_kill_announce：0 坦克被卡死或强制处死是否显示坦克伤害统计
+tank_damage_print_livetime：1 伤害统计是否显示坦克存活时间
+tank_damage_failed_announce：1 生还者团灭时且坦克在场是否显示伤害统计
+tank_damage_print_zero：1 显示坦克伤害统计时是否允许显示对坦克零伤的玩家
+
+注：
+	2.0 版本中的铁指具有 m_hasTankGlow 属性且 m_hasTankGlow 属性值为 1，在坦克视野中有光圈显示的物品，如警报车、垃圾桶等
+	已兼容多坦克情况
+
+更新记录：
+	2023/1/17：上传插件

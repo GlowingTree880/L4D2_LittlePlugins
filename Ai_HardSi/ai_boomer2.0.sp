@@ -13,6 +13,7 @@
 #define FALL_DETECT_HEIGHT 120.0
 #define COMMAND_INTERVAL 1.0
 #define PLAYER_HEIGHT 72.0
+#define TURN_ANGLE_DIVIDE 3.0
 #define DEBUG_ALL 0
 
 enum AimType
@@ -27,7 +28,7 @@ public Plugin myinfo =
 	name 			= "Ai Boomer 2.0",
 	author 			= "夜羽真白",
 	description 	= "Ai Boomer 增强 2.0 版本",
-	version 		= "2023/1/14",
+	version 		= "2023/1/17",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -42,7 +43,8 @@ ConVar
 	g_hVomitDuration,
 	g_hVomitInterval,
 	g_hTurnInterval,
-	g_hAllowInDegreeForceBile;
+	g_hAllowInDegreeForceBile,
+	g_hAllowAutoFrame;
 // Bools
 bool
 	can_bile[MAXPLAYERS + 1] = { true },
@@ -51,7 +53,8 @@ bool
 // Ints，bile_frame 0 位：当前目标索引，1 位：循环次数
 int
 	bile_frame[MAXPLAYERS + 1][2],
-	secondCheckFrame[MAXPLAYERS + 1] = { 0 };
+	/* 第二次强制喷吐检测，0位：当前检测帧数，1位：目标检测帧数 */
+	secondCheckFrame[MAXPLAYERS + 1];
 // Lists
 ArrayList
 	targetList[MAXPLAYERS + 1] = { null };
@@ -68,6 +71,7 @@ public void OnPluginStart()
 	g_hTurnInterval = CreateConVar("ai_BoomerTurnInterval", "15", "Boomer 喷吐旋转视角时每隔多少帧转移一个目标", CVAR_FLAG, true, 0.0);
 	// 在角度内是否允许强制喷吐
 	g_hAllowInDegreeForceBile = CreateConVar("ai_BoomerDegreeForceBile", "10", "是否允许目标和 Boomer 视角处在这个角度内且能看到目标头部强制喷吐，0 = 禁用", CVAR_FLAG, true, 0.0);
+	g_hAllowAutoFrame = CreateConVar("ai_BoomerAutoFrame", "1", "是否允许 Boomer 根据目标的角度自动计算视野在下一个目标的帧数", CVAR_FLAG, true, 0.0, true, 1.0);
 	/* 其他 Cvar */
 	g_hVomitRange = FindConVar("z_vomit_range");
 	g_hVomitDuration = FindConVar("z_vomit_duration");
@@ -127,18 +131,17 @@ public void evt_PlayerNowIt(Event event, const char[] name, bool dontBroadcast)
 public Action resetBileStateHandler(Handle timer, int client)
 {
 	isInBileState[client] = false;
+	secondCheckFrame[client] = 0;
 	return Plugin_Continue;
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3])
 {
 	if (!IsBoomer(client)) { return Plugin_Continue; }
-	float self_pos[3], self_eye_pos[3], targetPos[3], target_eye_pos[3], vec_speed[3], aim_angles[3], vel_buffer[3], cur_speed, dist, height;
-	int flags, target, closet_survivor_dist, ability, isAbilityUsing, i;
+	float self_pos[3], self_eye_pos[3], targetPos[3], target_eye_pos[3], vec_speed[3], aim_angles[3], vel_buffer[3], targetDist, cur_speed, height;
+	int flags, target, ability, isAbilityUsing, i;
 	bool has_sight;
-	flags = GetEntityFlags(client);
-	target = GetClosetSurvivor(client);
-	closet_survivor_dist = GetClosetSurvivorDistance(client);
+	flags = GetEntityFlags(client), target = GetClosetSurvivor(client);
 	ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
 	if (!IsValidEntity(ability)) { return Plugin_Continue; }
 	has_sight = view_as<bool>(GetEntProp(client, Prop_Send, "m_hasVisibleThreats"));
@@ -148,16 +151,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	GetClientAbsOrigin(client, self_pos);
 	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
 	GetClientEyePosition(client, self_eye_pos);
+	targetDist = GetVectorDistance(self_pos, targetPos);
 	if (has_sight && IsValidSurvivor(target) && !in_bile_interval[client] && targetList[client].Length < 1)
 	{
-		dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
-		if (dist <= g_hVomitRange.FloatValue)
+		height = self_pos[2] - targetPos[2];
+		if (targetDist <= g_hVomitRange.FloatValue)
 		{
 			ComputeAimAngles(client, target, aim_angles, AimEye);
 			if (g_hUpVision.BoolValue)
 			{
-				if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
-				else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
+				if (height == 0.0 || height < 0.0) { aim_angles[0] -= targetDist / (PLAYER_HEIGHT * 0.8); }
+				else if (height > 0.0) { aim_angles[0] -= targetDist / (PLAYER_HEIGHT * 1.5); }
 			}
 			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
 			/* 判断第一个目标是否需要强行被喷，boomer 能力使用后过一个目标帧数延时再做一次检测，避免生还者立刻躲起来还是被喷到 */
@@ -179,62 +183,96 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	}
 	if (targetList[client].Length >= 1 && !in_bile_interval[client] && g_hTurnVision.BoolValue)
 	{
-		if (bile_frame[client][0] < targetList[client].Length && bile_frame[client][1] < (g_hAllowInDegreeForceBile.BoolValue ? 2 * g_hTurnInterval.IntValue : g_hTurnInterval.IntValue))
+		/* 当前喷吐目标索引小于胖子目标数 */
+		if (bile_frame[client][0] < targetList[client].Length)
 		{
-			int turnTarget;
-			dist = GetVectorDistance(self_pos, targetPos), height = self_pos[2] - targetPos[2];
 			/* 获得下一个要转向的目标 */
+			int turnTarget, targetFrame;
+			float turnAngle;
 			turnTarget = targetList[client].Get(bile_frame[client][0], 1);
-			ComputeAimAngles(client, turnTarget, aim_angles, AimEye);
+			turnAngle = targetList[client].Get(bile_frame[client][0], 0);
+			GetClientAbsOrigin(turnTarget, targetPos);
+			height = self_pos[2] - targetPos[2];
 			/* 视野转向 & 上抬 */
+			ComputeAimAngles(client, turnTarget, aim_angles, AimEye);
 			if (g_hUpVision.BoolValue)
 			{
-				if (height == 0.0 || height < 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 0.8); }
-				else if (height > 0.0) { aim_angles[0] -= dist / (PLAYER_HEIGHT * 1.5); }
+				if (height == 0.0 || height < 0.0) { aim_angles[0] -= targetDist / (PLAYER_HEIGHT * 0.8); }
+				else if (height > 0.0) { aim_angles[0] -= targetDist / (PLAYER_HEIGHT * 1.5); }
 			}
 			TeleportEntity(client, NULL_VECTOR, aim_angles, NULL_VECTOR);
-			/* 允许在角度内强制喷吐，才进入二次检测，否则默认转视角即可 */
-			if (g_hAllowInDegreeForceBile.BoolValue)
+			/* 强制喷吐检测，帧数确认 */
+			targetFrame = g_hAllowInDegreeForceBile.BoolValue && g_hAllowAutoFrame.BoolValue ? RoundToNearest(turnAngle / TURN_ANGLE_DIVIDE) : g_hTurnInterval.IntValue;
+			#if DEBUG_ALL
+				PrintToConsoleAll("[Ai-Boomer]：下一个目标是：%N，角度是：%.2f 度，检测帧数为：%d 帧", turnTarget, turnAngle, targetFrame);
+			#endif
+			/* 当前 targetFrame = 0，代表目标就在面前，无需再次检测，直接强制被喷即可 */
+			if (g_hAllowInDegreeForceBile.BoolValue && g_hAllowAutoFrame.BoolValue && targetFrame == 0)
 			{
-				if (secondCheckFrame[turnTarget] < g_hTurnInterval.IntValue && !isInBileState[turnTarget]) { secondCheckFrame[turnTarget]++; }
-				else if (!isInBileState[turnTarget] && secondCheck(client, turnTarget))
-				{
-					#if DEBUG_ALL
-						PrintToConsoleAll("[Ai-Boomer]：%N 当前目标是：%N，二次检测通过，强制被喷", client, turnTarget);
-					#endif
-					L4D_CTerrorPlayer_OnVomitedUpon(turnTarget, client);
-					isInBileState[turnTarget] = true;
-					secondCheckFrame[turnTarget] = 0;
-					bile_frame[client][1] = 2 * g_hTurnInterval.IntValue;
-				}
+				L4D_CTerrorPlayer_OnVomitedUpon(turnTarget, client);
+				isInBileState[turnTarget] = true;
+				secondCheckFrame[turnTarget] = 0;
+				bile_frame[client][0] += 1;
+				return Plugin_Continue;
 			}
-			bile_frame[client][1] += 1;
-		}
-		else if (bile_frame[client][0] >= targetList[client].Length)
-		{
-			targetList[client].Clear();
-			bile_frame[client][0] = bile_frame[client][1] = 0;
-		}
-		else
-		{
-			bile_frame[client][0] += 1;
-			bile_frame[client][1] = 0;
+			if (bile_frame[client][1] < targetFrame)
+			{
+				if (g_hAllowInDegreeForceBile.BoolValue && g_hAllowAutoFrame.BoolValue)
+				{
+					if (secondCheckFrame[turnTarget] < targetFrame && !isInBileState[turnTarget])
+					{
+						#if DEBUG_ALL
+							PrintToConsoleAll("[Ai-Boomer]：目标：%N 当前二次检测帧数是：%d 帧，是否已经被喷：%b，是否过检测：%b",
+							turnTarget, secondCheckFrame[turnTarget], isInBileState[turnTarget], secondCheck(client, turnTarget));
+						#endif
+						secondCheckFrame[turnTarget]++;
+					}
+					else if (!isInBileState[turnTarget] && secondCheck(client, turnTarget))
+					{
+						#if DEBUG_ALL
+							PrintToConsoleAll("[Ai-Boomer]：%N 当前目标是：%N，二次检测通过，强制被喷", client, turnTarget);
+						#endif
+						L4D_CTerrorPlayer_OnVomitedUpon(turnTarget, client);
+						isInBileState[turnTarget] = true;
+						secondCheckFrame[turnTarget] = 0;
+						bile_frame[client][1] = targetFrame;
+					}
+					else if (isInBileState[turnTarget])
+					{
+						#if DEBUG_ALL
+							PrintToConsoleAll("[Ai-Boomer]：目标：%N 已经处于喷吐状态，切换下一个目标", turnTarget);
+						#endif
+						bile_frame[client][1] = secondCheckFrame[turnTarget] = 0;
+						bile_frame[client][0] += 1;
+						return Plugin_Continue;
+					}
+				}
+				bile_frame[client][1] += 1;
+			}
+			/* 喷完了，清理胖子目标集合 */
+			else if (bile_frame[client][0] >= targetList[client].Length)
+			{
+				targetList[client].Clear();
+				bile_frame[client][0] = bile_frame[client][1] = 0;
+			}
+			/* 没喷完，但是一个目标帧数满了，目标索引 + 1，继续喷下一个目标 */
+			else
+			{
+				bile_frame[client][0] += 1;
+				bile_frame[client][1] = 0;
+			}
 		}
 	}
 	// 靠近生还者，立即喷吐
-	if ((flags & FL_ONGROUND) && IsValidSurvivor(target) && has_sight && closet_survivor_dist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client] && Player_IsVisible_To(target, client))
+	if ((flags & FL_ONGROUND) && IsValidSurvivor(target) && has_sight && targetDist <= RoundToNearest(0.8 * g_hVomitRange.FloatValue) && !in_bile_interval[client] && can_bile[client])
 	{
 		buttons |= IN_FORWARD;
 		buttons |= IN_ATTACK;
 		if (can_bile[client]) { CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client); }
 		can_bile[client] = false;
 	}
-	// 目标是被控或者倒地的生还，则令其蹲下攻击
-	if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target)))
-	{
-		buttons |= IN_DUCK;
-		buttons |= IN_ATTACK2;
-	}
+	// 目标是被控或者倒地的生还，则令其右键攻击
+	if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target))) { buttons |= IN_ATTACK2; }
 	// 强行被喷
 	if (g_hForceBile.BoolValue && (buttons & IN_ATTACK) && !in_bile_interval[client] && IsValidSurvivor(target))
 	{
@@ -259,7 +297,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);
 	}
 	// 连跳
-	if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && 0.5 * g_hVomitRange.FloatValue < closet_survivor_dist < 1000.0 && cur_speed > 160.0 && IsValidSurvivor(target))
+	if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && 0.5 * g_hVomitRange.FloatValue < targetDist < 1000.0 && cur_speed > 160.0 && IsValidSurvivor(target))
 	{
 		vel_buffer = CalculateVel(self_pos, targetPos, g_hBhopSpeed.FloatValue);
 		buttons |= IN_JUMP;
@@ -365,8 +403,8 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion)
 {
 	isInBileState[victim] = true;
-	/* 一次检测，胖子目标集合长度大于 1 就不再做后面喷中的检测，否则多次触发导致无法喷中所有目标 */
-	if (!IsBoomer(attacker) || targetList[attacker].Length > 1) { return Plugin_Continue; }
+	/* 每次喷吐排除当前被喷目标与已经被喷了的目标，选择最近目标继续喷吐 */
+	if (!IsBoomer(attacker) && targetList[attacker].Length > 1) { return Plugin_Continue; }
 	// 当前 Boomer 目标集合中没有目标，开始获取目标
 	int i;
 	float eyePos[3] = {0.0}, targetEyePos[3] = {0.0}, dist, angle;
@@ -383,6 +421,9 @@ public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion
 		{
 			angle = getSelfTargetAngle(attacker, i);
 			targetList[attacker].Set(targetList[attacker].Push(angle), i, 1);
+			#if DEBUG_ALL
+				PrintToConsoleAll("[Ai-Boomer]：%N 的下一个目标是：%N", attacker, i);
+			#endif
 		}
 		delete trace;
 	}
