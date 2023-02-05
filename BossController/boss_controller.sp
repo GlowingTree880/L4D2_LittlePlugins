@@ -335,7 +335,6 @@ public Action Cmd_BossVote(int client, int args)
 		Handle bossVoteHandler = CreateBuiltinVote(BossVote_Handler, BuiltinVoteType_Custom_YesNo, BuiltinVoteAction_Cancel | BuiltinVoteAction_VoteEnd | BuiltinVoteAction_End);
 		SetBuiltinVoteArgument(bossVoteHandler, bossVoteTitle);
 		SetBuiltinVoteInitiator(bossVoteHandler, client);
-		SetBuiltinVoteResultCallback(bossVoteHandler, BossVoteResult_Handler);
 		DisplayBuiltinVote(bossVoteHandler, players, playerNum, MENU_DISPLAY_TIME);
 		FakeClientCommand(client, "Vote Yes");
 		CPrintToChatAll("{B}<{G}BossVote{B}>：{G}玩家 {O}%N {G}发起了一个设置 Boss 刷新路程的投票", client);
@@ -350,70 +349,76 @@ public int BossVote_Handler(Handle vote, BuiltinVoteAction action, int param1, i
 {
 	switch (action)
 	{
-		case BuiltinVoteAction_End:
+		/* 投票通过 */
+		case BuiltinVoteAction_VoteEnd:
 		{
-			delete vote;
-		}
-		case BuiltinVoteAction_Cancel:
-		{
-			DisplayBuiltinVoteFail(vote, view_as<BuiltinVoteFailReason>(param1));
-		}
-	}
-	return 0;
-}
-public int BossVoteResult_Handler(Handle vote, int num_votes, int num_clients, const int[][] client_info, int num_items, const int[][] item_info)
-{
-	for (int i = 0; i < num_items; i++)
-	{
-		if (item_info[i][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES)
-		{
-			if (item_info[i][BUILTINVOTEINFO_ITEM_VOTES] > (num_clients / 2))
+			#if DEBUG_ALL
+				LogMessage("[Boss-Controller]：投票结果：param1 是：%d，param2是：%d", param1, param2);
+			#endif
+			if (param1 == BUILTINVOTES_VOTE_YES)
 			{
+				char buffer[64] = {'\0'};
+				/* 设置投票通过结果 */
 				/* if (!IsInReady())
 				{
-					DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
-					CPrintToChatAll("{B}<{G}BossVote{B}>：{W}只能在准备期间投票更改 Boss 位置");
-					return;
+					FormatEx(buffer, sizeof(buffer), "只允许在准备期间更改 Boss 刷新位置");
+					DisplayBuiltinVoteFail(vote, buffer);
+					return 0;
 				} */
 				if (canSetTank && canSetWitch)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Boss 刷新路程...");
+					FormatEx(buffer, sizeof(buffer), "正在更改 Boss 刷新路程...");
+					DisplayBuiltinVotePass(vote, buffer);
 				}
 				else if (canSetTank)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Tank 刷新路程...");
+					FormatEx(buffer, sizeof(buffer), "正在更改 Tank 刷新路程...");
+					DisplayBuiltinVotePass(vote, buffer);
 				}
 				else if (canSetWitch)
 				{
-					DisplayBuiltinVotePass(vote, "正在更改 Witch 刷新路程...");
+					FormatEx(buffer, sizeof(buffer), "正在更改 Witch 刷新路程...");
+					DisplayBuiltinVotePass(vote, buffer);
 				}
 				else
 				{
-					DisplayBuiltinVotePass(vote, "正在禁用本轮 Boss 刷新...");
+					FormatEx(buffer, sizeof(buffer), "正在禁用本轮 Boss 刷新...");
+					DisplayBuiltinVotePass(vote, buffer);
 				}
-				// 投票通过，设置坦克女巫刷新位置
+				/* 更改 Boss 刷新路程 */
 				SetTankPercent(tankActFlow);
 				SetWitchPercent(witchActFlow);
 				nowTankFlow = tankActFlow;
 				nowWitchFlow = witchActFlow;
-				if (tankActFlow == 0)
-				{
-					g_hTankCanSpawn.BoolValue = false;
-				}
-				if (witchActFlow == 0)
-				{
-					g_hWitchCanSpawn.BoolValue = false;
-				}
+				if (tankActFlow == 0) { g_hTankCanSpawn.BoolValue = false; }
+				if (witchActFlow == 0) { g_hWitchCanSpawn.BoolValue = false; }
 				/* UpdateBossPercents(); */
 				Call_StartForward(fUpdateBoss);
 				Call_PushCell(tankActFlow);
 				Call_PushCell(witchActFlow);
 				Call_Finish();
-				return 0;
+			}
+			else if (param1 == BUILTINVOTES_VOTE_NO)
+			{
+				DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
+			}
+			else
+			{
+				DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Generic);
 			}
 		}
+		/* 投票被取消 */
+		case BuiltinVoteAction_Cancel:
+		{
+			DisplayBuiltinVoteFail(vote, view_as<BuiltinVoteFailReason>(param1));
+		}
+		/* 投票结束，删除 vote 句柄 */
+		case BuiltinVoteAction_End:
+		{
+			delete vote;
+			vote = null;
+		}
 	}
-	DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
 	return 0;
 }
 // 管理员更改坦克女巫刷新位置
@@ -1337,6 +1342,22 @@ void PrintBossPercent(int type, int client = -1)
 			CPrintToChatAll("%s", witchStr);
 		}
 	}
+	/* Tank 和 Witch 都禁止刷新的情况 */
+	else
+	{
+		if (type == TYPE_PLAYER && IsValidClient(client))
+		{
+			CPrintToChat(client, "{G}当前：{O}%d%%", GetSurvivorFlow());
+			CPrintToChat(client, "%s", tankStr);
+			CPrintToChat(client, "%s", witchStr);
+		}
+		else
+		{
+			CPrintToChatAll("{G}当前：{O}%d%%", GetSurvivorFlow());
+			CPrintToChatAll("%s", tankStr);
+			CPrintToChatAll("%s", witchStr);
+		}
+	}
 }
 // 判断是否可以进行 boss 投票
 bool CheckCanVoteBoss(int client)
@@ -1650,24 +1671,12 @@ public int Native_RefreshReadyUp(Handle plugin, int numParams)
 
 int GetSurvivorFlow()
 {
-	float flow = 0.0, tempFlow = 0.0, nearestNav[3] = {0.0};
-	Address pNav = Address_Null;
-	for (int client = 1; client <= MaxClients; client++)
-	{
-		if (IsValidSurvivor(client))
-		{
-			GetClientAbsOrigin(client, nearestNav);
-			pNav = L4D2Direct_GetTerrorNavArea(nearestNav);
-			if (pNav != Address_Null)
-			{
-				tempFlow = L4D2Direct_GetTerrorNavAreaFlow(pNav);
-				flow = (flow > tempFlow) ? flow : tempFlow;
-			}
-		}
-	}
-	flow /= L4D2Direct_GetMapMaxFlowDistance();
-	float tempProxy = flow + g_hVsBossBuffer.FloatValue / L4D2Direct_GetMapMaxFlowDistance();
-	return RoundToNearest((tempProxy > 1.0 ? 1.0 : tempProxy) * 100.0);
+	static float survivorDistance;
+	static int furthestSurvivor;
+	furthestSurvivor = L4D_GetHighestFlowSurvivor();
+	if (!IsValidSurvivor(furthestSurvivor)) { survivorDistance = L4D2_GetFurthestSurvivorFlow(); }
+	else { survivorDistance = L4D2Direct_GetFlowDistance(furthestSurvivor); }
+	return RoundToNearest(survivorDistance / L4D2Direct_GetMapMaxFlowDistance() * 100.0);
 }
 // 判断是否黑色狂欢节 remix 地图
 bool IsDKR()

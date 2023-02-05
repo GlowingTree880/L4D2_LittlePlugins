@@ -24,6 +24,7 @@
                 修复对抗模式下刷新 boss 后查看 boss 路程无法正确显示 “已刷新” 的问题
     2022-10-14：修复有 mapInfo.txt 文件下 mapInfo.txt 中无记录的地图无法刷新 boss 的问题
                 优化时钟句柄删除机制
+	2023-2-6：修复 Windows 服务器及本地无法正确使用 !voteboss 设置 Boss 刷新位置的问题，修复当 Tank 与 Witch 都禁止刷新时不显示 Boss 刷新位置的问题
 
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
