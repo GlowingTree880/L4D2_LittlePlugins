@@ -67,6 +67,19 @@ Ai_Hunter：
   ai_HunterTarget：2 ht目标选择：1=关闭此功能，2=最近生还者，3=手持非霰弹枪的生还者
   ai_HunterShotGunCheckRange：150.0 当 ai_HunterTarget 为3时，ht在大于这个距离时将会进行目标枪械检测
   
+Ai_Hunter_2.0：
+  2022/2/15日重写，增加以下功能：
+  ①增加 Cvar：ai_hunter_back_vision [1]（Hunter 突袭时是否视角背对目标）
+  ②增加 Cvar：ai_hunter_melee_first [1]（Hunter 突袭前是否先按右键再突袭，翻滚扑效果，此项需 Cvar：z_lunge_interval 数值不小于 0.1 否则效果不明显）
+  ③增加 Cvar：ai_hunter_high_pounce [400.0]（Hunter 在与目标超过这个高度且目标未看着 Hunter 情况下会直扑）
+  ④增加 Cvar：ai_hunter_angle_diff [2]（Hunter 在进行由随机数生成器生成的角度侧飞时，向左 [角度为正值] 和向右 [角度为负值] 飞扑次数的差值不能超过这个值）
+  ⑤删除 Hunter 回避手持霰弹枪的玩家与 Hunter 枪械检测功能
+  ⑥随机数生成器由 Gaussian RNG（高斯随机）更改为 XorShift RNG
+  出现任何报错或有更好的改进建议，欢迎提出 issue
+  
+  更新日志：
+	2023/2/15：上传插件，更新 treeutil.sp，更新 readme 文件
+  
 Ai_Charger：
   ai_ChargerBhop：1 是否开启牛连跳功能
   ai_ChargerBhopSpeed：80.0 牛连跳的速度
@@ -112,7 +125,6 @@ Ai_Jockey_2.0：
   
   更新日志：
 	2022/12/16：修复猴子允许高跳但是没有高跳效果而是仅右键挠人的问题，修复猴子高概率在空中向后看的问题，修复猴子在生还直视自身而距离大于 250 时视角抽搐的问题
-  
   
 Ai_Spitter：
   ai_SpitterBhop：1 是否开启口水连跳功能
