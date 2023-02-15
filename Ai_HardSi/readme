@@ -84,6 +84,9 @@ Ai_Charger_2.0：
   ③近战检测范围为 ai_ChargerChargeDistance 值，且需血量大于 ai_ChargerMeleeDamage 限制且在近战检测范围外才会切换目标，否则对手持近战的目标挥拳
   可能会出现报错问题，欢迎提出 issue
   
+  更新日志：
+	2023/2/15：将牛获取其他范围内有效目标相关代码从 L4D2_OnChooseVictim () 函数中移除
+  
 Ai_Jockey：
   ai_JockeyBhopSpeed：80.0 猴子连跳的速度
   ai_JockeyStartHopDistance：800.0 猴子在与目标处在这一个范围内时将会进行连跳

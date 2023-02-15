@@ -23,9 +23,12 @@ public Plugin myinfo =
 // ConVars
 ConVar g_hAllowBhop, g_hBhopSpeed, g_hChargeDist, g_hExtraTargetDist, g_hAimOffset, g_hChargerTarget, g_hAllowMeleeAvoid, g_hChargerMeleeDamage, g_hChargeInterval;
 // Float
-float charge_interval[MAXPLAYERS + 1];
+float
+	charge_interval[MAXPLAYERS + 1] = {0.0},
+	min_dist,
+	max_dist;
 // Bools
-bool can_attack_pinned[MAXPLAYERS + 1] = false, is_charging[MAXPLAYERS + 1] = false;
+bool can_attack_pinned[MAXPLAYERS + 1] = {false}, is_charging[MAXPLAYERS + 1] = {false};
 // Ints
 int survivor_num = 0, ranged_client[MAXPLAYERS + 1][MAXPLAYERS + 1], ranged_index[MAXPLAYERS + 1] = {0};
 
@@ -41,8 +44,16 @@ public void OnPluginStart()
 	g_hChargerMeleeDamage = CreateConVar("ai_ChargerMeleeDamage", "350", "Charger 血量小于这个值，将不会直接冲锋拿着近战的生还者", CVAR_FLAG, true, 0.0);
 	g_hChargerTarget = CreateConVar("ai_ChargerTarget", "1", "Charger目标选择：1=自然目标选择，2=优先取最近目标，3=优先撞人多处", CVAR_FLAG, true, 1.0, true, 2.0);
 	g_hChargeInterval = FindConVar("z_charge_interval");
+	g_hExtraTargetDist.AddChangeHook(extraTargetDistChangeHandler);
 	// HookEvents
 	HookEvent("player_spawn", evt_PlayerSpawn);
+	// GetOtherTarget
+	getOtherRangedTarget();
+}
+
+void extraTargetDistChangeHandler(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	getOtherRangedTarget();
 }
 
 // 事件
@@ -165,8 +176,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			buttons |= IN_ATTACK2;
 		}
 		// 连跳，并阻止冲锋，可以攻击被控的人的时，将最小距离置 0，连跳追上被控的人
-		int min_dist = can_attack_pinned[client] ? 0 : g_hChargeDist.IntValue;
-		if (has_sight && g_hAllowBhop.BoolValue && min_dist < closet_survivor_distance < 10000 && cur_speed > 175.0 && IsValidSurvivor(target))
+		int bhopMinDist = can_attack_pinned[client] ? 0 : g_hChargeDist.IntValue;
+		if (has_sight && g_hAllowBhop.BoolValue && bhopMinDist < closet_survivor_distance < 10000 && cur_speed > 175.0 && IsValidSurvivor(target))
 		{
 			if (flags & FL_ONGROUND)
 			{
@@ -195,22 +206,8 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 	int new_target = 0;
 	if (IsCharger(specialInfected))
 	{
-		float self_pos[3] = {0.0}, target_pos[3] = {0.0}, min_dist = 0.0, max_dist = 0.0;
+		float self_pos[3] = {0.0}, target_pos[3] = {0.0};
 		GetClientEyePosition(specialInfected, self_pos);
-		// 获取在冲锋范围内的目标，从 Cvar 中获取最下与最大范围
-		char cvar_dist[16] = '\0';
-		g_hExtraTargetDist.GetString(cvar_dist, sizeof(cvar_dist));
-		if (strcmp(cvar_dist, NULL_STRING) != 0)
-		{
-			char result_dist[2][16];
-			ExplodeString(cvar_dist, ",", result_dist, 2, 16);
-			min_dist = StringToFloat(result_dist[0]);
-			max_dist = StringToFloat(result_dist[1]);
-		}
-		else
-		{
-			max_dist = 350.0;
-		}
 		FindRangedClients(specialInfected, min_dist, max_dist);
 		if (IsValidSurvivor(curTarget) && IsPlayerAlive(curTarget))
 		{
@@ -293,7 +290,7 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 void Get_MeleeNum(int &melee_num, int &new_target)
 {
 	int active_weapon = -1;
-	char weapon_name[48] = '\0';
+	char weapon_name[48] = {'\0'};
 	for (int client = 1; client <= MaxClients; client++)
 	{
 		if (IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR) && IsPlayerAlive(client) && !IsClientIncapped(client) && !IsClientPinned(client))
@@ -317,7 +314,7 @@ void Get_MeleeNum(int &melee_num, int &new_target)
 bool Client_MeleeCheck(int client)
 {
 	int active_weapon = -1;
-	char weapon_name[48] = '\0';
+	char weapon_name[48] = {'\0'};
 	if (IsValidSurvivor(client) && IsPlayerAlive(client) && !IsClientIncapped(client) && !IsClientPinned(client))
 	{
 		active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
@@ -339,7 +336,7 @@ int GetCrowdPlace(int num_survivors)
 	{
 		int index = 0, iTarget = 0;
 		int[] iSurvivors = new int[num_survivors];
-		float fDistance[MAXPLAYERS + 1] = -1.0;
+		float fDistance[MAXPLAYERS + 1] = {-1.0};
 		for (int client = 1; client <= MaxClients; client++)
 		{
 			if (IsValidClient(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR))
@@ -352,11 +349,11 @@ int GetCrowdPlace(int num_survivors)
 			if (IsValidClient(client) && IsPlayerAlive(client) && GetClientTeam(client) == view_as<int>(TEAM_SURVIVOR))
 			{
 				fDistance[client] = 0.0;
-				float fClientPos[3] = 0.0;
+				float fClientPos[3] = {0.0};
 				GetClientAbsOrigin(client, fClientPos);
 				for (int i = 0; i < num_survivors; i++)
 				{
-					float fPos[3] = 0.0;
+					float fPos[3] = {0.0};
 					GetClientAbsOrigin(iSurvivors[i], fPos);
 					fDistance[client] += GetVectorDistance(fClientPos, fPos, true);
 				}
@@ -498,7 +495,7 @@ bool Dont_HitWall_Or_Fall(int client, float vel[3])
 {
 	bool hullrayhit = false;
 	int down_hullray_hitent = -1;
-	char down_hullray_hitent_classname[16] = '\0';
+	char down_hullray_hitent_classname[16] = {'\0'};
 	float selfpos[3] = {0.0}, resultpos[3] = {0.0}, mins[3] = {0.0}, maxs[3] = {0.0}, hullray_endpos[3] = {0.0}, down_hullray_startpos[3] = {0.0}, down_hullray_endpos[3] = {0.0}, down_hullray_hitpos[3] = {0.0};
 	GetClientAbsOrigin(client, selfpos);
 	AddVectors(selfpos, vel, resultpos);
@@ -558,7 +555,7 @@ bool TR_EntityFilter(int entity, int mask)
 	}
 	else if (entity > MaxClients)
 	{
-		char classname[16] = '\0';
+		char classname[16] = {'\0'};
 		GetEdictClassname(entity, classname, sizeof(classname));
 		if (strcmp(classname, "infected") == 0 || strcmp(classname, "witch") == 0 || strcmp(classname, "prop_physics") == 0 || strcmp(classname, "tank_rock") == 0)
 		{
@@ -602,4 +599,21 @@ float Get_Player_Aim_Offset(int client, int target)
 		return result_angle;
 	}
 	return -1.0;
+}
+
+void getOtherRangedTarget()
+{
+	// 获取在冲锋范围内的目标，从 Cvar 中获取最下与最大范围
+	static char cvar_dist[16], result_dist[2][16];
+	g_hExtraTargetDist.GetString(cvar_dist, sizeof(cvar_dist));
+	if (!IsNullString(cvar_dist))
+	{
+		ExplodeString(cvar_dist, ",", result_dist, 2, sizeof(result_dist[]));
+		min_dist = StringToFloat(result_dist[0]);
+		max_dist = StringToFloat(result_dist[1]);
+	}
+	else
+	{
+		max_dist = 350.0;
+	}
 }
