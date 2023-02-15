@@ -78,7 +78,7 @@ Ai_Hunter_2.0：
   出现任何报错或有更好的改进建议，欢迎提出 issue
   
   更新日志：
-	2023/2/15：上传插件，更新 treeutil.sp，更新 readme 文件
+	2023/2/15：上传插件，更新 treeutil.sp，更新 readme 文件，将部分变量更改为静态，将 Hunter 飞扑速度更改为 z_lunge_power 值
   
 Ai_Charger：
   ai_ChargerBhop：1 是否开启牛连跳功能

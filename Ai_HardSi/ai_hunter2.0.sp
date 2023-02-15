@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name 			= "Ai Hunter 2.0",
 	author 			= "夜羽真白",
 	description 	= "Ai Hunter 增强 2.0 版本",
-	version 		= "2022/2/15",
+	version 		= "2023/2/15",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -46,7 +46,8 @@ ConVar
 	g_hPounceLoftAngle,
 	g_hPounceGiveUpRange,
 	g_hPounceSilenceRange,
-	g_hCommitAttackRange;
+	g_hCommitAttackRange,
+	g_hLungePower;
 bool
 	ignoreCrouch,
 	hasQueuedLunge[MAXPLAYERS + 1];
@@ -79,6 +80,7 @@ public void OnPluginStart()
 	g_hPounceGiveUpRange = FindConVar("hunter_leap_away_give_up_range");
 	g_hPounceSilenceRange = FindConVar("z_pounce_silence_range");
 	g_hCommitAttackRange = FindConVar("hunter_committed_attack_range");
+	g_hLungePower = FindConVar("z_lunge_power");
 	// 挂钩事件
 	HookEvent("player_spawn", playerSpawnHandler);
 	HookEvent("ability_use", abilityUseHandler);
@@ -135,22 +137,29 @@ void setCvarValue(bool set)
 public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
 	if (!isValidHunter(hunter)) { return Plugin_Continue; }
-	int
-		target = getClosestSurvivor(hunter),
-		ability = GetEntPropEnt(hunter, Prop_Send, "m_customAbility");
+	static int
+		target,
+		ability;
+	target = getClosestSurvivor(hunter),
+	ability = GetEntPropEnt(hunter, Prop_Send, "m_customAbility");
 	if (!IsValidEntity(ability) || !IsValidEdict(ability) || !IsValidSurvivor(target)) { return Plugin_Continue; }
 	// 下一次可以使用能力的时间
-	float
-		timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp"),
-		gametime = GetGameTime(),
+	static float
+		timestamp,
+		gametime,
 		selfPos[3],
 		selfEyeAngle[3],
 		targetPos[3],
 		targetDistance;
-	bool
-		hasSight = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_hasVisibleThreats")),
-		isDucking= view_as<bool>(GetEntProp(hunter, Prop_Send, "m_bDucked")),
-		isLunging = view_as<bool>(GetEntProp(ability, Prop_Send, "m_isLunging"));
+	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
+	gametime = GetGameTime();
+	static bool
+		hasSight,
+		isDucking,
+		isLunging;
+	hasSight = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_hasVisibleThreats"));
+	isDucking = view_as<bool>(GetEntProp(hunter, Prop_Send, "m_bDucked"));
+	isLunging = view_as<bool>(GetEntProp(ability, Prop_Send, "m_isLunging"));
 	GetClientAbsOrigin(hunter, selfPos);
 	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
 	targetDistance = GetVectorDistance(selfPos, targetPos);
@@ -253,10 +262,10 @@ public void roundEndHandler(Event event, const char[] name, bool dontBroadcast)
 public void hunterOnPounce(int hunter)
 {
 	if (!isValidHunter(hunter)) { return; }
-	int
+	static int
 		lungeEntity,
 		target;
-	float
+	static float
 		selfPos[3],
 		targetPos[3],
 		selfEyeAngle[3],
@@ -302,7 +311,8 @@ public void hunterOnPounce(int hunter)
 		#if DEBUG
 			PrintToConsoleAll("[Ai-Hunter]：与最近目标：%N 距离：%d，高度：%.2f 可以侧飞", target, GetClientDistance(hunter, target), FloatAbs(targetPos[2] - selfPos[2]));
 		#endif
-		int angle = xorShiftGetRandomInt(0, g_hPounceAngleMean.IntValue, g_hPounceAngleStd.IntValue);
+		static int angle;
+		angle = xorShiftGetRandomInt(0, g_hPounceAngleMean.IntValue, g_hPounceAngleStd.IntValue);
 		// 角度是正值，则 ht 向左飞，反之向右，是否需要角度修正
 		if ((angle > 0 && anglePounceCount[hunter][POUNCE_LFET] - anglePounceCount[hunter][POUNCE_RIGHT] > g_hAnglePounceCount.IntValue) ||
 			(angle < 0 && anglePounceCount[hunter][POUNCE_RIGHT] - anglePounceCount[hunter][POUNCE_LFET] > g_hAnglePounceCount.IntValue))
@@ -433,7 +443,7 @@ void angleLunge(int hunter, int target, int lungeEntity, float turnAngle)
 		GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
 		SubtractVectors(targetPos, selfPos, lungeVec);
 		NormalizeVector(lungeVec, lungeVec);
-		ScaleVector(lungeVec, FindConVar("hunter_pounce_air_speed").FloatValue);
+		ScaleVector(lungeVec, g_hLungePower.FloatValue);
 	}
 	// 增加水平角度
 	resultVec[0] = lungeVec[0] * Cosine(turnAngle) - lungeVec[1] * Sine(turnAngle);
@@ -482,7 +492,7 @@ void getHunterMeleeFirstRange()
 bool isVisibleTo(int hunter, int target, float offset)
 {
 	if (!isValidHunter(hunter) || !IsValidSurvivor(target) || !IsPlayerAlive(target)) { return false; }
-	float
+	static float
 		selfEyePos[3],
 		selfEyeAngle[3],
 		targetEyePos[3];
