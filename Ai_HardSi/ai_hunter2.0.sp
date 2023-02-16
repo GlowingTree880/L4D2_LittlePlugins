@@ -157,11 +157,12 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 		timestamp,
 		gametime,
 		selfPos[3],
-		selfEyeAngle[3],
 		targetPos[3],
-		targetDistance;
+		targetDistance,
+		lungeVector[3];
 	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
 	gametime = GetGameTime();
+	GetEntPropVector(ability, Prop_Send, "m_queuedLunge", lungeVector);
 	static bool
 		hasSight,
 		isDucking,
@@ -175,12 +176,12 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 	// 开启飞扑时背身
 	if (g_hBackVision.BoolValue && isLunging)
 	{
-		GetClientEyeAngles(hunter, selfEyeAngle);
-		GetAngleVectors(selfEyeAngle, selfEyeAngle, NULL_VECTOR, NULL_VECTOR);
-		NegateVector(selfEyeAngle);
-		NormalizeVector(selfEyeAngle, selfEyeAngle);
-		GetVectorAngles(selfEyeAngle, selfEyeAngle);
-		TeleportEntity(hunter, NULL_VECTOR, selfEyeAngle, NULL_VECTOR);
+		NormalizeVector(lungeVector, lungeVector);
+		NegateVector(lungeVector);
+		// 将飞扑方向向量取反后，原来向前飞的 ht 面朝右 90 度，y 轴再次旋转 90 度背身
+		lungeVector[1] -= 90.0; 
+		GetVectorAngles(lungeVector, lungeVector);
+		TeleportEntity(hunter, NULL_VECTOR, lungeVector, NULL_VECTOR);
 		return Plugin_Changed;
 	}
 	if (!isOnGround(hunter)) { return Plugin_Continue; }
@@ -369,20 +370,23 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 {
 	if (!isValidHunter(specialInfected) || !IsValidSurvivor(curTarget) || !IsPlayerAlive(curTarget)) { return Plugin_Continue; }
 	// hunter 和目标都有效，检测可见性
+	static int newTarget;
 	static float targetPos[3];
 	GetEntPropVector(curTarget, Prop_Send, "m_vecOrigin", targetPos);
 	// 当前目标不可见，使用 getClosestSurvivor 获取最近的可见目标
 	if (!L4D2_IsVisibleToPlayer(specialInfected, TEAM_INFECTED, curTarget, INVALID_NAV_AREA, targetPos))
 	{
 		// 不可见，更换新的最近可见目标
-		curTarget = getClosestSurvivor(specialInfected);
+		newTarget = getClosestSurvivor(specialInfected);
 		// 如果 getClosestSurvivor 返回 INVALID_CLIENT 则使用默认目标
-		if (!IsValidSurvivor(curTarget))
+		if (!IsValidSurvivor(newTarget))
 		{
 			hunterCurrentTarget[specialInfected] = curTarget;
 			return Plugin_Continue;
 		}
-		hunterCurrentTarget[specialInfected] = curTarget;
+		// 新目标可见，更改目标
+		hunterCurrentTarget[specialInfected] = newTarget;
+		curTarget = newTarget;
 		return Plugin_Changed;
 	}
 	// 当前目标可见，给 hunterCurrentTarget 赋值，避免 OnPlayerRunCmd 中拿不到目标
@@ -452,20 +456,20 @@ float getPlayerAimingOffset(int hunter, int target)
 }
 
 // 限制 hunter 飞行的垂直角度
-void limitLungeVerticality(int ablility)
+void limitLungeVerticality(int ability)
 {
-	if (!IsValidEntity(ablility) || !IsValidEdict(ablility)) { return; }
+	if (!IsValidEntity(ability) || !IsValidEdict(ability)) { return; }
 	static float
 		verticleAngle,
 		queueLunged[3],
 		resultLunged[3];
-	GetEntPropVector(ablility, Prop_Send, "m_queuedLunge", queueLunged);
+	GetEntPropVector(ability, Prop_Send, "m_queuedLunge", queueLunged);
 	verticleAngle = DegToRad(g_hPounceVerticalAngle.FloatValue);
 	resultLunged[1] = queueLunged[1] * Cosine(verticleAngle) - queueLunged[2] * Sine(verticleAngle);
 	resultLunged[2] = queueLunged[1] * Sine(verticleAngle) + queueLunged[2] * Cosine(verticleAngle);
 	resultLunged[0] = queueLunged[0] * Cosine(verticleAngle) + queueLunged[2] * Sine(verticleAngle);
 	resultLunged[2] = queueLunged[0] * -Sine(verticleAngle) + queueLunged[2] * Cosine(verticleAngle);
-	SetEntPropVector(ablility, Prop_Send, "m_queuedLunge", resultLunged);
+	SetEntPropVector(ability, Prop_Send, "m_queuedLunge", resultLunged);
 }
 
 // 限制 hunter 飞行水平角度
