@@ -377,10 +377,16 @@ public Action L4D2_OnChooseVictim(int specialInfected, int &curTarget)
 		// 不可见，更换新的最近可见目标
 		curTarget = getClosestSurvivor(specialInfected);
 		// 如果 getClosestSurvivor 返回 INVALID_CLIENT 则使用默认目标
-		if (!IsValidSurvivor(curTarget)) { return Plugin_Continue; }
+		if (!IsValidSurvivor(curTarget))
+		{
+			hunterCurrentTarget[specialInfected] = curTarget;
+			return Plugin_Continue;
+		}
 		hunterCurrentTarget[specialInfected] = curTarget;
 		return Plugin_Changed;
 	}
+	// 当前目标可见，给 hunterCurrentTarget 赋值，避免 OnPlayerRunCmd 中拿不到目标
+	hunterCurrentTarget[specialInfected] = curTarget;
 	return Plugin_Continue;
 }
 
