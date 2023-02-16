@@ -196,10 +196,11 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 		{
 			buttons |= IN_ATTACK2;
 		}
-		else if (gametime > timestamp &&
-				(noSightPounceRange > 0 && targetDistance <= noSightPounceRange) &&
-				(noSightPounceHeight > 0 && FloatAbs(selfPos[2] - targetPos[2]) <= noSightPounceHeight))
+		else if (gametime > timestamp)
 		{
+			// 设置了高度或距离或两个都设置情况下，检查是否符合条件
+			if (noSightPounceRange > 0 && targetDistance > noSightPounceRange) { return Plugin_Continue; }
+			if (noSightPounceHeight > 0 && FloatAbs(selfPos[2] - targetPos[2]) > noSightPounceHeight) { return Plugin_Continue; }
 			if (!hasQueuedLunge[hunter])
 			{
 				hasQueuedLunge[hunter] = true;
