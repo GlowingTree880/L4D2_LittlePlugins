@@ -1,3 +1,8 @@
 这是一个：任意模式，Tank 刷新后，对旁观者与特感方显示的当前 Tank 状态面板，包含当前 Tank 血量，控制权，着火状态，是否处在胆汁状态中，与当前 Tank 控制者等信息
 
 部分代码参考自：spechud.sp（Hyper-V HUD Manager）By：Visor, Forgetest，链接：https://github.com/Target5150/MoYu_Server_Stupid_Plugins
+
+更新日志：
+	2023/3/9：① 适配插件语法到 1.11 平台
+			② 优化部分逻辑，现此插件默认显示最后生成的 Tank，如先后生成两只 Tank，则插件显示第二只 Tank 的血量，第二只 Tank 死亡后则自动切换显示第一只 Tank 血量（这个 Tank 未死亡）
+			③ 修复 Tank 死亡后不能自动关闭面板的问题

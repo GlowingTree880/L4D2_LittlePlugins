@@ -6,27 +6,48 @@
 #include <sdktools>
 #include <left4dhooks>
 #include <colors>
+#include "treeutil/treeutil.sp"
+
+#define CVAR_FLAG FCVAR_NOTIFY
+#define INVALID_CLIENT -1
+#define TANK_HUD_DISPLAY_TIME 3
 
 public Plugin myinfo = 
 {
 	name 			= "Spectator And InfectedTeam Tank Hud",
 	author 			= "夜羽真白",
 	description 	= "旁观者与特感团队的坦克面板",
-	version 		= "1.0.1.0",
+	version 		= "1.0.1.1",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
 // ConVars
-ConVar tankburnduration;
+ConVar
+	g_hEnable,
+	g_hPanelRefreshTime,
+	g_hPanelTitle;
+// 其他 Cvar
+ConVar
+	tankBurnDuration;
 // Ints
-int tankclient = -1;
+int
+	tankClient = INVALID_CLIENT;
 // Bools
-bool istankactive = false, hiddenpanel[MAXPLAYERS + 1] = false, invomit[MAXPLAYERS + 1] = false;
+bool
+	hiddenPanel[MAXPLAYERS + 1],
+	inVomit[MAXPLAYERS + 1];
+Handle
+	g_hTankHudTimer = null;
+Panel
+	tankHud = null;
 
 public void OnPluginStart()
 {
 	// ConVars
-	tankburnduration = FindConVar("tank_burn_duration");
+	g_hEnable = CreateConVar("tank_hud_enable", "1", "是否开启 Tank 状态面板", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hPanelRefreshTime = CreateConVar("tank_hud_refresh_interval", "0.5", "Tank 状态面板刷新时间", CVAR_FLAG, true, 0.1);
+	g_hPanelTitle = CreateConVar("tank_hud_title", "树树子 Server's Tank Hud", "Tank 状态面板标题", CVAR_FLAG);
+	tankBurnDuration = FindConVar("tank_burn_duration");
 	// Commands
 	RegConsoleCmd("sm_tankhud", Cmd_TankHud, "开启关闭坦克面板");
 	// Events
@@ -42,16 +63,15 @@ public void OnPluginStart()
 // *********************
 public Action Cmd_TankHud(int client, int args)
 {
-	if (!hiddenpanel[client])
+	if (!hiddenPanel[client])
 	{
-		hiddenpanel[client] = true;
+		hiddenPanel[client] = true;
 		CPrintToChat(client, "{G}<TankHUD>：{W}Tank HUD now is {LG}disabled");
+		return Plugin_Continue;
 	}
-	else
-	{
-		hiddenpanel[client] = false;
-		CPrintToChat(client, "{G}<TankHUD>：{W}Tank HUD now is {LG}enabled");
-	}
+	hiddenPanel[client] = false;
+	CPrintToChat(client, "{G}<TankHUD>：{W}Tank HUD now is {LG}enabled");
+	return Plugin_Continue;
 }
 
 // *********************
@@ -59,241 +79,186 @@ public Action Cmd_TankHud(int client, int args)
 // *********************
 public void evt_RoundEvent(Event event, const char[] name, bool dontBroadcast)
 {
-	istankactive = false;
-	tankclient = -1;
+	delete g_hTankHudTimer;
+	g_hTankHudTimer = null;
+	delete tankHud;
+	tankHud = null;
+	tankClient = INVALID_CLIENT;
 }
 
 public void evt_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	tankclient = GetClientOfUserId(event.GetInt("userid"));
-	if (!istankactive)
+	tankClient = GetClientOfUserId(event.GetInt("userid"));
+	// 未开启面板
+	if (!g_hEnable.BoolValue) { return; }
+	// 开启了面板
+	delete g_hTankHudTimer;
+	g_hTankHudTimer = CreateTimer(g_hPanelRefreshTime.FloatValue, Timer_RefreshPanel, _, TIMER_REPEAT);
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
 	{
-		istankactive = true;
-		CreateTimer(0.5, Timer_RefreshPanel, _, TIMER_REPEAT);
-	}
-	for (int client = 1; client <= MaxClients; client++)
-	{
-		if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 2 && hiddenpanel[client])
-		{
-			CPrintToChat(client, "{G}<TankHUD>：{W}TankHUD now is {LG}disabled\nType {O}!tankhud {W}into chat to toggle the {LG}tankhud");
-		}
+		if (!IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || hiddenPanel[i]) { continue; }
+		CPrintToChat(i, "{G}<TankHUD>：{W}TankHUD now is {LG}disabled\nType {O}!tankhud {W}into chat to toggle the {LG}tankhud");
 	}
 }
 
+// 当前 Tank 死亡，查找是否还有其他的 Tank
 public void evt_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (client > 0 && client <= MaxClients && GetClientTeam(client) == 3 && GetEntProp(client, Prop_Send, "m_zombieClass") == 8)
-	{
-		UpdateTank(client);
-	}
+	if (GetInfectedClass(client) != ZC_TANK) { return; }
+	tankClient = hasAnyTank();
 }
 
 public void evt_PlayerNowIt(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (client > 0 && client <= MaxClients && GetClientTeam(client) == 3 && GetEntProp(client, Prop_Send, "m_zombieClass") == 8)
-	{
-		invomit[client] = true;
-		float blindtime = GetConVarFloat(FindConVar("z_vomit_fade_start"));
-		float fadetime = GetConVarFloat(FindConVar("z_vomit_fade_duration"));
-		CreateTimer(blindtime + fadetime, Timer_DisableBlind, client);
-	}
+	if (GetInfectedClass(client) != ZC_TANK) { return; }
+	inVomit[client] = true;
+	float blindTime = GetConVarFloat(FindConVar("z_vomit_fade_start"));
+	float fadeTime = GetConVarFloat(FindConVar("z_vomit_fade_duration"));
+	CreateTimer(blindTime + fadeTime, Timer_DisableBlind, client);
 }
 
 public Action Timer_DisableBlind(Handle timer, int client)
 {
-	invomit[client] = false;
+	inVomit[client] = false;
+	return Plugin_Continue;
 }
 
+// 客户端退出，将客户端的 hiddenPanel 设置为 false
 public void OnClientDisconnect(int client)
 {
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2 && !IsFakeClient(client))
-	{
-		hiddenpanel[client] = false;
-	}
+	if (!IsValidClient(client)) { return; }
+	hiddenPanel[client] = false;
 }
 
-void UpdateTank(int oldtankclient)
+// 检查场上是否还有其他 Tank
+int hasAnyTank()
 {
-	int newtank = -1;
-	for (int client = 1; client <= MaxClients; client++)
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (client != oldtankclient && IsClientInGame(client) && GetClientTeam(client) == 3 && GetEntProp(client, Prop_Send, "m_zombieClass") == 8)
-		{
-			newtank = client;
-			break;
-		}
+		if (GetInfectedClass(i) != ZC_TANK || !IsPlayerAlive(i)) { continue; }
+		return i;
 	}
-	if (newtank <= 0)
-	{
-		istankactive = false;
-	}
+	return INVALID_CLIENT;
 }
 
 // 部分代码来自 Zonemod spechud.sp（Hyper-V HUD Manager） by Visor, Forgetest，link：https://github.com/Target5150/MoYu_Server_Stupid_Plugins
 public Action Timer_RefreshPanel(Handle timer)
 {
-	Panel menupanel = new Panel();
-	if (istankactive)
+	delete tankHud;
+	tankHud = new Panel();
+	// 场上没有任何 Tank 了，清除 Hud
+	if (!IsValidClient(tankClient) || !IsPlayerAlive(tankClient) || hasAnyTank() < 1)
 	{
-		static char info[64], name[64], rage[64];
-		if (menupanel != INVALID_HANDLE)
-		{
-			delete menupanel;
-		}
-		menupanel = new Panel();
-		DrawPanelText(menupanel, "树树子 Server Tank HUD");
-		DrawPanelText(menupanel, " \n");
-		if (!IsFakeClient(tankclient))
-		{
-			GetClientFixedName(tankclient, name, sizeof(name));
-			FormatEx(info, sizeof(info), "▶ 控制：%s", name, info);
-		}
-		else
-		{
-			info = "▶ 控制：AI";
-		}
-		DrawPanelText(menupanel, info);
-		// 生命显示
-		int health = GetClientHealth(tankclient);
-		int tankmaxhealth = GetEntProp(tankclient, Prop_Send, "m_iMaxHealth");
-		if (health > 0 && !IsIncapped(tankclient))
-		{
-			FormatEx(info, sizeof(info), "▶ 当前生命值：%d / %.1f%%", health, 100.0 * health / tankmaxhealth);
-		}
-		else
-		{
-			FormatEx(info, sizeof(info), "▶ 当前：已死亡");
-		}
-		DrawPanelText(menupanel, info);
-		// 控制权显示
-		int passcount = L4D2Direct_GetTankPassedCount();
-		switch (passcount)
-		{
-			case 0:
-			{
-				FormatEx(info, sizeof(info), "Native");
-			}
-			case 1:
-			{
-				FormatEx(info, sizeof(info), "%dst", passcount);
-			}
-			case 2:
-			{
-				FormatEx(info, sizeof(info), "%dnd", passcount);
-			}
-			case 3:
-			{
-				FormatEx(info, sizeof(info), "%drd", passcount);
-			}
-			default:
-			{
-				FormatEx(info, sizeof(info), "%dth", passcount);
-			}
-		}
-		FormatEx(rage, sizeof(rage), "▶ 控制权：%d%%（%s）", GetTankFrustration(tankclient), info);
-		DrawPanelText(menupanel, rage);
-		// 是否着火
-		if (GetEntityFlags(tankclient) & FL_ONFIRE)
-		{
-			if (!IsIncapped(tankclient))
-			{
-				FormatEx(info, sizeof(info), "▶ 着火状态：%.1f 秒后死亡", health / float(GetConVarInt(tankburnduration)));
-			}
-			else
-			{
-				FormatEx(info, sizeof(info), "▶ 着火状态：无（已死亡）", health / float(GetConVarInt(tankburnduration)));
-			}
-		}
-		else
-		{
-			FormatEx(info, sizeof(info), "▶ 着火状态：未被燃烧", health / float(GetConVarInt(tankburnduration)));
-		}
-		DrawPanelText(menupanel, info);
-		// 是否被胆汁
-		if (invomit[tankclient])
-		{
-			FormatEx(info, sizeof(info), "▶ 胆汁状态：正在胆汁效果中");
-		}
-		else
-		{
-			FormatEx(info, sizeof(info), "▶ 胆汁状态：无");
-		}
-		DrawPanelText(menupanel, info);
-		// 网络状态
-		if (!IsFakeClient(tankclient))
-		{
-			FormatEx(info, sizeof(info), "▶ 网络：%dms", RoundToNearest(GetClientAvgLatency(tankclient, NetFlow_Both) * 100.0));
-		}
-		else
-		{
-			FormatEx(info, sizeof(info), "▶ 网络：AI");
-		}
-		DrawPanelText(menupanel, info);
-		// 将面板发送至旁观者与感染者团队
-		for (int client = 1; client <= MaxClients; client++)
-		{
-			if (IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 2 && !hiddenpanel[client])
-			{
-				menupanel.Send(client, PanelHandler, 3);
-				if (client == tankclient && !IsFakeClient(tankclient))
-				{
-					menupanel.Send(tankclient, PanelHandler, 3);
-				}
-			}
-		}
-		return Plugin_Continue;
+		delete tankHud;
+		tankHud = null;
+		g_hTankHudTimer = null;
+		return Plugin_Stop;
 	}
-	return Plugin_Stop;
+	static int
+			i,
+			health,
+			maxHealth;
+	static char title[128],
+				info[64],
+				name[MAX_NAME_LENGTH],
+				rage[32];
+	g_hPanelTitle.GetString(title, sizeof(title));
+	// 标题显示
+	tankHud.SetTitle(title);
+	tankHud.DrawText(" \n");
+	// 控制者显示
+	if (!IsFakeClient(tankClient))
+	{
+		GetClientFixedName(tankClient, name, sizeof(name));
+		FormatEx(info, sizeof(info), "▶ 控制：%s", name);
+	}
+	else { FormatEx(info, sizeof(info), "▶ 控制：%N (AI)", tankClient); }
+	tankHud.DrawText(info);
+	// 生命显示
+	if (!IsClientIncapped(tankClient))
+	{
+		health = GetEntProp(tankClient, Prop_Data, "m_iHealth");
+		maxHealth = GetEntProp(tankClient, Prop_Send, "m_iMaxHealth");
+		// 除零异常
+		FormatEx(info, sizeof(info), "▶ 生命值：%d / %.1f%%", health, maxHealth > 0 ? 100.0 * health / maxHealth : 0.0);
+	}
+	else { FormatEx(info, sizeof(info), "▶ 当前：已死亡"); }
+	tankHud.DrawText(info);
+	// 控制权显示
+	int passCount = L4D2Direct_GetTankPassedCount();
+	switch (passCount)
+	{
+		case 0: { FormatEx(info, sizeof(info), "Native"); }
+		case 1: { FormatEx(info, sizeof(info), "%dst", passCount); }
+		case 2: { FormatEx(info, sizeof(info), "%dnd", passCount); }
+		case 3: { FormatEx(info, sizeof(info), "%drd", passCount); }
+		default: { FormatEx(info, sizeof(info), "%dth", passCount); }
+	}
+	FormatEx(rage, sizeof(rage), "▶ 控制权：%d%% (%s)", GetTankFrustration(tankClient), info);
+	tankHud.DrawText(rage);
+	// 是否着火
+	if (GetEntityFlags(tankClient) & FL_ONFIRE)
+	{
+		if (!IsClientIncapped(tankClient))
+		{
+			FormatEx(info, sizeof(info), "▶ 着火状态：%.1f 秒后死亡", health / tankBurnDuration.FloatValue);
+		}
+		else
+		{
+			FormatEx(info, sizeof(info), "▶ 着火状态：无 (已死亡)");
+		}
+	}
+	else { FormatEx(info, sizeof(info), "▶ 着火状态：未被燃烧"); }
+	tankHud.DrawText(info);
+	// 是否被胆汁
+	if (inVomit[tankClient]) { FormatEx(info, sizeof(info), "▶ 胆汁状态：正在胆汁效果中"); }
+	else { FormatEx(info, sizeof(info), "▶ 胆汁状态：无"); }
+	tankHud.DrawText(info);
+	// 网络状态
+	if (!IsFakeClient(tankClient))
+	{
+		FormatEx(info, sizeof(info), "▶ 网络：%dms", RoundToNearest(GetClientAvgLatency(tankClient, NetFlow_Both) * 100.0));
+	}
+	else { FormatEx(info, sizeof(info), "▶ 网络：无 (AI)"); }
+	tankHud.DrawText(info);
+	// 将面板发送至旁观者与感染者团队
+	for (i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) == TEAM_SURVIVOR || hiddenPanel[i]) { continue; }
+		tankHud.Send(i, PanelHandler, TANK_HUD_DISPLAY_TIME);
+	}
+	return Plugin_Continue;
 }
 
-public int PanelHandler(Menu menu, MenuAction action, int param1, int param2)
+public int PanelHandler(Menu menu, MenuAction action, int client, int item)
 {
 	return 0;
 }
 
-bool IsValidTank(int client)
-{
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
 int GetTankFrustration(int client)
 {
-	int frustration = 0;
-	if (IsValidTank(client))
-	{
-		frustration = 100 - GetEntProp(client, Prop_Send, "m_frustration");
-	}
-	return frustration;
-}
-
-bool IsIncapped(int client)
-{
-    return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
+	return GetInfectedClass(client) == ZC_TANK ? 100 - GetEntProp(client, Prop_Send, "m_frustration") : 0;
 }
 
 void GetClientFixedName(int client, char[] name, int len)
 {
+	if (!IsValidClient(client)) { strcopy(name, len, "Unknown"); }
 	GetClientName(client, name, len);
 	if (name[0] == '[')
 	{
 		char temp[MAX_NAME_LENGTH];
 		strcopy(temp, sizeof(temp), name);
-		temp[sizeof(temp) - 2] = 0;
+		temp[sizeof(temp) - 2] = '\0';
 		strcopy(name[1], len - 1, temp);
 		name[0] = ' ';
 	}
 	if (strlen(name) > 18)
 	{
 		name[15] = name[16] = name[17] = '.';
-		name[18] = 0;
+		name[18] = '\0';
 	}
 }
