@@ -1,3 +1,4 @@
+// 团队类型
 enum
 {
 	TEAM_SPECTATOR = 1,
@@ -5,6 +6,7 @@ enum
 	TEAM_INFECTED
 }
 
+// 感染者类型
 enum
 {
 	ZC_SMOKER = 1,
@@ -264,11 +266,12 @@ stock int GetClientIncappedCount(int client)
 	return IsValidSurvivor(client) ? GetEntProp(client, Prop_Send, "m_currentReviveCount") : -1;
 }
 // 随机获取一个生还者，可指定是否仅选择（未死亡，未被控，未倒地）的生还者，有则返回生还者 id，无则返回 0
+// valid 参数为 false 仅过滤死亡生还者
 stock int GetRandomSurvivorAndValid(int excludeSurvivor = -1, bool valid)
 {
 	ArrayList targetList = new ArrayList();
 	int i;
-	for(i = 0; i <= MaxClients; i++)
+	for(i = 1; i <= MaxClients; i++)
 	{
 		if (valid)
 		{
