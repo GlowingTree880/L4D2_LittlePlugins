@@ -43,6 +43,9 @@
 - **InfectedPushWhenSpawn：**
   A plugin that makes special infected jump and gives it an acceleration towards the survivor after special infected spawning
   <br>（特感刷新时令其跳跃并给予其一个朝向生还者方向的加速度）
+- **InfectedTeleport：**
+  A plugin that allows special infected to teleport to their target when they fall behind
+  <br>（落后特感传送插件）
 - **Text：** Use with Infected_Control.smx, Auto start spawn when the first survivor leave safe area, and indicates the current difficulty
   <br>（需要配合 Infected_Control 插件使用，否则需要手动刷特！参考国内主流药役插件 AnneServer （2 月 15 日版本）中核心插件 text.smx 反编译并修复编写，此插件主要负责提供 !xx，!zs，!kill 指令的功能，显示当前难度，自动关闭大厅匹配，自动出门刷特，团灭时更改游戏模式为写实等功能）
 - **ServerFunction：** A simple plugin which provides base server functions
