@@ -24,7 +24,7 @@
 #define SDK_HOOK_TYPE SDKHook_PreThink
 #define FIND_POS_DELAY 5.0
 #define EXPAND_COUNT_PRE_FRAME 3
-#define DEBUG_ALL 0
+#define DEBUG_ALL 1
 
 public Plugin myinfo = 
 {
@@ -95,6 +95,7 @@ static const char validEntityName[][] =
 	"prop_dynamic",
 	"prop_physics",
 	"prop_physics_multiplayer",
+	"func_rotating",
 	"infected",
 	"tank_rock",
 	"witch"
@@ -120,7 +121,7 @@ public void OnPluginStart()
 	g_hAllowInfetedClass = CreateConVar("teleport_infected_class", "1,2,3,4,5,6", "哪种特感允许被传送", CVAR_FLAG);
 	g_hMinDistance = CreateConVar("teleport_min_distance", "250.0", "特感传送的位置距离目标生还者的最小距离", CVAR_FLAG, true, 0.0);
 	g_hMaxDistance = CreateConVar("teleport_max_distance", "800.0", "特感传送的位置距离目标生还者的最大距离", CVAR_FLAG, true, 0.0);
-	g_hTeleportDistance = CreateConVar("teleport_max_distance", "600.0", "特感落后目标生还者这么远就尝试将其传送", CVAR_FLAG, true, 0.0);
+	g_hTeleportDistance = CreateConVar("teleport_start_distance", "600.0", "特感落后目标生还者这么远就尝试将其传送", CVAR_FLAG, true, 0.0);
 	g_hExpandFrame = CreateConVar("teleport_expand_frame", "50", "传送的特感这么多帧数没有找到位置则开始扩大找位范围，直到 z_spawn_range", CVAR_FLAG, true, 0.0);
 	g_hMaxTeleportCount = CreateConVar("teleport_max_count", "-1", "每只特感允许传送的最大次数，-1：无限制", CVAR_FLAG, true, -1.0);
 	g_hHealthRestore = CreateConVar("teleport_health_restore", "50", "特感每次传送回复失去血量的这么多百分比", CVAR_FLAG, true, 0.0, true, 100.0);
@@ -287,7 +288,7 @@ void sdkHookThinkCallback(int client)
 			rightBack[3],
 			rayStartPos[3],
 			rayEndPos[3],
-			rayPlaneNormal[3],
+			visiblePos[3],
 			vecDistance,
 			navDistance;
 	static int
@@ -359,17 +360,17 @@ void sdkHookThinkCallback(int client)
 			delete trace;
 			continue;
 		}
-		// 获取射线击中平面法向量，应对倾斜屋顶情况
-		TR_GetPlaneNormal(trace, rayPlaneNormal);
 		TR_GetEndPosition(rayEndPos, trace);
+		CopyVectors(rayEndPos, visiblePos);
 		rayEndPos[2] += NAV_HEIGHT;
+		visiblePos[2] += PLAYER_HEIGHT;
 		// ***** 调试输出 *****
 		// #if DEBUG_ALL
 		// 	ShowPos(4, rayStartPos, rayEndPos);
 		// #endif
 		// *******************
 		// 检查射线中止位置是否有效
-		if (isValidNavArea(rayEndPos) && !isPlayerStuck(rayEndPos, rayPlaneNormal) && !isVisibleTo(rayEndPos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(rayEndPos), L4D2Direct_GetTerrorNavArea(rayEndPos), g_hSpawnRange.FloatValue, TEAM_INFECTED, true))
+		if (isValidNavArea(rayEndPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(rayEndPos), L4D2Direct_GetTerrorNavArea(rayEndPos), g_hSpawnRange.FloatValue, TEAM_INFECTED, true))
 		{
 			rayEndPos[2] = selfPos[2];
 			vecDistance = GetVectorDistance(rayEndPos, selfPos);
@@ -449,12 +450,9 @@ static bool isValidNavArea(float pos[3])
  * @param: {planeNormal} 坐标平面的法向量
  * @return: {bool}
  */
-static bool isPlayerStuck(float pos[3], float planeNormal[3])
+static bool isPlayerStuck(float pos[3])
 {
-	NormalizeVector(planeNormal, planeNormal);
-	ScaleVector(planeNormal, PLAYER_HEIGHT);
-	AddVectors(pos, planeNormal, planeNormal);
-	Handle trace = TR_TraceHullFilterEx(pos, planeNormal, view_as<float>({-25.0, -25.0, 0.0}), view_as<float>({25.0, 25.0, PLAYER_HEIGHT}), MASK_PLAYERSOLID_BRUSHONLY, traceRayFilter);
+	Handle trace = TR_TraceHullFilterEx(pos, pos, view_as<float>({-25.0, -25.0, 0.0}), view_as<float>({25.0, 25.0, PLAYER_HEIGHT}), MASK_PLAYERSOLID_BRUSHONLY, traceRayFilter);
 	if (!TR_DidHit(trace))
 	{
 		delete trace;
