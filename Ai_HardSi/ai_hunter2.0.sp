@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name 			= "Ai Hunter 2.0",
 	author 			= "夜羽真白",
 	description 	= "Ai Hunter 增强 2.0 版本",
-	version 		= "2023/2/15",
+	version 		= "2023/4/1",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -52,7 +52,9 @@ ConVar
 	g_hLungePower;
 bool
 	ignoreCrouch,
-	hasQueuedLunge[MAXPLAYERS + 1];
+	hasQueuedLunge[MAXPLAYERS + 1],
+	// 是否允许 ht 背飞，[0] 为是否允许取随机数，[1] 为是否允许背飞
+	canBackVision[MAXPLAYERS + 1][2];
 float
 	canLungeTime[MAXPLAYERS + 1],
 	meleeMinRange,
@@ -72,7 +74,7 @@ public void OnPluginStart()
 	g_hStraightPounceDistance = CreateConVar("ai_hunter_straight_pounce_distance", "200.0", "hunter 允许直扑的范围", CVAR_FLAG, true, 0.0);
 	g_hAimOffset = CreateConVar("ai_hunter_aim_offset", "360.0", "与目标水平角度在这一范围内且在直扑范围外，ht 不会直扑", CVAR_FLAG, true, 0.0, true, 360.0);
 	g_hNoSightPounceRange = CreateConVar("ai_hunter_no_sign_pounce_range", "300,250", "hunter 不可见目标时允许飞扑的范围（水平，垂直，逗号分隔，0,0 | x,0 | 0,x=禁用 0 的部分）", CVAR_FLAG);
-	g_hBackVision = CreateConVar("ai_hunter_back_vision", "0", "hunter 处在空中时是否视角背对生还者", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hBackVision = CreateConVar("ai_hunter_back_vision", "50", "hunter 处在空中时视角背对生还者的概率，0=禁用", CVAR_FLAG, true, 0.0, true, 100.0);
 	g_hMeleeFirst = CreateConVar("ai_hunter_melee_first", "300.0,1000.0", "hunter 每次准备突袭时是否先按右键（最小最大距离，逗号分隔，0=禁用）");
 	g_hHighPounceHeight = CreateConVar("ai_hunter_high_pounce", "400", "hunter 在与目标多高时会直扑目标", CVAR_FLAG, true, 0.0);
 	g_hWallDetectDistance = CreateConVar("ai_hunter_wall_detect_distance", "-1.0", "hunter 视线前方有墙体，有多少概率飞向墙体", CVAR_FLAG, true, 0.0);
@@ -159,7 +161,9 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 		selfPos[3],
 		targetPos[3],
 		targetDistance,
-		lungeVector[3];
+		lungeVector[3],
+		lungeVectorNegate[3],
+		backVisionChance;
 	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
 	gametime = GetGameTime();
 	GetEntPropVector(ability, Prop_Send, "m_queuedLunge", lungeVector);
@@ -174,17 +178,28 @@ public Action OnPlayerRunCmd(int hunter, int& buttons, int& impulse, float vel[3
 	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
 	targetDistance = GetVectorDistance(selfPos, targetPos);
 	// 开启飞扑时背身
-	if (g_hBackVision.BoolValue && isLunging)
+	if (isLunging)
 	{
-		NormalizeVector(lungeVector, lungeVector);
-		NegateVector(lungeVector);
-		// 将飞扑方向向量取反后，原来向前飞的 ht 面朝右 90 度，y 轴再次旋转 90 度背身
-		lungeVector[1] -= 90.0; 
-		GetVectorAngles(lungeVector, lungeVector);
-		TeleportEntity(hunter, NULL_VECTOR, lungeVector, NULL_VECTOR);
-		return Plugin_Changed;
+		if (!canBackVision[hunter][0])
+		{
+			backVisionChance = GetRandomFloatInRange(0.0, 100.0);
+			backVisionChance <= g_hBackVision.FloatValue ? (canBackVision[hunter][1] = true) : (canBackVision[hunter][1] = false);
+			canBackVision[hunter][0] = true;
+		}
+		if (canBackVision[hunter][1])
+		{
+			// 似乎比获取 lungeVector 并反向的方法准确些，此方法计算与目标之间的向量取反，保持视角背对目标而不是飞扑方向
+			MakeVectorFromPoints(selfPos, targetPos, lungeVectorNegate);
+			NegateVector(lungeVectorNegate);
+			NormalizeVector(lungeVectorNegate, lungeVectorNegate);
+			GetVectorAngles(lungeVectorNegate, lungeVectorNegate);
+			TeleportEntity(hunter, NULL_VECTOR, lungeVectorNegate, NULL_VECTOR);
+			return Plugin_Changed;
+		}
+		return Plugin_Continue;
 	}
 	if (!isOnGround(hunter)) { return Plugin_Continue; }
+	canBackVision[hunter][0] = false;
 	// 有视野和没有视野的情况，没有视野也允许飞
 	if (!hasSight && IsValidSurvivor(target))
 	{
@@ -249,7 +264,7 @@ public void playerSpawnHandler(Event event, const char[] name, bool dontBroadcas
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (!isValidHunter(client)) { return; }
-	hasQueuedLunge[client] = false;
+	hasQueuedLunge[client] = canBackVision[client][0] = canBackVision[client][1] = false;
 	canLungeTime[client] = 0.0;
 	anglePounceCount[client][POUNCE_LFET] = anglePounceCount[client][POUNCE_RIGHT] = 0;
 }

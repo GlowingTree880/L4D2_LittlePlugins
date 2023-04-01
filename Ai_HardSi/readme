@@ -82,6 +82,7 @@ Ai_Hunter_2.0：
 	2023/2/16： 增加 Cvar：ai_hunter_no_sign_pounce_range [300,250]（hunter 不可见目标时允许飞扑的范围 [水平，垂直，逗号分隔，0,0 | x,0 | 0,x，0 的部分会被忽略]）
 				使用 L4D2_OnChooseVictim() 函数检测当前目标是否可见，如不可见则会获取最近可见目标，如所有目标都不可见则使用 Hunter 默认目标，使用 hunterCurrentTarget 数组记录 Hunter 当前目标，减少在 OnPlayerRunCmd() 函数中再次获取目标的性能开销
 				修复 Hunter 开启飞扑背身时视角抽搐抖动的问题
+	2023/4/1： 增加 Hunter 概率背身飞扑功能，更改背身算法为时刻背对目标生还者而不是背对飞扑方向
   
 Ai_Charger：
   ai_ChargerBhop：1 是否开启牛连跳功能
