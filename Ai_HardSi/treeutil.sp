@@ -400,6 +400,15 @@ stock bool IsInGhostState(int client)
 // *************************
 // 			其他类
 // *************************
+/*
+ * @Description: 判断当前客户端是否在地面
+ * @param: {client} 需要判断的客户端
+ * @return: {bool} 
+ */
+stock bool isClientOnGround(int client)
+{
+	return IsValidClient(client) && GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") != -1;
+}
 // 获取生还者数量，可指定是否包含 bot 和死亡的玩家
 stock int GetSurvivorCount(bool include_bot = true, bool include_death = false)
 {
