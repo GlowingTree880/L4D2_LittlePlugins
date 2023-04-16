@@ -75,6 +75,7 @@ enum
 int
 	teleportCheckTime[MAXPLAYERS + 1],
 	teleportCount[MAXPLAYERS + 1],
+	// expandFrame[client][0] 为未超过拓展帧数时的计数，[1] 为超过拓展帧数从拓展帧数到最大 Nav 距离的计数
 	expandFrame[MAXPLAYERS + 1][2],
 	offset;
 
@@ -192,18 +193,15 @@ public void playerTeamHandler(Event event, const char[] name, bool dontBroadcast
 		newTeam = event.GetInt("newteam");
 	bool
 		disconnect = event.GetBool("disconnect");
-	// invalid client or client disconnect or old team is not survivor
+	// 玩家无效或断开连接或原团队不是生还者团队则 UnHook
 	if (!IsValidClient(client) || disconnect || oldTeam != TEAM_SURVIVOR)
 	{
 		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
 	}
 	else if (oldTeam != TEAM_SURVIVOR && newTeam == TEAM_SURVIVOR)
 	{
-		if (teleportInfecteds[client] == null)
-		{
-			teleportInfecteds[client] = new ArrayList();
-		}
-		// start hook
+		if (teleportInfecteds[client] == null) { teleportInfecteds[client] = new ArrayList(); }
+		// 开始 SDKHook
 		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
 		SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
 	}
@@ -225,27 +223,10 @@ public Action checkInfectedCanBeTeleportHandler(Handle timer)
 	static int
 				i,
 				target;
-	static float
-				selfEyePos[3],
-				targetPos[3];
 	for (i = 1; i <= MaxClients; i++)
 	{
-		// 不是特感，跳过
-		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_INFECTED || !IsPlayerAlive(i) || IsClientIncapped(i)) { continue; }
-		// 单个特感最大允许传送次数不为 -1 且当前特感已达到最大传送次数，跳过
-		if (g_hMaxTeleportCount.IntValue > -1 && teleportCount[i] > g_hMaxTeleportCount.IntValue) { continue; }
-		// 当前特感类型不允许传送，跳过
-		if (!allowedTeleportInfected[GetEntProp(i, Prop_Send, "m_zombieClass")]) { continue; }
 		target = getTargetSurvivor(i);
-		// 当前特感目标无效，跳过
-		if (!IsValidSurvivor(target) || !IsPlayerAlive(target)) { continue; }
-		GetClientEyePosition(i, selfEyePos);
-		GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
-		selfEyePos[2] = targetPos[2];
-		// 距离小于允许传送距离，跳过
-		if (GetVectorDistance(selfEyePos, targetPos) < g_hTeleportDistance.FloatValue) { continue; }
-		// 特感可视，跳过
-		if (isVisibleTo(selfEyePos))
+		if (!canBeTeleport(i, target) || !IsValidSurvivor(target) || !IsPlayerAlive(target))
 		{
 			teleportCheckTime[i] = 0;
 			continue;
@@ -258,8 +239,8 @@ public Action checkInfectedCanBeTeleportHandler(Handle timer)
 			// 当前特感不在目标的传送集合中，则添加
 			if (teleportInfecteds[target].FindValue(GetClientUserId(i), 0) == -1) { teleportInfecteds[target].Push(GetClientUserId(i)); }
 		}
+		canFindTeleportPos[target] = canFindTeleportPos[target] ? true : false;
 	}
-	canFindTeleportPos[target] = canFindTeleportPos[target] ? true : false;
 	return Plugin_Continue;
 }
 
@@ -303,7 +284,7 @@ void sdkHookThinkCallback(int client)
 			healthRestore,
 			renderColor[4];
 	static DataPack
-					pack;
+			pack;
 	// 获取一个待传送的特感，判断是否有效
 	teleportInfected = GetClientOfUserId(teleportInfecteds[client].Get(0));
 	if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected))
@@ -405,7 +386,7 @@ void sdkHookThinkCallback(int client)
 				PrintToConsoleAll("[infected-teleport]：即将传送感染者：%N 到目标：%N 旁，检测次数：%d", teleportInfected, client, teleportCheckTime[teleportInfected]);
 			#endif
 			// *******************
-			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected))
+			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected) || !canBeTeleport(teleportInfected, client))
 			{
 				delete trace;
 				teleportInfecteds[client].Erase(0);
@@ -707,10 +688,7 @@ void onSurvivorLeftSafeArea()
 		SDKUnhook(i, SDK_HOOK_TYPE, sdkHookThinkCallback);
 		SDKHook(i, SDK_HOOK_TYPE, sdkHookThinkCallback);
 		// 再次检查，没有建立目标集合则建立
-		if (teleportInfecteds[i] == null)
-		{
-			teleportInfecteds[i] = new ArrayList();
-		}
+		if (teleportInfecteds[i] == null) { teleportInfecteds[i] = new ArrayList(); }
 	}
 }
 
@@ -736,6 +714,38 @@ void buildTargetList(bool build)
 			teleportInfecteds[i] = null;
 		}
 	}
+}
+
+/*
+ * @Description: 判断特感是否可以被传送
+ * @param: {client} 需要被判断的特感
+ * @param: {target} 当前特感的目标
+ * @return: {bool} 
+ */
+static bool canBeTeleport(int client, int target)
+{
+	// 不是有效特感，不允许传送
+	if (!IsValidInfected(client) || IsInGhostState(client) || !IsPlayerAlive(client)) { return false; }
+	// 当前特感不在地上或正在控人，不允许传送
+	if (!isClientOnGround(client) || IsPinningSurvivor(client)) { return false; }
+	// 当前特感类型不允许传送
+	if (!allowedTeleportInfected[GetEntProp(client, Prop_Send, "m_zombieClass")]) { return false; }
+	// 最大允许传送次数不为 -1，且当前特感达到最大允许传送次数，不允许传送
+	if (g_hMaxTeleportCount.IntValue > -1 && teleportCount[client] > g_hMaxTeleportCount.IntValue) { return false; }
+	// 当前特感目标无效，不允许传送
+	if (!IsValidSurvivor(target) || !IsPlayerAlive(target)) { return false; }
+	// 当前特感直线距离小于允许传送距离，不允许传送
+	static float
+				selfPos[3],
+				selfEyePos[3],
+				targetPos[3];
+	GetClientAbsOrigin(client, selfPos);
+	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
+	if (GetVectorDistance(selfPos, targetPos) < g_hTeleportDistance.FloatValue) { return false; }
+	// 当前特感可以被生还者看见，不允许传送
+	GetClientEyePosition(client, selfEyePos);
+	if (isVisibleTo(selfEyePos)) { return false; }
+	return true;
 }
 
 /*
