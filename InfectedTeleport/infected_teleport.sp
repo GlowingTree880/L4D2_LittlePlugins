@@ -32,7 +32,7 @@ public Plugin myinfo =
 	name 			= "Infected Teleport",
 	author 			= "夜羽真白",
 	description 	= "特感传送",
-	version 		= "1.0.0.0",
+	version 		= "2023/4/16",
 	url 			= "https://steamcommunity.com/id/saku_ra/"
 }
 
@@ -43,6 +43,7 @@ ConVar
 	g_hAllowInfetedClass,
 	g_hMinDistance,
 	g_hMaxDistance,
+	g_hMaxNavDistance,
 	g_hExpandFrame,
 	g_hTeleportDistance,
 	g_hMaxTeleportCount,
@@ -51,8 +52,6 @@ ConVar
 	g_hShouldAhead,
 	g_hTargetType,
 	g_hTransParentTeleport;
-ConVar
-	g_hSpawnRange;
 
 // 目标策略
 enum
@@ -124,6 +123,7 @@ public void OnPluginStart()
 	g_hAllowInfetedClass = CreateConVar("teleport_infected_class", "1,2,3,4,5,6", "哪种特感允许被传送", CVAR_FLAG);
 	g_hMinDistance = CreateConVar("teleport_min_distance", "250.0", "特感传送的位置距离目标生还者的最小距离", CVAR_FLAG, true, 0.0);
 	g_hMaxDistance = CreateConVar("teleport_max_distance", "800.0", "特感传送的位置距离目标生还者的最大距离", CVAR_FLAG, true, 0.0);
+	g_hMaxNavDistance = CreateConVar("teleport_max_nav_distance", "2000.0", "特感传送的位置距离目标生还者的最大 Nav 距离", CVAR_FLAG, true, g_hMaxDistance.FloatValue + 1.0);
 	g_hTeleportDistance = CreateConVar("teleport_start_distance", "600.0", "特感落后目标生还者这么远就尝试将其传送", CVAR_FLAG, true, 0.0);
 	g_hExpandFrame = CreateConVar("teleport_expand_frame", "50", "传送的特感这么多帧数没有找到位置则开始扩大找位范围，直到 z_spawn_range", CVAR_FLAG, true, 0.0);
 	g_hMaxTeleportCount = CreateConVar("teleport_max_count", "-1", "每只特感允许传送的最大次数，-1：无限制", CVAR_FLAG, true, -1.0);
@@ -132,13 +132,12 @@ public void OnPluginStart()
 	g_hIgnoreIncap = CreateConVar("teleport_ignore_incap", "0", "特感传送是否无视倒地生还者视野", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hTargetType = CreateConVar("teleport_target_type", "2", "特感传送目标选择：1=随机生还者，2=离自身最近的生还者，3=路程最高的生还者，4=路程最低的生还者", CVAR_FLAG, true, float(TARGET_RANDOM), true, float(TARGET_STRATERGY_SIZE - 1));
 	g_hTransParentTeleport = CreateConVar("teleport_transparent", "1", "是否在特感传送前将其设置为透明，传送后恢复", CVAR_FLAG, true, 0.0, true, 1.0);
-	// other convar
-	g_hSpawnRange = FindConVar("z_spawn_range");
-	offset = intAbs(g_hSpawnRange.IntValue - g_hMaxDistance.IntValue);
+	// offset
+	offset = intAbs(g_hMaxNavDistance.IntValue - g_hMaxDistance.IntValue);
 	// cvar change hook
 	g_hAllowInfetedClass.AddChangeHook(allowedInfectedClassChangedHandler);
 	g_hMaxDistance.AddChangeHook(offsetChangedHandler);
-	g_hSpawnRange.AddChangeHook(offsetChangedHandler);
+	g_hMaxNavDistance.AddChangeHook(offsetChangedHandler);
 	// event hook
 	HookEvent("player_team", playerTeamHandler);
 	HookEvent("round_start", roundStartHandler);
@@ -176,7 +175,7 @@ public void allowedInfectedClassChangedHandler(ConVar convar, const char[] oldVa
 
 public void offsetChangedHandler(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	offset = intAbs(g_hSpawnRange.IntValue - g_hMaxDistance.IntValue);
+	offset = intAbs(g_hMaxNavDistance.IntValue - g_hMaxDistance.IntValue);
 }
 
 public void roundStartHandler(Event event, const char[] name, bool dontBroadcast)
@@ -379,7 +378,7 @@ void sdkHookThinkCallback(int client)
 		// #endif
 		// *******************
 		// 检查射线中止位置是否有效
-		if (isValidNavArea(navPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(navPos), L4D2Direct_GetTerrorNavArea(selfPos), g_hSpawnRange.FloatValue, TEAM_INFECTED, false))
+		if (isValidNavArea(navPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(navPos), L4D2Direct_GetTerrorNavArea(selfPos), g_hMaxNavDistance.FloatValue, TEAM_INFECTED, false))
 		{
 			// rayEndPos[2] 等于目标 z 坐标判断直线距离
 			rayEndPos[2] = selfPos[2];
@@ -390,7 +389,7 @@ void sdkHookThinkCallback(int client)
 				PrintToConsoleAll("[infected-teleport]：找到位置：%.2f %.2f %.2f，与目标：%N 直线距离: %.2f，Nav 距离: %.2f", navPos[0], navPos[1], navPos[2], client, vecDistance, navDistance);
 			#endif
 			// *******************
-			if (vecDistance < g_hMinDistance.FloatValue || vecDistance > g_hMaxDistance.FloatValue || navDistance == -1.0 || navDistance < g_hMinDistance.FloatValue || navDistance > g_hSpawnRange.FloatValue)
+			if (vecDistance < g_hMinDistance.FloatValue || vecDistance > g_hMaxDistance.FloatValue || navDistance == -1.0 || navDistance < g_hMinDistance.FloatValue || navDistance > g_hMaxNavDistance.FloatValue)
 			{
 				delete trace;
 				continue;

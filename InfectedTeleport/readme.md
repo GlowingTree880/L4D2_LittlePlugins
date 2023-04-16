@@ -2,7 +2,7 @@
 
 ## 插件介绍
 - 本插件提供落后特感的传送功能，特感传送找位基于使用 `TR_TraceRayFilterEx()` 函数的射线找位，支持更改传送距离、单局允许传送次数、传送检测间隔等功能
-- 插件会为每个在场特感根据 `teleport_target_type` 分配目标，特感落后时会以目标为中心，`teleport_max_distance` 为最大范围 **绘制正方形网格，** 在网格中使用 `TR_TraceRayFilterEx()` 垂直射线找位并记录找位帧数， **若位置满足要求则传送，** 若找位帧数大于 `teleport_expand_frame` 则开始 **扩大最大范围，** 直到 `z_spawn_range` 大小（默认 1500），若最大范围已达到 `z_spawn_range` 大小且 2 秒内仍然找不到位置，则会 **暂停找位** `FIND_POS_DELAY` 秒（默认 5）继续尝试找位
+- 插件会为每个在场特感根据 `teleport_target_type` 分配目标，特感落后时会以目标为中心，`teleport_max_distance` 为最大范围 **绘制正方形网格，** 在网格中使用 `TR_TraceRayFilterEx()` 垂直射线找位并记录找位帧数， **若位置满足要求则传送，** 若找位帧数大于 `teleport_expand_frame` 则开始 **扩大最大范围，** 直到 `teleport_max_nav_distance` 大小（默认 2000），若最大范围已达到 `teleport_max_nav_distance` 大小且 2 秒内仍然找不到位置，则会 **暂停找位** `FIND_POS_DELAY`（默认 5 秒）继续尝试找位
 
 ```Java
 // 是否开启特感传送插件
@@ -17,6 +17,8 @@ teleport_infected_class 1,2,3,4,5,6
 teleport_min_distance 250.0
 // 特感传送位置距离目标生还者最远直线距离（建议不要小于 800 否则位置很少）
 teleport_max_distance 800.0
+// 特感传送的位置距离目标生还者的最大 Nav 距离（最小值为 teleport_max_distance 值 + 1.0）
+teleport_max_nav_distance 2000.0
 // 特感落后目标生还者这么多则试图将其传送
 teleport_start_distance 600.0
 // 特感传送找位时经过这么多游戏帧还没有找到位置则扩大找位范围
@@ -37,4 +39,4 @@ teleport_transparent 1
 
 ## 更新日志
 - 2023-4-1：上传插件与 readme 文件，修正找位射线撞击位置可视高度
-- 2023-4-16：修复代码 bug（传送位置是否卡住判断错误，NavArea 距离判断错误），增加特感传送时是否设置透明，传送后恢复原可见度功能（防止 Spitter 和 Hunter 传送时拉丝）
+- 2023-4-16：修复代码 bug（传送位置是否卡住判断错误，Nav 距离判断错误），增加特感传送时是否设置透明，传送后恢复原可见度功能（防止 Spitter 和 Hunter 传送时拉丝），将传送位置最大 Nav 距离从原 Cvar：`z_spawn_range` 更改为使用单独 Cvar：`teleport_max_nav_distance`
