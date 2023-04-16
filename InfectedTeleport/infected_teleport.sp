@@ -727,7 +727,7 @@ static bool canBeTeleport(int client, int target)
 	// 不是有效特感，不允许传送
 	if (!IsValidInfected(client) || IsInGhostState(client) || !IsPlayerAlive(client)) { return false; }
 	// 当前特感不在地上或正在控人，不允许传送
-	if (!isClientOnGround(client) || IsPinningSurvivor(client)) { return false; }
+	if (!IsClientOnGround(client) || IsPinningSurvivor(client)) { return false; }
 	// 当前特感类型不允许传送
 	if (!allowedTeleportInfected[GetEntProp(client, Prop_Send, "m_zombieClass")]) { return false; }
 	// 最大允许传送次数不为 -1，且当前特感达到最大允许传送次数，不允许传送
