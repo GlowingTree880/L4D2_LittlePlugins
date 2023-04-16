@@ -405,7 +405,7 @@ stock bool IsInGhostState(int client)
  * @param: {client} 需要判断的客户端
  * @return: {bool} 
  */
-stock bool isClientOnGround(int client)
+stock bool IsClientOnGround(int client)
 {
 	return IsValidClient(client) && GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") != -1;
 }
