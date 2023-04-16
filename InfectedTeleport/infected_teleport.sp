@@ -386,11 +386,17 @@ void sdkHookThinkCallback(int client)
 				PrintToConsoleAll("[infected-teleport]：即将传送感染者：%N 到目标：%N 旁，检测次数：%d", teleportInfected, client, teleportCheckTime[teleportInfected]);
 			#endif
 			// *******************
-			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected) || !canBeTeleport(teleportInfected, client))
+			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected))
 			{
 				delete trace;
 				teleportInfecteds[client].Erase(0);
 				teleportInfected = INVALID_CLIENT;
+				break;
+			}
+			// 当前特感不允许被传送，传送检测设置为 0 并跳出
+			if (!canBeTeleport(teleportInfected, client))
+			{
+				teleportCheckTime[teleportInfected] = 0;
 				break;
 			}
 			navPos[2] -= 10.0;
