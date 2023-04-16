@@ -24,6 +24,7 @@
 #define SDK_HOOK_TYPE SDKHook_PreThink
 #define FIND_POS_DELAY 5.0
 #define EXPAND_COUNT_PRE_FRAME 3
+#define ALPHA_TRANSPARENT 0
 #define DEBUG_ALL 1
 
 public Plugin myinfo = 
@@ -48,7 +49,8 @@ ConVar
 	g_hIgnoreIncap,
 	g_hHealthRestore,
 	g_hShouldAhead,
-	g_hTargetType;
+	g_hTargetType,
+	g_hTransParentTeleport;
 ConVar
 	g_hSpawnRange;
 
@@ -67,7 +69,8 @@ enum
 	BLOCK_TYPE_EVERYONE,
 	BLOCK_TYPE_SURVIVORS,
 	BLOCK_TYPE_PLAYER_INFECTED,
-	BLOCK_TYPE_ALL_INFECTED
+	BLOCK_TYPE_ALL_INFECTED,
+	BLOCK_TYPE_ALL_PLAYERS_AND_PHYSICS_OBJECTS
 };
 
 int
@@ -128,6 +131,7 @@ public void OnPluginStart()
 	g_hShouldAhead = CreateConVar("teleport_pos_ahead", "1", "特感传送的位置的路程是否需要在目标生还者之前", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hIgnoreIncap = CreateConVar("teleport_ignore_incap", "0", "特感传送是否无视倒地生还者视野", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hTargetType = CreateConVar("teleport_target_type", "2", "特感传送目标选择：1=随机生还者，2=离自身最近的生还者，3=路程最高的生还者，4=路程最低的生还者", CVAR_FLAG, true, float(TARGET_RANDOM), true, float(TARGET_STRATERGY_SIZE - 1));
+	g_hTransParentTeleport = CreateConVar("teleport_transparent", "1", "是否在特感传送前将其设置为透明，传送后恢复", CVAR_FLAG, true, 0.0, true, 1.0);
 	// other convar
 	g_hSpawnRange = FindConVar("z_spawn_range");
 	offset = intAbs(g_hSpawnRange.IntValue - g_hMaxDistance.IntValue);
@@ -288,6 +292,7 @@ void sdkHookThinkCallback(int client)
 			rightBack[3],
 			rayStartPos[3],
 			rayEndPos[3],
+			navPos[3],
 			visiblePos[3],
 			vecDistance,
 			navDistance;
@@ -296,8 +301,10 @@ void sdkHookThinkCallback(int client)
 			teleportInfected,
 			currentHealth,
 			maxHealth,
-			healthRestore;
-
+			healthRestore,
+			renderColor[4];
+	static DataPack
+					pack;
 	// 获取一个待传送的特感，判断是否有效
 	teleportInfected = GetClientOfUserId(teleportInfecteds[client].Get(0));
 	if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected))
@@ -337,7 +344,7 @@ void sdkHookThinkCallback(int client)
 		{
 			// ***** 调试输出 *****
 			#if DEBUG_ALL
-				PrintToConsoleAll("[infected-teleport]：找位超出限制范围，将在 %d 秒后继续尝试找位", FIND_POS_DELAY);
+				PrintToConsoleAll("[infected-teleport]：找位超出限制范围，将在 %.1f 秒后继续尝试找位", FIND_POS_DELAY);
 			#endif
 			// *******************
 			expandFrame[client][0] = expandFrame[client][1] = 0;
@@ -355,14 +362,16 @@ void sdkHookThinkCallback(int client)
 		rayStartPos[2] = GetRandomFloatInRange(selfPos[2], selfPos[2] + g_hMaxDistance.FloatValue);
 		// 发射射线
 		Handle trace = TR_TraceRayFilterEx(rayStartPos, RAY_DOWN_ANGLE, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite, traceRayFilter, client);
+		if (trace == null) { continue; }
 		if (!TR_DidHit(trace))
 		{
 			delete trace;
 			continue;
 		}
 		TR_GetEndPosition(rayEndPos, trace);
+		CopyVectors(rayEndPos, navPos);
 		CopyVectors(rayEndPos, visiblePos);
-		rayEndPos[2] += NAV_HEIGHT;
+		navPos[2] += NAV_HEIGHT;
 		visiblePos[2] += PLAYER_HEIGHT;
 		// ***** 调试输出 *****
 		// #if DEBUG_ALL
@@ -370,14 +379,15 @@ void sdkHookThinkCallback(int client)
 		// #endif
 		// *******************
 		// 检查射线中止位置是否有效
-		if (isValidNavArea(rayEndPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(rayEndPos), L4D2Direct_GetTerrorNavArea(rayEndPos), g_hSpawnRange.FloatValue, TEAM_INFECTED, true))
+		if (isValidNavArea(navPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(navPos), L4D2Direct_GetTerrorNavArea(selfPos), g_hSpawnRange.FloatValue, TEAM_INFECTED, false))
 		{
+			// rayEndPos[2] 等于目标 z 坐标判断直线距离
 			rayEndPos[2] = selfPos[2];
 			vecDistance = GetVectorDistance(rayEndPos, selfPos);
-			navDistance = L4D2_NavAreaTravelDistance(rayEndPos, selfPos, true);
+			navDistance = L4D2_NavAreaTravelDistance(rayEndPos, selfPos, false);
 			// ***** 调试输出 *****
 			#if DEBUG_ALL
-				PrintToConsoleAll("[infected-teleport]：找到位置：%.2f %.2f %.2f，与目标：%N 直线距离: %.2f，Nav 距离: %.2f", rayEndPos[0], rayEndPos[1], rayEndPos[2], client, vecDistance, navDistance);
+				PrintToConsoleAll("[infected-teleport]：找到位置：%.2f %.2f %.2f，与目标：%N 直线距离: %.2f，Nav 距离: %.2f", navPos[0], navPos[1], navPos[2], client, vecDistance, navDistance);
 			#endif
 			// *******************
 			if (vecDistance < g_hMinDistance.FloatValue || vecDistance > g_hMaxDistance.FloatValue || navDistance == -1.0 || navDistance < g_hMinDistance.FloatValue || navDistance > g_hSpawnRange.FloatValue)
@@ -386,7 +396,7 @@ void sdkHookThinkCallback(int client)
 				continue;
 			}
 			// 传送的位置在目标生还者后面则跳过本次循环
-			if (g_hShouldAhead.BoolValue && !isPosAheadTarget(rayEndPos, selfPos))
+			if (g_hShouldAhead.BoolValue && !isPosAheadTarget(navPos, selfPos))
 			{
 				delete trace;
 				continue;
@@ -403,8 +413,24 @@ void sdkHookThinkCallback(int client)
 				teleportInfected = INVALID_CLIENT;
 				break;
 			}
-			rayEndPos[2] -= 5.0;
-			TeleportEntity(teleportInfected, rayEndPos, NULL_VECTOR, NULL_VECTOR);
+			navPos[2] -= 10.0;
+			// 实体传送时是否设置透明，传送完成恢复
+			if (g_hTransParentTeleport.BoolValue)
+			{
+				GetEntityRenderColor(teleportInfected, renderColor[0], renderColor[1], renderColor[2], renderColor[3]);
+				SetEntityRenderColor(teleportInfected, renderColor[0], renderColor[1], renderColor[2], ALPHA_TRANSPARENT);
+				pack = new DataPack();
+				pack.Reset();
+				pack.WriteCell(teleportInfected);
+				pack.WriteFloatArray(navPos, sizeof(navPos));
+				pack.WriteCellArray(renderColor, sizeof(renderColor));
+				// 延迟一帧传送
+				RequestFrame(nextFrameDoTeleportInfected, pack);
+			}
+			else
+			{
+				TeleportEntity(teleportInfected, navPos, NULL_VECTOR, NULL_VECTOR);
+			}
 			teleportInfecteds[client].Erase(0);
 			teleportCheckTime[teleportInfected] = 0;
 			// ***** 调试输出 *****
@@ -435,6 +461,28 @@ void sdkHookThinkCallback(int client)
 }
 
 /*
+ * @Description: 特感透明传送回调函数
+ * @param: {pack} 数据包
+ * @return: {void} 
+ */
+void nextFrameDoTeleportInfected(DataPack pack)
+{
+	if (pack == null) { return; }
+	static int
+				teleportInfected,
+				renderColor[4];
+	static float navPos[3];
+	pack.Reset();
+	teleportInfected = pack.ReadCell();
+	pack.ReadFloatArray(navPos, sizeof(navPos));
+	pack.ReadCellArray(renderColor, sizeof(renderColor));
+	delete pack;
+	if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected)) { return; }
+	TeleportEntity(teleportInfected, navPos, NULL_VECTOR, NULL_VECTOR);
+	SetEntityRenderColor(teleportInfected, renderColor[0], renderColor[1], renderColor[2], renderColor[3]);
+}
+
+/*
  * @Description: 检查指定坐标是否在有效 Nav Area 上（Nav 地址不为 Address_Null）
  * @param: {pos} 需要检查的坐标
  * @return: {bool}
@@ -447,19 +495,19 @@ static bool isValidNavArea(float pos[3])
 /*
  * @Description: 检查特定坐标是否会卡住客户端
  * @param: {pos} 特定坐标
- * @param: {planeNormal} 坐标平面的法向量
  * @return: {bool}
  */
 static bool isPlayerStuck(float pos[3])
 {
-	Handle trace = TR_TraceHullFilterEx(pos, pos, view_as<float>({-25.0, -25.0, 0.0}), view_as<float>({25.0, 25.0, PLAYER_HEIGHT}), MASK_PLAYERSOLID_BRUSHONLY, traceRayFilter);
+	Handle trace = TR_TraceHullFilterEx(pos, pos, view_as<float>({-25.0, -25.0, 0.0}), view_as<float>({25.0, 25.0, PLAYER_HEIGHT}), MASK_PLAYERSOLID, traceRayFilter);
+	if (trace == null) { return false; }
 	if (!TR_DidHit(trace))
 	{
 		delete trace;
-		return false;
+		return true;
 	}
 	delete trace;
-	return true;
+	return false;
 }
 
 /*
@@ -500,7 +548,7 @@ static bool isVisibleTo(float pos[3])
 static bool traceRayFilter(int entity, int contentsMask, any data)
 {
 	// 射线撞击到自身或客户端实体，不允许穿过
-	if (entity == data || (entity > 0 && entity <= MaxClients)) { return false; }
+	if (entity == data || (entity >= 1 && entity <= MaxClients)) { return false; }
 	// 撞击到其他实体，检测类型
 	static char className[64];
 	GetEntityClassname(entity, className, sizeof(className));
@@ -508,13 +556,13 @@ static bool traceRayFilter(int entity, int contentsMask, any data)
 	// blocker 类型的，获取是否阻塞与阻塞类型
 	if (strcmp(className, "env_physics_blocker") == 0 || strcmp(className, "env_player_blocker") == 0)
 	{
-		if (!HasEntProp(entity, Prop_Send, "m_bBlocked")) { return true; }
+		if (!HasEntProp(entity, Prop_Send, "m_bBlocked")) { return false; }
 		if (GetEntProp(entity, Prop_Send, "m_bBlocked") != 1) { return true; }
 		static int blockType;
 		blockType = GetEntProp(entity, Prop_Send, "m_nBlockType");
 		return (blockType == BLOCK_TYPE_SURVIVORS || blockType == BLOCK_TYPE_PLAYER_INFECTED);
 	}
-	return false;
+	return true;
 }
 
 /*

@@ -31,7 +31,10 @@ teleport_pos_ahead 1
 teleport_ignore_incap 0
 // 特感传送目标选择（1：随机生还者，2：离自身最近的生还者，3：路程最高的生还者，4：路程最低的生还者）
 teleport_target_type 1
+// 是否在特感传送前将其设置为透明，传送后恢复
+teleport_transparent 1
 ```
 
 ## 更新日志
 - 2023-4-1：上传插件与 readme 文件，修正找位射线撞击位置可视高度
+- 2023-4-16：修复代码 bug（传送位置是否卡住判断错误，NavArea 距离判断错误），增加特感传送时是否设置透明，传送后恢复原可见度功能（防止 Spitter 和 Hunter 传送时拉丝）
