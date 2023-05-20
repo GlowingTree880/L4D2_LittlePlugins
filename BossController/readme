@@ -25,6 +25,9 @@
     2022-10-14：修复有 mapInfo.txt 文件下 mapInfo.txt 中无记录的地图无法刷新 boss 的问题
                 优化时钟句柄删除机制
 	2023-2-6：修复 Windows 服务器及本地无法正确使用 !voteboss 设置 Boss 刷新位置的问题，修复当 Tank 与 Witch 都禁止刷新时不显示 Boss 刷新位置的问题
+	2023-5-20：增加两个 Cvar：boss_prohibit_non_plugin [1]：战役模式下是否不允许其他插件刷新 Boss（其他插件刷新后检查是否是本插件刷新的，不是则踢出），对抗模式不可用
+				boss_disable_in_finale [0]：是否在救援关禁止本插件接管 Boss 刷新（增加插件的通用性，不必每次打新图都需要新增新的静态坦克女巫地图）
+				将当前路程算法更改为与 ZoneMod 路程算法相同，否则会出现 Boss 刷新位置与显示路程不符的问题
 
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
