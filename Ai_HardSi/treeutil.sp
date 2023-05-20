@@ -409,37 +409,30 @@ stock bool IsClientOnGround(int client)
 {
 	return IsValidClient(client) && GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") != -1;
 }
+/*
+ * @Description: 获取客户端当前速度值，客户端无效则返回 -1.0
+ * @param: {client} 需要获取速度的客户端
+ * @return: {float} 
+ */
+stock float GetClientCurrentSpeed(int client)
+{
+	if (!IsValidClient(client)) { return -1.0; }
+	float speedVector[3];
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", speedVector);
+	return SquareRoot(Pow(speedVector[0], 2.0) + Pow(speedVector[1], 2.0));
+}
+
 // 获取生还者数量，可指定是否包含 bot 和死亡的玩家
 stock int GetSurvivorCount(bool include_bot = true, bool include_death = false)
 {
 	int count = 0;
-	for (int client = 1; client <= MaxClients; client++)
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsValidSurvivor(client) && include_bot && include_death)
-		{
-			count += 1;
-		}
-		else if (IsValidSurvivor(client) && !include_bot && !include_death)
-		{
-			if (!IsFakeClient(client) && IsPlayerAlive(client))
-			{
-				count += 1;
-			}
-		}
-		else if (IsValidSurvivor(client) && !include_bot && include_death)
-		{
-			if (!IsFakeClient(client))
-			{
-				count += 1;
-			}
-		}
-		else if (IsValidSurvivor(client) && include_bot && !include_death)
-		{
-			if (IsPlayerAlive(client))
-			{
-				count += 1;
-			}
-		}
+		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR) { continue; }
+		if (!include_bot && IsFakeClient(i)) { continue; }
+		if (!include_death && !IsPlayerAlive(i)) { continue; }
+		count++;
 	}
 	return count;
 }
@@ -627,6 +620,43 @@ stock int KMPGetPatternIndex(const char[] mainString, const char[] pattern)
 	}
 	return p2 == len2 ? p1 - len2 : -1;
 }
+/*
+ * @Description: 播放指定声音文件给所有人
+ * @param: {source} 声音文件路径
+ * @return: {void} 
+ */
+stock void PlaySoundToAll(const char[] source)
+{
+	EmitSoundToAll(source, SOUND_FROM_PLAYER, SNDCHAN_STATIC, SNDLEVEL_NORMAL, SND_NOFLAGS, SNDVOL_NORMAL, SNDPITCH_NORMAL, -1, NULL_VECTOR, NULL_VECTOR, true, 0.0);
+}
+/*
+ * @Description: 播放指定声音文件给指定客户端
+ * @param: {source} 声音文件路径
+ * @param: {target} 指定客户端
+ * @return: {void} 
+ */
+stock void PlaySoundToClient(const char[] source, int target)
+{
+	if (!IsValidClient(target)) { return; }
+	EmitSoundToClient(target, source, SOUND_FROM_PLAYER, SNDCHAN_STATIC, SNDLEVEL_NORMAL, SND_NOFLAGS, SNDVOL_NORMAL, SNDPITCH_NORMAL, -1, NULL_VECTOR, NULL_VECTOR, true, 0.0);
+}
+/*
+ * @Description: 使用 FakeClientCommand 执行需要 s_cheats 1 权限的指令
+ * @param: {client} 需要使用 FakeClientCommand 的客户端
+ * @param: {command}: 指令头
+ * @param: {options}: 指令参数
+ * @return: {void}
+ * 
+ */
+stock void ExecuteCheatCommand(int client, const char[] command, char[] options = "")
+{
+	if (!IsValidClient(client)) { return; }
+	int flags = GetCommandFlags(command);
+	SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+	if (strlen(options) > 0) { FakeClientCommand(client, "%s %s", command, options); }
+	else { FakeClientCommand(client, "%s", command); }
+	SetCommandFlags(command, flags);
+}
 
 // *************************
 // 			向量类
@@ -675,4 +705,21 @@ stock int GetRandomIntInRange(int min, int max)
 stock float GetRandomFloatInRange(float min, float max)
 {
 	return (GetURandomFloat() * (max - min)) + min;
+}
+
+// *************************
+// 			字符串类
+// *************************
+
+/*
+ * @Description: 检查给定字符数组是否是空的字符串数组
+ * @param: {string} 字符串数组
+ * @param: {len} 字符串数组长度
+ * @return: {bool} 
+ */
+stock bool isEmptyString(const char[] string, int len)
+{
+	int i;
+	for (i = 0; i < len; i++) { if (string[i] != '\0') { return false; } }
+	return true;
 }
