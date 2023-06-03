@@ -2,8 +2,10 @@
 
 - 这里是一个存放着一些自用，因为个人突发奇想或好友建议而制作的 L4D2 插件的小仓库，将会不间断上传包含服务器功能，游戏玩法等多种类型的插件
 - 刚刚开始学着写 L4D2 的插件，可能只注重实现了功能而忽略了架构和其他的一些方面，还可能会有非常非常多的 Bug，目前还在向大佬学习中，如果发现了 Bug 欢迎向我提出哦( ･ω< )
+- 由于技艺不精，所以不接插件定制哦(；д；)
   > This is a small project whitch stores some L4D2 plug-ins made since sudden whims or suggestions from friends. Various types of plug-ins including server functions, gameplay, etc. will be uploaded continuously（Sorry for my poor English(；へ：)）.
   > <br>I have just started to learn to write L4D2 plug-ins. So may only focus on the realization of the function and ignore the architecture and some other aspects. There may also be a lot of bugs. Now I am keep on learning from the great guys. If you find a bug or something strange when using the plugin, any report is appreciated.
+  > <br>Due to poor personal technical in plugin writing, so do not accept plugin customization
 - [我的 Steam 个人资料链接（My Steam Profile Link）](https://steamcommunity.com/id/saku_ra/)
 
 # RequireMents
@@ -15,6 +17,8 @@
 |    [treeutil.sp](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/Ai_HardSi/treeutil.sp)    |        -         |                                                                          自用函数库，可选，部分插件需要此依赖                                                                          |
 | [vector_show.sp](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/Ai_HardSi/vector_show.sp) |        -         |                    可选，部分插件需要此依赖，代码来源：[[L4D & L4D2] Witch Lightning Attack](https://forums.alliedmods.net/showthread.php?p=1623047) By panxiaohai                     |
 |  [colors.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/TankStatusPanel/colors.inc)  |        -         | 聊天框字体颜色支持， 增加 {W}、{O}、{LG} 等颜色 Tag 支持，来源：[Tailred](https://github.com/yukari190/Tailred/blob/master/addons/sourcemod/scripting/include/colors.inc) By yukari190 |
+| [logger.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/PlayerTeleport/logger.inc)    |        -         | 一种面向对象的插件日志记录头文件，可以使用 log.info("信息") 的方式来记录日志                                                                                                           |
+
 
 # Plugins
 
@@ -74,6 +78,8 @@
   <br>（配合使用 MySQL 数据库记录玩家等级/B 数/技能/其他信息的插件）
 - **BossController：** A plug-in that in campaign or versus (may support other modes) allows the Boss to be spawned on a fixed distance
   <br>（战役或对抗（可能支持其他模式）允许在固定路程刷新 Boss，支持投票更改 Boss 刷新位置）
+- **PlayerTeleport：** A plug-in that provides basic player teleport function, allowing teleport survivor or infected by command `!tp` or userId or client name
+  <br>（提供基本玩家传送功能，支持传送生还者与特感，支持通过 !tp 指令或名称或 userId 进行传送）
 
   - 注：上述有关 AnneServer 的插件源代码 **非 AnneServer 对应插件实际源代码**，为通过反编译 .smx 二进制插件文件并修复反编译后的文件内容得到<br>（The above plugins's code which related to AnneServer **is NOT the actual code for the the corresponding plugin** is obtained by decompiling the .smx binary file and repairing the content of the decompiled file.）
   - 关于反编译行为的合理性与 Sourcemod GPL version 3 许可证及编写的插件/拓展与许可证间的关系可查阅：<br>[SourceModLicense](https://www.sourcemod.net/license.php)<br>[Quoted from Azelphur](https://forums.alliedmods.net/showpost.php?p=1648709&postcount=80)<br>[Quoted from Silvers](https://forums.alliedmods.net/showpost.php?p=2709004&postcount=394)<br>[Quoted from Sazpaimon](https://forums.alliedmods.net/showpost.php?p=1587691&postcount=10)
