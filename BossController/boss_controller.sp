@@ -186,6 +186,7 @@ public void OnPluginStart()
 	// AdminCmd
 	RegAdminCmd("sm_ftank", Cmd_ForceTank, ADMFLAG_BAN);
 	RegAdminCmd("sm_fwitch", Cmd_ForceWitch, ADMFLAG_BAN);
+	RegAdminCmd("sm_checkflow", Cmd_CheckFlow, ADMFLAG_BAN);
 	// ChangeHook
 	g_hEnableDirector.AddChangeHook(ConVarChanged_Cvars);
 }
@@ -199,6 +200,21 @@ public void OnPluginEnd()
 	delete lTankFlows;
 	delete lWitchFlows;
 	delete mapInfo;
+}
+
+public Action Cmd_CheckFlow(int client, int args) {
+	if (!IsValidClient(client)) {
+		return Plugin_Handled;
+	}
+	if (!L4D_IsVersusMode()) {
+		CPrintToChat(client, "{O}%s: {G}非对抗模式, {O}Tank: %d%%, Witch: %d%%", PLUGIN_PREFIX, nowTankFlow, nowWitchFlow);
+		return Plugin_Continue;
+	}
+	CPrintToChat(client, "{O}%s: {G}对抗第一局是否允许刷 {O}Tank: %b, Witch: %b", PLUGIN_PREFIX, L4D2Direct_GetVSTankToSpawnThisRound(0), L4D2Direct_GetVSWitchToSpawnThisRound(0));
+	CPrintToChat(client, "{O}%s: {G}对抗第二局是否允许刷 {O}Tank: %b, Witch: %b", PLUGIN_PREFIX, L4D2Direct_GetVSTankToSpawnThisRound(1), L4D2Direct_GetVSWitchToSpawnThisRound(1));
+	CPrintToChat(client, "{O}%s: {G}对抗第一局 {O}Tank: %.2f%%, Witch: %.2f%%", PLUGIN_PREFIX, L4D2Direct_GetVSTankFlowPercent(0), L4D2Direct_GetVSWitchFlowPercent(0));
+	CPrintToChat(client, "{O}%s: {G}对抗第二局 {O}Tank: %.2f%%, Witch: %.2f%%", PLUGIN_PREFIX, L4D2Direct_GetVSTankFlowPercent(1), L4D2Direct_GetVSWitchFlowPercent(1));
+	return Plugin_Continue;
 }
 
 public void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -753,8 +769,7 @@ public Action Timer_GetBossFlow(Handle timer)
 			log.info("%s: 当前地图 %s 是静态 Tank 地图, 不允许随机 Tank 位置", PLUGIN_PREFIX, curMapName);
 		}
 		// 检查当前地图是否为静态女巫地图，不是，则随机一个女巫刷新位置
-		if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName))
-		{
+		if (g_hWitchCanSpawn.BoolValue && !IsStaticWitchMap(curMapName)) {
 			// 可以投票设置女巫位置
 			canSetWitch = true;
 			if (mapInfo.JumpToKey(curMapName)) {
@@ -818,6 +833,8 @@ public Action Timer_GetBossFlow(Handle timer)
 		deleteInterval(lWitchFlows, interval);
 	}
 	nowWitchFlow = GetRandomSpawnPos(lWitchFlows);
+	log.info("%s: 调整 Boss 刷新范围 [%d%% - %d%%]", PLUGIN_PREFIX, minFlow, maxFlow);
+	log.info("%s: Tank 位置集合长度 %d, 随机 Tank: %d%%, Witch 位置集合长度 %d, 随机 Witch: %d%%", PLUGIN_PREFIX, lTankFlows.Length, nowTankFlow, lWitchFlows.Length, nowWitchFlow);
 	if (g_hTankCanSpawn.BoolValue && !IsStaticTankMap(curMapName)) {
 		if (lTankFlows.Length >= 1) {
 			canSpawnTank = true;
@@ -832,7 +849,7 @@ public Action Timer_GetBossFlow(Handle timer)
 					if (!InVersusSecondRound()) {
 						versusFirstTankFlow = nowTankFlow;
 						SetTankPercent(nowTankFlow);
-						log.info("%s: 当前没有 mapinfo 文件, 随机 Tank 位置: %d%%", PLUGIN_PREFIX, nowTankFlow);
+						log.info("%s: 对抗模式, 当前没有 mapinfo 文件, 随机 Tank 位置: %d%%", PLUGIN_PREFIX, nowTankFlow);
 					} else {
 						nowTankFlow = versusFirstTankFlow;
 						SetTankPercent(versusFirstTankFlow);
@@ -861,15 +878,15 @@ public Action Timer_GetBossFlow(Handle timer)
 				if (g_hVersusConsist.BoolValue) {
 					if (!InVersusSecondRound()) {
 						versusFirstWitchFlow = nowWitchFlow;
-						SetTankPercent(nowWitchFlow);
-						log.info("%s: 当前没有 mapinfo 文件, 随机 Witch 位置: %d%%", PLUGIN_PREFIX, nowWitchFlow);
+						SetWitchPercent(nowWitchFlow);
+						log.info("%s: 对抗模式, 当前没有 mapinfo 文件, 随机 Witch 位置: %d%%", PLUGIN_PREFIX, nowWitchFlow);
 					} else {
 						nowWitchFlow = versusFirstWitchFlow;
-						SetTankPercent(versusFirstWitchFlow);
+						SetWitchPercent(versusFirstWitchFlow);
 						log.info("%s: 对抗模式第二轮, 设置 Witch 刷新位置与第一轮相同 %d%%, %d%%", PLUGIN_PREFIX, versusFirstWitchFlow);
 					}
 				} else {
-					SetTankPercent(nowWitchFlow);
+					SetWitchPercent(nowWitchFlow);
 				}
 			}
 		}
@@ -1145,6 +1162,7 @@ bool IsValidInterval(int interval[2])
 // 设置坦克刷新位置
 void SetTankPercent(int percent)
 {
+	log.info("%s: 设置 Tank Flow: %d, float Flow: %.2f", PLUGIN_PREFIX, percent, (float(percent) / 100.0));
 	if (percent == 0)
 	{
 		L4D2Direct_SetVSTankFlowPercent(0, 0.0);
@@ -1154,7 +1172,7 @@ void SetTankPercent(int percent)
 	}
 	else
 	{
-		float newPercent = (float(percent) / 100.0);
+		float newPercent = (float(percent) / 100);
 		L4D2Direct_SetVSTankFlowPercent(0, newPercent);
 		L4D2Direct_SetVSTankFlowPercent(1, newPercent);
 		L4D2Direct_SetVSTankToSpawnThisRound(0, true);
@@ -1163,6 +1181,7 @@ void SetTankPercent(int percent)
 }
 // 设置女巫刷新位置
 void SetWitchPercent(int percent) {
+	log.info("%s: 设置 Witch Flow: %d, float Flow: %.2f", PLUGIN_PREFIX, percent, (float(percent) / 100.0));
 	if (percent == 0)
 	{
 		L4D2Direct_SetVSWitchFlowPercent(0, 0.0);
