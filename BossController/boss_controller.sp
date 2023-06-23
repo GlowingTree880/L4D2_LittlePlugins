@@ -688,10 +688,6 @@ public Action checkKickWitch(Handle timer, int witch)
 
 public Action Timer_GetBossFlow(Handle timer)
 {
-	// 对抗第二轮，不允许获取新的 Boss 刷新路程
-	if (InVersusSecondRound()) {
-		return Plugin_Stop;
-	}
 	int i, interval[2];
 	bool canSpawnTank, canSpawnWitch;
 
@@ -853,7 +849,7 @@ public Action Timer_GetBossFlow(Handle timer)
 					} else {
 						nowTankFlow = versusFirstTankFlow;
 						SetTankPercent(versusFirstTankFlow);
-						log.info("%s: 对抗模式第二轮, 设置 Tank 刷新位置与第一轮相同 %d%%, %d%%", versusFirstTankFlow);
+						log.info("%s: 对抗模式第二轮, 设置 Tank 刷新位置与第一轮相同 %d%%", PLUGIN_PREFIX, versusFirstTankFlow);
 					}
 				} else {
 					SetTankPercent(nowTankFlow);
@@ -883,7 +879,7 @@ public Action Timer_GetBossFlow(Handle timer)
 					} else {
 						nowWitchFlow = versusFirstWitchFlow;
 						SetWitchPercent(versusFirstWitchFlow);
-						log.info("%s: 对抗模式第二轮, 设置 Witch 刷新位置与第一轮相同 %d%%, %d%%", PLUGIN_PREFIX, versusFirstWitchFlow);
+						log.info("%s: 对抗模式第二轮, 设置 Witch 刷新位置与第一轮相同 %d%%", PLUGIN_PREFIX, versusFirstWitchFlow);
 					}
 				} else {
 					SetWitchPercent(nowWitchFlow);
@@ -1172,7 +1168,7 @@ void SetTankPercent(int percent)
 	}
 	else
 	{
-		float newPercent = (float(percent) / 100);
+		float newPercent = (float(percent) / 100.0);
 		L4D2Direct_SetVSTankFlowPercent(0, newPercent);
 		L4D2Direct_SetVSTankFlowPercent(1, newPercent);
 		L4D2Direct_SetVSTankToSpawnThisRound(0, true);
@@ -1191,7 +1187,7 @@ void SetWitchPercent(int percent) {
 	}
 	else
 	{
-		float newPercent = (float(percent) / 100);
+		float newPercent = (float(percent) / 100.0);
 		L4D2Direct_SetVSWitchFlowPercent(0, newPercent);
 		L4D2Direct_SetVSWitchFlowPercent(1, newPercent);
 		L4D2Direct_SetVSWitchToSpawnThisRound(0, true);
