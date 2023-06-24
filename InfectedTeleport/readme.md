@@ -27,6 +27,8 @@ teleport_expand_frame 50.0
 teleport_max_count -1
 // 特感传送后回复失去的生命之这么多百分比的生命值（失去 300 则回复 300 * 50% = 150，0：关闭）
 teleport_health_restore 50
+// 特感的当前速度低于这个值允许进行传送检测
+teleport_allow_speed 50
 // 特感传送的位置是否需要在目标生还者当前路程之前
 teleport_pos_ahead 1
 // 特感传送检测是否可以被生还者看见时是否忽略倒地生还者
@@ -40,4 +42,4 @@ teleport_transparent 1
 ## 更新日志
 - 2023-4-1：上传插件与 readme 文件，修正找位射线撞击位置可视高度
 - 2023-4-16：修复代码 bug（传送位置是否卡住判断错误，Nav 距离判断错误），增加特感传送时是否设置透明，传送后恢复原可见度功能（防止 Spitter 和 Hunter 传送时拉丝），将传送位置最大 Nav 距离从原 Cvar：`z_spawn_range` 更改为使用单独 Cvar：`teleport_max_nav_distance`，修复特感即将传送时未检测是否可传送导致的相关问题
-- 2023-6-24：修复使用 FindValue 查找当前特感是否在某个生还的传送队列中时的报错问题
+- 2023-6-24：修复使用 FindValue 查找当前特感是否在某个生还的传送队列中时的报错问题，增加 Cvar：teleport_allow_speed [50] 特感低于这个速度且不可视则允许传送
