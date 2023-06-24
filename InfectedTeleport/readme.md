@@ -40,3 +40,4 @@ teleport_transparent 1
 ## 更新日志
 - 2023-4-1：上传插件与 readme 文件，修正找位射线撞击位置可视高度
 - 2023-4-16：修复代码 bug（传送位置是否卡住判断错误，Nav 距离判断错误），增加特感传送时是否设置透明，传送后恢复原可见度功能（防止 Spitter 和 Hunter 传送时拉丝），将传送位置最大 Nav 距离从原 Cvar：`z_spawn_range` 更改为使用单独 Cvar：`teleport_max_nav_distance`，修复特感即将传送时未检测是否可传送导致的相关问题
+- 2023-6-24：修复使用 FindValue 查找当前特感是否在某个生还的传送队列中时的报错问题
