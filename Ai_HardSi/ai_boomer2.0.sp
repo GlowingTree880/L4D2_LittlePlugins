@@ -272,8 +272,14 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		if (can_bile[client]) { CreateTimer(g_hVomitDuration.FloatValue, Timer_ResetBile, client); }
 		can_bile[client] = false;
 	}
-	// 目标是被控或者倒地的生还，则令其右键攻击
-	if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target))) { buttons |= IN_ATTACK2; }
+	// 目标是被控或者倒地的生还，距离小于 150 且高度小于 PLAYER_HEIGHT 且可视，则令其右键攻击
+	if (IsValidSurvivor(target) && (IsClientIncapped(target) || IsClientPinned(target)) && targetDist <= 80.0)
+	{
+		if (FloatAbs(self_pos[2] - targetPos[2]) > PLAYER_HEIGHT) { return Plugin_Continue; }
+		GetClientEyePosition(target, target_eye_pos);
+		if (!L4D2_IsVisibleToPlayer(client, TEAM_SURVIVOR, TEAM_INFECTED, 0, target_eye_pos)) { return Plugin_Continue; }
+		buttons |= IN_ATTACK2;
+	}
 	// 强行被喷
 	if (g_hForceBile.BoolValue && (buttons & IN_ATTACK) && !in_bile_interval[client] && IsValidSurvivor(target))
 	{
@@ -298,7 +304,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		CreateTimer(g_hVomitInterval.FloatValue, Timer_ResetAbility, client);
 	}
 	// 连跳
-	if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && 0.5 * g_hVomitRange.FloatValue < targetDist < 1000.0 && cur_speed > 160.0 && IsValidSurvivor(target))
+	if (g_hAllowBhop.BoolValue && has_sight && (flags & FL_ONGROUND) && ((0.5 * g_hVomitRange.FloatValue) < targetDist && targetDist < 1000.0) && cur_speed > 160.0 && IsValidSurvivor(target))
 	{
 		vel_buffer = CalculateVel(self_pos, targetPos, g_hBhopSpeed.FloatValue);
 		buttons |= IN_JUMP;
@@ -405,6 +411,7 @@ public Action L4D_OnVomitedUpon(int victim, int &attacker, bool &boomerExplosion
 {
 	isInBileState[victim] = true;
 	/* 每次喷吐排除当前被喷目标与已经被喷了的目标，选择最近目标继续喷吐 */
+	if (targetList[attacker] == null) { targetList[attacker] = new ArrayList(2); }
 	if (!IsBoomer(attacker) && targetList[attacker].Length > 1) { return Plugin_Continue; }
 	// 当前 Boomer 目标集合中没有目标，开始获取目标
 	int i;
