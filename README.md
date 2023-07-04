@@ -66,6 +66,8 @@
   <br>（限制游戏内每位玩家在一关（如 c2m1，c2m2）中能够使用每种投掷物（燃烧瓶，胆汁，土制炸弹）的次数或三种投掷物的总次数，并且对使用超过次数上限的玩家进行惩罚与对向安全区域中投掷燃烧瓶的玩家给予惩罚（喜欢烧烤队友 48））
 - **HappyDPS：** a happy DPS infected (Spitter, Boomer) plugin, this plugin controls whether there is still a Tank on the field that prohibits opening and closing the end saferoom door and controls melee damage to DPS special infected
   <br>（令人快乐的 DPS 特感（Spitter，Boomer）插件，控制近战对 DPS 特感的伤害同时令 DPS 特感免受除了近战伤害外的其他武器伤害，并且能控制是否在场上还有 Tank 存在时禁止开关终点安全门，阳间服必备）
+- **SimpleMode：** A plugin that supports different gamemodes' configuration management and gamemode vote
+  <br>（配置模式管理及配置模式投票选择）
 - **SpecVote：** Vote to move a player who were not originally in the spectator team to the spectator team
   <br>（任意或指定团队成员可发起投票，将当前不在旁观者团队内的玩家移动至旁观者团队，防止出现演员）
 - **SurvivorMVP：** Display survivors' data such as  killing SI, CI, FF done to teammates
