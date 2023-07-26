@@ -25,10 +25,14 @@ mvp_allow_show_acc 1
 mvp_show_fail_count 1
 // 是否在过关或团灭时显示 MVP 详细信息（特感杀手，清尸狂人，队友杀手等）
 mvp_show_details 1
+// 显示详细信息时是否显示你的排名（仅对特感击杀数，丧尸击杀数进行排名，如果你两个 MVP 都不是的话，则对你的特感击杀数进行排名，如果你是特感 MVP 则对你的丧尸击杀数进行排名，反之如果你是丧尸 MVP 则对你的特感击杀数进行排名，如果两项 MVP 都是你则不进行排名）
+mvp_show_your_rank 1
 ```
 
 # 效果图示
-![生还者 MVP 效果图示](/SurvivorMVP/survivor_mvp.png)
+![生还者 MVP 效果图示](/SurvivorMVP/survivor_mvp1.png)
+![生还者 MVP 效果图示](/SurvivorMVP/survivor_mvp2.png)
 
 # 更新日志
 - 2022-12-21：上传插件与 readme 文件
+- 2023-07-27：更新代码样式，增加排名功能，增加 inc 库文件
