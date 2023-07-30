@@ -997,10 +997,10 @@ public Action Timer_SpawnBoss(Handle timer) {
 	}
 	// log.debugAll("%s: 战役模式, Tank: %d%%, Witch: %d%%, Current: %d%%", PLUGIN_PREFIX, nowTankFlow, nowWitchFlow, flow);
 	// 战役模式下刷新 boss
-	if (flow >= nowTankFlow && !spawnedTank) {
+	if (!IsStaticTankMap(curMapName) && flow >= nowTankFlow && !spawnedTank) {
 		SpawnBoss(ZC_TANK);
 	}
-	if (flow >= nowWitchFlow && !spawnedWitch) {
+	if (!IsStaticWitchMap(curMapName) && flow >= nowWitchFlow && !spawnedWitch) {
 		SpawnBoss(ZC_WITCH);
 	}
 	return Plugin_Continue;
@@ -1057,23 +1057,24 @@ void SpawnBoss(int class)
 void PrintBossPercent(int type, int client = -1)
 {
 	char tankStr[64], witchStr[64];
-	// 固定地图
 	if (IsStaticTankMap(curMapName) || (g_hDisableInFinale.BoolValue && isFinale)) {
+		// 固定地图
 		FormatEx(tankStr, sizeof(tankStr), "{R}<Tank>: {O}Static");
+	} else if (!g_hTankCanSpawn.BoolValue || nowTankFlow <= 0) {
+		// 禁止刷新
+		FormatEx(tankStr, sizeof(tankStr), "{R}<Tank>: {O}None");
+	} else {
+		// 正常刷新
+		FormatEx(tankStr, sizeof(tankStr), "{R}<Tank>: {O}%d%% {W}(%s)", nowTankFlow, spawnedTank ? "✓" : "✕");
 	}
+
 	if (IsStaticWitchMap(curMapName) || (g_hDisableInFinale.BoolValue && isFinale)) {
 		FormatEx(witchStr, sizeof(witchStr), "{R}Witch: {O}Static");
-	}
-	// 禁止刷新
-	if (!g_hTankCanSpawn.BoolValue || nowTankFlow <= 0) {
-		FormatEx(tankStr, sizeof(tankStr), "{R}<Tank>: {O}None");
-	}
-	if (!g_hWitchCanSpawn.BoolValue || nowWitchFlow <= 0) {
+	} else if (!g_hWitchCanSpawn.BoolValue || nowWitchFlow <= 0) {
 		FormatEx(witchStr, sizeof(witchStr), "{R}<Witch>: {O}None");
+	} else {
+		FormatEx(witchStr, sizeof(witchStr), "{R}<Witch>: {O}%d%% {W}(%s)", nowWitchFlow, spawnedWitch ? "✓" : "✕");
 	}
-	// 正常刷新
-	FormatEx(tankStr, sizeof(tankStr), "{R}<Tank>: {O}%d%% {W}(%s)", nowTankFlow, spawnedTank ? "✓" : "✕");
-	FormatEx(witchStr, sizeof(witchStr), "{R}<Witch>: {O}%d%% {W}(%s)", nowWitchFlow, spawnedWitch ? "✓" : "✕");
 
 	// 整合字符串
 	if (g_hTankCanSpawn.BoolValue && !g_hWitchCanSpawn.BoolValue) {
@@ -1201,7 +1202,11 @@ bool GetTankAvoidInterval(int interval[2])
 	}
 	float flow = L4D2Direct_GetVSTankFlowPercent(0);
 	if (flow == 0.0) {
-		return false;
+		if (nowTankFlow <= 0) {
+			return false;
+		} else {
+			flow = nowTankFlow * 0.01;
+		}
 	}
 
 	interval[0] = RoundToFloor((flow * 100.0) - (g_hWitchAvoidTank.FloatValue / 2.0));

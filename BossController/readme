@@ -32,6 +32,7 @@
 				修复玩家接管插件刷出的 Tank 被提出问题
 				增加 Cvar：boss_prompt_dist 可以调整在 Boss 刷新前提示当前路程与 Boss 刷新路程
 				更改一些代码布局
+	2023-7-30：修复静态 Tank 与 Witch 地图路程显示为 0% 与出门刷 Boss 问题
 
   Cvars：
     boss_tank_can_spawn 1：是否允许插件生成 Tank
