@@ -129,15 +129,15 @@ public Action showMvpHandler(int client, int args)
 	}
 
 	if (GetClientTeam(client) == TEAM_SPECTATOR && (g_hWhichTeamToShow.IntValue != 0 && g_hWhichTeamToShow.IntValue != 1)) {
-		CPrintToChat(client, "{W}[{B}MVP{W}]: {W}当前生还者 MVP 统计数据不允许向旁观者显示");
+		CPrintToChat(client, "{B}[{W}MVP{B}]: {W}当前生还者 MVP 统计数据不允许向旁观者显示");
 		return Plugin_Handled;
 	}
 	else if (GetClientTeam(client) == TEAM_SURVIVOR && (g_hWhichTeamToShow.IntValue != 0 && g_hWhichTeamToShow.IntValue != 2)) {
-		CPrintToChat(client, "{W}[{B}MVP{W}]: {W}当前生还者 MVP 统计数据不允许向生还者显示");
+		CPrintToChat(client, "{B}[{W}MVP{B}]: {W}当前生还者 MVP 统计数据不允许向生还者显示");
 		return Plugin_Handled;
 	}
 	else if (GetClientTeam(client) == TEAM_INFECTED && (g_hWhichTeamToShow.IntValue != 0 && g_hWhichTeamToShow.IntValue != 3)) {
-		CPrintToChat(client, "{W}[{B}MVP{W}]: {W}当前生还者 MVP 统计数据不允许向感染者显示");
+		CPrintToChat(client, "{B}[{W}MVP{B}]: {W}当前生还者 MVP 统计数据不允许向感染者显示");
 		return Plugin_Handled;
 	}
 	printMvpStatus(client);
@@ -207,7 +207,7 @@ public void roundStartHandler(Event event, const char[] name, bool dontBroadcast
 public void missionLostHandler(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_hAllowShowFailCount.BoolValue) {
-		CPrintToChatAll("{W}[{B}提示{W}]: {W}这是你们第 {O}%d {W}次团灭，请继续努力哦 (*･ω< )", ++failCount);
+		CPrintToChatAll("{B}[{W}提示{B}]: {W}这是你们第 {O}%d {W}次团灭，请继续努力哦 (*･ω< )", ++failCount);
 	}
 
 	if (!g_hAllowShowMvp.BoolValue || g_bHasPrint) {
@@ -430,6 +430,10 @@ void printParticularMvp(int client) {
 	}
 	// 允许显示你的排名
 	if (g_hAllowShowRank.BoolValue) {
+		// 不是生还者, 不显示排名
+		if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR) {
+			return;
+		}
 		// 你是 SI MVP, 则显示你的 CI 排名, 你是 SI, CI MVP 霸榜了, 除非你想显示你的 FF 排名, 则不显示你的排名
 		if (client == siMvpClient && client == ciMvpClient) {
 			return;
