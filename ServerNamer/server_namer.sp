@@ -125,22 +125,44 @@ public Action timerRefreshHostNameHandler(Handle timer)
 
 void setServerName()
 {
-	char cvarString[128] = {'\0'}, port[16] = {'\0'}, finalServerName[128] = {'\0'};
+	char
+		cvarString[128],
+		port[16],
+		finalServerName[128];
+	// 获取基本服名
 	g_hBaseServerName.GetString(cvarString, sizeof(cvarString));
 	FindConVar("hostport").GetString(port, sizeof(port));
 	// 配置基本服名
-	if (strcmp(cvarString, NULL_STRING) == 0)
-	{
+	if (strlen(cvarString) < 1) {
+		// 基本服名不存在, 找 hostport 中的端口配置, 如未配置则使用 Left 4 Dead 2
 		key.Rewind();
 		// 找到在文件中配置的端口
 		if (key.JumpToKey(port, false)) { key.GetString("baseName", finalServerName, sizeof(finalServerName), "Left 4 Dead 2"); }
 		else { FormatEx(finalServerName, sizeof(finalServerName), "Left 4 Dead 2"); }
-	} else { FormatEx(finalServerName, sizeof(finalServerName), "%s", cvarString); }
+	} else {
+		FormatEx(finalServerName, sizeof(finalServerName), "%s", cvarString);
+	}
 	// 配置特感信息
 	if (g_hAllowDisplayInfectedInfo.BoolValue)
 	{
-		char infectedInfo[32] = {'\0'};
-		FormatEx(infectedInfo, sizeof(infectedInfo), "[%d特%d秒]", g_hInfectedLimit.IntValue, g_hSpawnInterval.IntValue);
+		char infectedInfo[32];
+		int maxSpecials = L4D2_GetScriptValueInt("MaxSpecials", -1);
+		float respawnInterval = L4D2_GetScriptValueFloat("SpecialRespawnInterval", -1.0);
+		if (g_hInfectedLimit == null && g_hSpawnInterval != null) {
+			FormatEx(infectedInfo, sizeof(infectedInfo), "[%d特%d秒]",
+			maxSpecials,
+			g_hSpawnInterval.IntValue);
+		} else if (g_hInfectedLimit != null && g_hSpawnInterval == null) {
+			FormatEx(infectedInfo, sizeof(infectedInfo), "[%d特%d秒]",
+			g_hInfectedLimit.IntValue,
+			RoundToNearest(respawnInterval));
+		} else if (g_hInfectedLimit == null && g_hSpawnInterval == null) {
+			FormatEx(infectedInfo, sizeof(infectedInfo), "[%d特%d秒]",
+			maxSpecials,
+			RoundToNearest(respawnInterval));
+		} else {
+			FormatEx(infectedInfo, sizeof(infectedInfo), "[%d特%d秒]", g_hInfectedLimit.IntValue, g_hSpawnInterval.IntValue);
+		}
 		StrCat(finalServerName, sizeof(finalServerName), infectedInfo);
 	}
 	// 配置路程

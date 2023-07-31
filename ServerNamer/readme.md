@@ -6,7 +6,7 @@
 
 1. 在 `sourcemod/configs/` 目录下建立 hostname 文件夹
 2. 进入 `sourcemod/configs/hostname` 文件夹，新建 hostname.txt 文件
-3. 编辑 hostname.txt 配置服名，示例如下（27015、27020 为服务器端口，用于未在插件中配置服名时使用服务器当前端口配置相应服名）
+3. 编辑 hostname.txt 配置服名，示例如下（27015、27020 为服务器端口，用于未在插件中配置服名时使用服务器当前端口配置相应服名，若基本服名与端口服名同时未配置，最终服名将会显示为 Left 4 Dead 2）
 
 ```Java
 ServerName
@@ -52,3 +52,4 @@ sn_base_mode_name "普通药役"
 # 更新日志
 
 - 2022-12-18：上传插件与 readme 文件
+- 2023-7-31：增加无插件刷特时特感数量与时间使用导演系统 MaxSpecials 与 SpecialRespawnInterval 值
