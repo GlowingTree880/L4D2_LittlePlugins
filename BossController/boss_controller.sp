@@ -600,25 +600,27 @@ public void OnMapStart()
 	tankIndex = witchIndex = -1;
 	ZeroVector(tankSpawnPos);
 	ZeroVector(witchSpawnPos);
-	if (L4D_IsVersusMode())
-	{
+}
+// 延迟获取当前是否是静态地图, 否则会先设置导演模式再判断是否是静态地图
+public void OnConfigsExecuted() {
+	if (L4D_IsVersusMode()) {
+		log.info("%s: 当前是对抗模式, 不接管导演模式", PLUGIN_PREFIX);
 		setDirectorNoBossesCvar(false);
 		return;
 	}
 	// 非对抗模式下，且非静态 Boss 地图，接管 director_no_bosses
 	if (!g_hEnableDirector.BoolValue && !IsStaticTankMap(curMapName) && !IsStaticWitchMap(curMapName)
-		&& ((!g_hDisableInFinale.BoolValue && isFinale) || !isFinale))
-	{
+		&& ((!g_hDisableInFinale.BoolValue && isFinale) || !isFinale)) {
 		log.info("%s: 非对抗模式, 非终局, 非静态地图, 接管导演模式", PLUGIN_PREFIX);
 		setDirectorNoBossesCvar(true);
 	}
 	// 非对抗模式下，是静态坦克地图或女巫地图，设置 director_no_bosses 为 0，允许刷新 boss，不允许刷新的则刷出来处死
-	if (IsStaticTankMap(curMapName) || IsStaticWitchMap(curMapName) || (g_hDisableInFinale.BoolValue && isFinale))
-	{
+	if (IsStaticTankMap(curMapName) || IsStaticWitchMap(curMapName) || (g_hDisableInFinale.BoolValue && isFinale)) {
 		log.info("%s: 非对抗模式, 非终局, 是静态地图, 不接管导演模式", PLUGIN_PREFIX);
 		setDirectorNoBossesCvar(false);
 	}
 }
+
 public void OnMapEnd()
 {
 	versusFirstTankFlow = versusFirstWitchFlow = nowTankFlow = nowWitchFlow = 0;
