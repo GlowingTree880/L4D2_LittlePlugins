@@ -15,7 +15,6 @@
 #include <left4dhooks>
 #include <logger>
 #include "treeutil/treeutil.sp"
-// #include "vector/vector_show.sp"
 
 #define CVAR_FLAG FCVAR_NOTIFY
 #define INVALID_CLIENT -1
@@ -52,6 +51,7 @@ ConVar
 	g_hHealthRestore,
 	g_hShouldAhead,
 	g_hAllowTeleportSpeed,
+	g_hAllowInSaferoom,
 	g_hTargetType,
 	g_hTransParentTeleport,
 	g_hEnableLog;
@@ -133,16 +133,17 @@ public void OnPluginStart()
 	g_hMaxNavDistance = CreateConVar("teleport_max_nav_distance", "2000.0", "特感传送的位置距离目标生还者的最大 Nav 距离", CVAR_FLAG, true, g_hMaxDistance.FloatValue + 1.0);
 	g_hTeleportDistance = CreateConVar("teleport_start_distance", "600.0", "特感落后目标生还者这么远就尝试将其传送", CVAR_FLAG, true, 0.0);
 	g_hExpandFrame = CreateConVar("teleport_expand_frame", "50", "传送的特感这么多帧数没有找到位置则开始扩大找位范围，直到 z_spawn_range", CVAR_FLAG, true, 0.0);
-	g_hMaxTeleportCount = CreateConVar("teleport_max_count", "-1", "每只特感允许传送的最大次数，-1：无限制", CVAR_FLAG, true, -1.0);
+	g_hMaxTeleportCount = CreateConVar("teleport_max_count", "-1", "每只特感允许传送的最大次数，-1: 无限制", CVAR_FLAG, true, -1.0);
 	g_hHealthRestore = CreateConVar("teleport_health_restore", "50", "特感每次传送回复失去血量的这么多百分比", CVAR_FLAG, true, 0.0, true, 100.0);
 	g_hAllowTeleportSpeed = CreateConVar("teleport_allow_speed", "50", "特感的当前速度低于这个值允许进行传送检测", CVAR_FLAG, true, 0.0);
-	g_hShouldAhead = CreateConVar("teleport_pos_ahead", "1", "特感传送的位置的路程是否需要在目标生还者之前", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hShouldAhead = CreateConVar("teleport_pos_ahead", "0", "特感传送的位置的路程是否需要在目标生还者之前", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hIgnoreIncap = CreateConVar("teleport_ignore_incap", "0", "特感传送是否无视倒地生还者视野", CVAR_FLAG, true, 0.0, true, 1.0);
-	g_hTargetType = CreateConVar("teleport_target_type", "2", "特感传送目标选择：1=随机生还者，2=离自身最近的生还者，3=路程最高的生还者，4=路程最低的生还者", CVAR_FLAG, true, float(TARGET_RANDOM), true, float(TARGET_STRATERGY_SIZE - 1));
+	g_hTargetType = CreateConVar("teleport_target_type", "2", "特感传送目标选择: 1=随机生还者, 2=离自身最近的生还者, 3=路程最高的生还者, 4=路程最低的生还者", CVAR_FLAG, true, float(TARGET_RANDOM), true, float(TARGET_STRATERGY_SIZE - 1));
+	g_hAllowInSaferoom = CreateConVar("teleport_allow_in_saferoom", "0", "特感传送时是否允许传送到安全屋内", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hTransParentTeleport = CreateConVar("teleport_transparent", "1", "是否在特感传送前将其设置为透明，传送后恢复", CVAR_FLAG, true, 0.0, true, 1.0);
-	g_hEnableLog = CreateConVar("teleport_enable_log", "1", "是否开启插件日志记录", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hEnableLog = CreateConVar("teleport_log_level", "6", "插件日志记录级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加", CVAR_FLAG, true, 0.0, true, 1.0);
 
-	log = new Logger(g_hEnableLog.BoolValue);
+	log = new Logger(g_hEnableLog.IntValue);
 
 	// offset
 	offset = intAbs(g_hMaxNavDistance.IntValue - g_hMaxDistance.IntValue);
@@ -151,32 +152,34 @@ public void OnPluginStart()
 	g_hMaxDistance.AddChangeHook(offsetChangedHandler);
 	g_hMaxNavDistance.AddChangeHook(offsetChangedHandler);
 	// event hook
-	HookEvent("player_team", playerTeamHandler);
 	HookEvent("round_start", roundStartHandler);
 	getAllowedTeleportInfected();
-	// plugin late load
-	if (pluginLateLoad)
-	{
-		// 插件延迟加载时，先触发 PluginStart 再触发 MapStart 则无法开启传送检测，延迟一帧开启传送检测
-		RequestFrame(pluginLateLoadHandler, _);
+	
+	// 插件延迟加载
+	if (pluginLateLoad) {
+		for (int i = 1; i <= MaxClients; i++) {
+			if (!IsClientInGame(i)) {
+				continue;
+			}
+			OnClientPutInServer(i);
+		}
+		RequestFrame(nextFrameOnPluginStart);
 	}
 }
 
-public void pluginLateLoadHandler()
-{
+void nextFrameOnPluginStart() {
 	onSurvivorLeftSafeArea();
 }
 
-public void OnPluginEnd()
-{
-	delete teleportCheckTimer;
-	teleportCheckTimer = null;
-	buildTargetList(false);
+public void OnAllPluginsLoaded() {
+	if (!LibraryExists("left4dhooks")) {
+		LogMessage("\n==========\n本插件需要前置插件 \"[L4D & L4D2] Left 4 DHooks Direct\" 方可运行\n");
+		SetFailState("\n==========\n本插件需要前置插件 \"[L4D & L4D2] Left 4 DHooks Direct\" 方可运行\n");
+	}
 }
 
 public void OnMapStart()
 {
-	buildTargetList(true);
 	clearTeleportInfo();
 }
 
@@ -192,51 +195,14 @@ public void offsetChangedHandler(ConVar convar, const char[] oldValue, const cha
 
 public void roundStartHandler(Event event, const char[] name, bool dontBroadcast)
 {
-	buildTargetList(true);
 	clearTeleportInfo();
 }
 
-public void playerTeamHandler(Event event, const char[] name, bool dontBroadcast)
-{
-	int
-		client = GetClientOfUserId(event.GetInt("userid")),
-		oldTeam = event.GetInt("oldteam"),
-		newTeam = event.GetInt("newteam");
-	bool
-		disconnect = event.GetBool("disconnect");
-	// 玩家无效或断开连接或原团队不是生还者团队则 UnHook
-	if (!IsValidClient(client) || disconnect || oldTeam != TEAM_SURVIVOR) {
-		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-		if (teleportInfecteds[client] != null) {
-			teleportInfecteds[client].Clear();
-		}
-	}
-	else if (oldTeam != TEAM_SURVIVOR && newTeam == TEAM_SURVIVOR)
-	{
-		if (teleportInfecteds[client] == null) { teleportInfecteds[client] = new ArrayList(); }
-		// 开始 SDKHook
-		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-		SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-	}
-}
-
-public void OnClientAuthorized(int client) {
-	if (client <= 0 || client > MaxClients || IsFakeClient(client)) {
-		return;
-	}
-	if (teleportInfecteds[client] == null) {
+public void OnClientPutInServer(int client) {
+	SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
+	if (client > 0 && client <= MaxClients && teleportInfecteds[client] == null) {
 		teleportInfecteds[client] = new ArrayList();
-	}
-	SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-	SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-}
-
-public void OnClientDisconnect(int client) {
-	if (!IsValidClient(client) || IsFakeClient(client)) {
-		return;
-	}
-	SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-	if (teleportInfecteds[client] != null) {
+	} else {
 		teleportInfecteds[client].Clear();
 	}
 }
@@ -259,19 +225,27 @@ public Action checkInfectedCanBeTeleportHandler(Handle timer)
 				target;
 	for (i = 1; i <= MaxClients; i++)
 	{
+		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_INFECTED || !IsPlayerAlive(i) || IsInGhostState(i)) {
+			continue;
+		}
+
 		target = getTargetSurvivor(i);
-		if (!canBeTeleport(i, target) || !IsValidSurvivor(target) || !IsPlayerAlive(target))
-		{
+		if (!IsValidSurvivor(target) || !IsPlayerAlive(target)) {
+			continue;
+		}
+		if (!canBeTeleport(i, target)) {
 			teleportCheckTime[i] = 0;
 			continue;
 		}
 		// 检查通过，增加传送次数
 		teleportCheckTime[i]++;
-		if (teleportCheckTime[i] > g_hCheckTime.IntValue)
-		{
+		if (teleportCheckTime[i] > g_hCheckTime.IntValue) {
 			canFindTeleportPos[target] = true;
-			// 当前特感不在目标的传送集合中，则添加
-			if (teleportInfecteds[target].FindValue(GetClientUserId(i), 0) == -1) { teleportInfecteds[target].Push(GetClientUserId(i)); }
+			// 当前特感 UserId 不在目标的传送集合中，则添加
+			int userId = GetClientUserId(i);
+			if (teleportInfecteds[target].FindValue(userId) < 0) {
+				teleportInfecteds[target].Push(userId);
+			}
 		}
 		canFindTeleportPos[target] = canFindTeleportPos[target] ? true : false;
 	}
@@ -286,17 +260,18 @@ public Action checkInfectedCanBeTeleportHandler(Handle timer)
 void sdkHookThinkCallback(int client)
 {
 	// 插件未开启或不允许找位，返回
-	if (!g_hEnable.BoolValue || !canFindTeleportPos[client] || GetGameTime() - resetFindPosTime[client] < FIND_POS_DELAY) { return; }
-	// 这个生还者的待传送特感集合中没有特感，返回
-	if (teleportInfecteds[client].Length == 0)
-	{
-		if (expandFrame[client][0] > 0) { expandFrame[client][0] = expandFrame[client][1] = 0; }
+	if (!g_hEnable.BoolValue || !canFindTeleportPos[client] || GetGameTime() - resetFindPosTime[client] < FIND_POS_DELAY) {
 		return;
 	}
-	// 生还者无效，UnHook，返回
-	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
+	if (!IsPlayerAlive(client)) {
+		return;
+	}
+	// 这个生还者的待传送特感集合中没有特感，返回
+	if (teleportInfecteds[client].Length < 1)
 	{
-		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
+		if (expandFrame[client][0] > 0) {
+			expandFrame[client][0] = expandFrame[client][1] = 0;
+		}
 		return;
 	}
 	// 可以传送
@@ -337,21 +312,16 @@ void sdkHookThinkCallback(int client)
 	rightBack[0] += g_hMaxDistance.FloatValue;
 	rightBack[1] += g_hMaxDistance.FloatValue;
 	// 未超出开始拓展限制范围且帧数小于拓展限制帧数，拓展帧数增加
-	if (expandFrame[client][0] < g_hExpandFrame.IntValue && expandFrame[client][1] < offset)
-	{
+	if (expandFrame[client][0] < g_hExpandFrame.IntValue && expandFrame[client][1] < offset) {
 		expandFrame[client][0]++;
-	}
-	else if (expandFrame[client][0] >= g_hExpandFrame.IntValue && expandFrame[client][1] < offset)
-	{
+	} else if (expandFrame[client][0] >= g_hExpandFrame.IntValue && expandFrame[client][1] < offset) {
 		// 增加距离时拓展帧数不变
 		expandFrame[client][1] += expandFrame[client][1] < offset ? EXPAND_COUNT_PRE_FRAME : 0;
 		leftFront[0] -= expandFrame[client][1];
 		leftFront[1] -= expandFrame[client][1];
 		rightBack[0] += expandFrame[client][1];
 		rightBack[1] += expandFrame[client][1];
-	}
-	else if (expandFrame[client][1] >= offset)
-	{
+	} else if (expandFrame[client][1] >= offset) {
 		// 网格拓展到最大限度，且超过 2s 有特感未刷出，则清空传送集合，否则继续找位容易导致卡顿
 		expandFrame[client][0]++;
 		if (expandFrame[client][0] > 2 * GetServerTickRate() + g_hExpandFrame.IntValue && teleportInfecteds[client].Length > 0)
@@ -365,52 +335,46 @@ void sdkHookThinkCallback(int client)
 		return;
 	}
 	// 循环 tickrace 次，获取随机射线起始位置
-	for(i = 0; i < GetServerTickRate(); i++)
-	{
+	for(i = 0; i < GetServerTickRate(); i++) {
 		rayStartPos[0] = GetRandomFloatInRange(leftFront[0], rightBack[0]);
 		rayStartPos[1] = GetRandomFloatInRange(leftFront[1], rightBack[1]);
 		rayStartPos[2] = GetRandomFloatInRange(selfPos[2], selfPos[2] + g_hMaxDistance.FloatValue);
 		// 发射射线
-		Handle trace = TR_TraceRayFilterEx(rayStartPos, RAY_DOWN_ANGLE, MASK_NPCSOLID_BRUSHONLY, RayType_Infinite, traceRayFilter, client);
-		if (trace == null) { continue; }
-		if (!TR_DidHit(trace))
-		{
-			delete trace;
+		TR_TraceRay(rayStartPos, RAY_DOWN_ANGLE, MASK_PLAYERSOLID, RayType_Infinite);
+		if (!TR_DidHit()) {
 			continue;
 		}
-		TR_GetEndPosition(rayEndPos, trace);
+		TR_GetEndPosition(rayEndPos);
+
 		CopyVectors(rayEndPos, navPos);
 		CopyVectors(rayEndPos, visiblePos);
 		navPos[2] += NAV_HEIGHT;
 		visiblePos[2] += PLAYER_HEIGHT;
-		// ***** 调试输出 *****
-		// if (g_hEnableLog.BoolValue) {
-		// 	ShowPos(4, rayStartPos, rayEndPos);
-		// }
-		// *******************
 		// 检查射线中止位置是否有效
-		if (isValidNavArea(navPos) && !isPlayerStuck(rayEndPos) && !isVisibleTo(visiblePos) && L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(navPos), L4D2Direct_GetTerrorNavArea(selfPos), g_hMaxNavDistance.FloatValue, TEAM_INFECTED, false))
-		{
+		static Address rayEndNav;
+		rayEndNav = isValidNavArea(navPos);
+		if (rayEndNav != Address_Null && 
+			!isPlayerStuck(rayEndPos) && 
+			!isVisibleTo(visiblePos) && 
+			L4D2_NavAreaBuildPath(L4D2Direct_GetTerrorNavArea(navPos), L4D2Direct_GetTerrorNavArea(selfPos), g_hMaxNavDistance.FloatValue, TEAM_INFECTED, false)) {
 			// rayEndPos[2] 等于目标 z 坐标判断直线距离
 			rayEndPos[2] = selfPos[2];
 			vecDistance = GetVectorDistance(rayEndPos, selfPos);
 			navDistance = L4D2_NavAreaTravelDistance(rayEndPos, selfPos, false);
-			// log.debugAll("%s: 找到位置 [%.2f, %.2f, %.2f], 与目标 %N 直线距离 %.2f, Nav 距离 %.2f", PLUGIN_PREFIX, navPos[0], navPos[1], navPos[2], client, vecDistance, navDistance);
-			if (vecDistance < g_hMinDistance.FloatValue || vecDistance > g_hMaxDistance.FloatValue || navDistance == -1.0 || navDistance < g_hMinDistance.FloatValue || navDistance > g_hMaxNavDistance.FloatValue)
-			{
-				delete trace;
+
+			if (vecDistance < g_hMinDistance.FloatValue || vecDistance > g_hMaxDistance.FloatValue || navDistance == -1.0 || navDistance < g_hMinDistance.FloatValue || navDistance > g_hMaxNavDistance.FloatValue) {
 				continue;
 			}
 			// 传送的位置在目标生还者后面则跳过本次循环
-			if (g_hShouldAhead.BoolValue && !isPosAheadTarget(navPos, selfPos))
-			{
-				delete trace;
+			if (g_hShouldAhead.BoolValue && !isPosAheadTarget(navPos, selfPos)) {
+				continue;
+			}
+			// 传送位置在安全区域内则跳过本次循环
+			if (g_hAllowInSaferoom.BoolValue && L4D_GetNavArea_SpawnAttributes(rayEndNav) & NAV_SPAWN_CHECKPOINT) {
 				continue;
 			}
 			log.info("%s: 即将传送特感 %N 到目标 %N 旁, 检测 %d 次", PLUGIN_PREFIX, teleportInfected, client, teleportCheckTime[teleportInfected]);
-			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected))
-			{
-				delete trace;
+			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected)) {
 				teleportInfecteds[client].Erase(0);
 				teleportInfected = INVALID_CLIENT;
 				break;
@@ -421,7 +385,7 @@ void sdkHookThinkCallback(int client)
 				teleportCheckTime[teleportInfected] = 0;
 				break;
 			}
-			navPos[2] -= 10.0;
+			navPos[2] -= 15.0;
 			// 实体传送时是否设置透明，传送完成恢复
 			if (g_hTransParentTeleport.BoolValue)
 			{
@@ -454,8 +418,8 @@ void sdkHookThinkCallback(int client)
 					SetEntProp(teleportInfected, Prop_Data, "m_iHealth", currentHealth + healthRestore);
 				}
 			}
+			break;
 		}
-		delete trace;
 		return;
 	}
 }
@@ -487,9 +451,9 @@ void nextFrameDoTeleportInfected(DataPack pack)
  * @param: {pos} 需要检查的坐标
  * @return: {bool}
  */
-static bool isValidNavArea(float pos[3])
+static Address isValidNavArea(float pos[3])
 {
-	return L4D2Direct_GetTerrorNavArea(pos) != Address_Null;
+	return L4D2Direct_GetTerrorNavArea(pos);
 }
 
 /*
@@ -665,7 +629,6 @@ static int getFlowSurvivor(bool mode)
 void clearTeleportInfo()
 {
 	delete teleportCheckTimer;
-	teleportCheckTimer = null;
 	static int i;
 	for (i = 1; i <= MaxClients; i++)
 	{
@@ -699,41 +662,9 @@ void getAllowedTeleportInfected()
 
 void onSurvivorLeftSafeArea()
 {
+	PrintToConsoleAll("生还者出门, 创建时钟");
 	delete teleportCheckTimer;
 	teleportCheckTimer = CreateTimer(g_hCheckInterval.FloatValue, checkInfectedCanBeTeleportHandler, _, TIMER_REPEAT);
-	static int i;
-	for (i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) { continue; }
-		SDKUnhook(i, SDK_HOOK_TYPE, sdkHookThinkCallback);
-		SDKHook(i, SDK_HOOK_TYPE, sdkHookThinkCallback);
-		// 再次检查，没有建立目标集合则建立
-		if (teleportInfecteds[i] == null) {
-			teleportInfecteds[i] = new ArrayList();
-		}
-	}
-}
-
-/*
- * @Description: 为每一个生还者建立待传送的特感的目标集合
- * @param: {build} true 则建立，false 则释放目标集合的内存
- * @return: {void}
- */
-void buildTargetList(bool build)
-{
-	static int i;
-	for (i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) { continue; }
-		if (build) {
-			if (teleportInfecteds[i] == null) {
-				teleportInfecteds[i] = new ArrayList();
-			}
-		} else {
-			delete teleportInfecteds[i];
-			teleportInfecteds[i] = null;
-		}
-	}
 }
 
 /*
