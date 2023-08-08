@@ -662,7 +662,6 @@ void getAllowedTeleportInfected()
 
 void onSurvivorLeftSafeArea()
 {
-	PrintToConsoleAll("生还者出门, 创建时钟");
 	delete teleportCheckTimer;
 	teleportCheckTimer = CreateTimer(g_hCheckInterval.FloatValue, checkInfectedCanBeTeleportHandler, _, TIMER_REPEAT);
 }
