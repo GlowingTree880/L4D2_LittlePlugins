@@ -19,7 +19,7 @@
 | [vector_show.sp](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/Ai_HardSi/vector_show.sp) |        -         |                    可选，部分插件需要此依赖，代码来源：[[L4D & L4D2] Witch Lightning Attack](https://forums.alliedmods.net/showthread.php?p=1623047) By panxiaohai                     |
 | [vector_show.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/vector_show.inc)     |        -         | VectorShow 坐标，角度显示 .inc 版本																																					|
 |  [colors.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/colors.inc)              |        1.2.3     | 聊天框字体颜色支持， 增加 {W}、{O}、{LG} 等颜色 Tag 支持，来源：ZoneMod 插件包 																										|
-| [logger.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/logger.inc)               |        -         | 一种面向对象的插件日志记录头文件，可以使用 log.xxx("信息") 的方式来记录日志                                                                                                            |
+| [logger.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/logger.inc)               |        -         | 一种面向对象的插件日志记录头文件，可以使用 log.xxx("信息") 的方式来记录日志，对比 PlayerTeleport 中的 logger.inc 文件，将 `是否开启日志` 更改为 `日志级别控制`                                                                                                            |
 
 
 # Plugins
