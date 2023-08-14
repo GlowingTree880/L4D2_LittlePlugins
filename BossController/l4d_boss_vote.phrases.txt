@@ -1,0 +1,190 @@
+"Phrases"
+{
+    "Tag"
+    {
+        "en"        "{B}<{O}BossVote{B}>{W}"
+    }
+	// 新增 VoteBoss, 玩家发起 BossVote 聊天框显示 xxx 发起了一个 BossVote
+    "VoteBoss"
+    {
+        "#format"	"{1:s}"
+        "en"        "{G}{1} {W}initiated a boss vote."
+    }
+    // 新增 BossVoteDisable, BossVote 功能被关闭时聊天框显示
+	"BossVoteDisable"
+    {
+        "en"        "BossVote is now disabled."
+    }
+	
+    // 投票前检查是否允许发起新的投票
+    "NotAvailable"
+    {
+        "en"        "Boss voting is not available on this map."
+    }
+    "Available"
+    {
+        "en"        "Boss voting is only available during ready up."
+    }
+	
+	// 新增 AvailableOnlyInSafeArea, 玩家只有在未离开安全区域时才允许发起 BossVote
+    "AvailableOnlyInSafeArea"
+    {
+        "en"        "Boss voting is only available before leave safearea."
+    }
+    // 新增 TankAlreadySpawned, Tank 已经刷新完成时不允许投票更改 Tank 位置
+	"TankAlreadySpawned"
+	{
+		"en"		"Only can change {O}Tank {W}before Tank spawned."
+	}
+	// 新增 WitchAlreadySpawned, Witch 已经刷新完成时不允许投票更改 Witch 位置
+	"WitchAlreadySpawned"
+	{
+		"en"		"Only can change {O}Witch {W}before Witch spawned."
+	}
+	// 新增 MoveToRandomValidWitchFlow, 更改 Tank 和 Witch 刷新路程时, 新的 Witch 刷新路程被新的 Tank 刷新路程 Ban Flow, 获取有效 Witch 刷新路程
+	"MoveToRandomValidWitchFlow"
+	{
+		"#format"	"{1:d}"
+		"en"		"New Witch Flow is banned by Tank flow, choose a random valid Witch flow {O}{1}%%"
+	}
+	
+    "FirstRound"
+    {
+        "en"        "Boss voting is only available during the first round of a map."
+    }
+    "NotAvailableForSpec"
+    {
+        "en"        "Boss voting is not available for spectators."
+    }
+    "CannotBeCalled"
+    {
+        "en"        "Boss Vote cannot be called right now..."
+    }
+	
+    // VoteBossCmd
+    "Usage"
+    {
+        "en"        "Usage: !voteboss {G}<{W}tank{G}> <{W}witch{G}>{W}."
+    }
+    "Usage2"
+    {
+        "en"        "Use {W}\"{B}0{W}\" for {G}No Spawn{W}, \"{B}-1{W}\" for {G}Ignorance."
+    }
+	
+    // 新增 ForceTankUseage, !ftank 使用方法
+    "ForceTankUseage"
+    {
+        "en"        "Usage: !ftank {G}<{W}tank{G}>{W}."
+    }
+    // 新增 ForceWitchUseage, !fwitch 使用方法
+    "ForceTankUseage"
+    {
+        "en"        "Usage: !fwitch {G}<{W}witch{G}>{W}."
+    }
+	
+    "Invalid"
+    {
+        "en"        "Percentages are {G}invalid{W}."
+    }
+    "TankStatic"
+    {
+        "en"        "Tank spawn is static and can not be changed on this map."
+    }
+    "WitchStatic"
+    {
+        "en"        "Witch spawn is static and can not be changed on this map."
+    }
+    "TankBanned"
+    {
+        "en"        "Tank percentage is {B}banned{W}."
+    }
+    "WitchBanned"
+    {
+        "en"        "Witch percentage is {B}banned{W}."
+    }
+    "SetBosses"
+    {
+        "en"        "Set Tank to: %s and Witch to: %s?"
+    }
+    "SetTank"
+    {
+        "en"        "Set Tank to: %s and Witch to: Disabled?"
+    }
+    "SetOnlyTank"
+    {
+        "en"        "Set Tank to: %s?"
+    }
+    "SetWitch"
+    {
+        "en"        "Set Tank to: Disabled and Witch to: %s?"
+    }
+    "SetOnlyWitch"
+    {
+        "en"        "Set Witch to: %s?"
+    }
+    "SetBossesDisabled"
+    {
+        "en"        "Set Bosses to: Disabled?"
+    }
+    "SetTankDisabled"
+    {
+        "en"        "Set Tank to: Disabled?"
+    }
+    "SetWitchDisabled"
+    {
+        "en"        "Set Witch to: Disabled?"
+    }
+    // BossVoteResultHandler
+    "OnlyReadyUp"
+    {
+        "en"        "Spawns can only be set during ready up."
+    }
+    "SettingBoss"
+    {
+        "en"        "Setting Boss Spawns..."
+    }
+    "SettingTank"
+    {
+        "en"        "Setting Tank Spawn..."
+    }
+    "SettingWitch"
+    {
+        "en"        "Setting Witch Spawn..."
+    }
+    "SettingBossDisabled"
+    {
+        "en"        "Setting Boss Disabled..."
+    }
+    // ForceTankCommand
+    "CommandNotAvailable"
+    {
+        "en"        "Command not available on this map."
+    }
+    "TankSpawnStatic"
+    {
+        "en"        "Tank spawn is static and can not be changed on this map."
+    }
+    "PercentageInvalid"
+    {
+        "en"        "Percentage is {B}invalid{W}."
+    }
+    "Percentagebanned"
+    {
+        "en"        "Percentage is {B}banned{W}."
+    }
+    "TankSpawnAdmin"
+    {
+		"#format"   "{1:i},{2:s}" // 1:p_iRequestedPercent 2:clientName
+        "en"        "Tank spawn set to {G}{1}%{W} by Admin {B}{2}{W}."
+    }
+    // ForceWitchCommand
+    "WitchSpawnStatic"
+    {
+        "en"        "Witch spawn is static and can not be changed on this map."
+    }
+    "WitchSpawnAdmin"
+    {
+		"#format"   "{1:i},{2:s}" // 1:p_iRequestedPercent 2:clientName
+        "en"        "Witch spawn set to {G}{1}%{W} by Admin {B}{2}{W}."
+    }
+}

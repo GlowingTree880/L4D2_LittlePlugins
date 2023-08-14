@@ -155,10 +155,16 @@ public void getTankPercentString(char[] tankStr, int len, bool isReadyUpFormat) 
 	GetCurrentMap(mapName, sizeof(mapName));
 
 	bool isStaticTank;
-	if (!L4D_IsVersusMode()) {
-		isStaticTank = isStaticTankMap(mapName);
+	if (L4D_IsVersusMode()) {
+		if (isFinaleMap() && g_hDisableInFinale.BoolValue) {
+			isStaticTank = true;
+		} else if (!isDarkCarnivalRemix()) {
+			isStaticTank = isStaticTankMap(mapName);
+		}
 	} else {
-		if (!isDarkCarnivalRemix() || (isFinaleMap() && g_hDisableInFinale.BoolValue)) {
+		if (isFinaleMap() && g_hDisableInFinale.BoolValue) {
+			isStaticTank = true;
+		} else {
 			isStaticTank = isStaticTankMap(mapName);
 		}
 	}
@@ -201,10 +207,16 @@ public void getWitchPercentString(char[] witchStr, int len, bool isReadyUpFormat
 	GetCurrentMap(mapName, sizeof(mapName));
 
 	bool isStaticWitch;
-	if (!L4D_IsVersusMode()) {
-		isStaticWitch = isStaticWitchMap(mapName);
+	if (L4D_IsVersusMode()) {
+		if (isFinaleMap() && g_hDisableInFinale.BoolValue) {
+			isStaticWitch = true;
+		} else if (!isDarkCarnivalRemix()) {
+			isStaticWitch = isStaticWitchMap(mapName);
+		}
 	} else {
-		if (!isDarkCarnivalRemix() || (isFinaleMap() && g_hDisableInFinale.BoolValue)) {
+		if (isFinaleMap() && g_hDisableInFinale.BoolValue) {
+			isStaticWitch = true;
+		} else {
 			isStaticWitch = isStaticWitchMap(mapName);
 		}
 	}

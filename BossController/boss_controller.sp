@@ -408,23 +408,13 @@ void checkMapInfoExist() {
 	isMapInfoExist = false;
 }
 
-// FIXME: 部分地图无法找到 trigger_finale 实体, 如 c5m5
 /**
-* 判断当前地图是否是救援关, 通过查询是否存在 trigger_finale 实体
+* 判断当前地图是否是当前任务的最后一张地图
 * @param void
 * @return bool
 **/
 bool isFinaleMap() {
-	static int i;
-	static char name[64];
-	for (i = MaxClients + 1; i < GetEntityCount(); i++) {
-		if (!IsValidEntity(i) || !IsValidEdict(i)) { continue; }
-		GetEntityClassname(i, name, sizeof(name));
-		if (strcmp(name, "trigger_finale", false) == 0) {
-			return true;
-		}
-	}
-	return false;
+	return L4D_IsMissionFinalMap();
 }
 
 /**

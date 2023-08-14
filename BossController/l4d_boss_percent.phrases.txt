@@ -1,0 +1,95 @@
+"Phrases"
+{
+	// 新增 Current, 用于显示当前生还者路程
+	"Current"
+	{
+		"en"	"{G}Current: {O}%d%%"
+	}
+	
+	// 新增 TankPrompt, Tank 刷新前提示 Tank 刷新位置
+	"TankPrompt"
+	{
+		"#format"	"{1:d},{2:d}"
+		"en"	"<{G}Boss{W}>: {W}Current {O}{1}%%{W}. {G}Tank {W}will spawn at {O}{2}%%"
+	}
+	// 新增 WitchPrompt, Witch 刷新前提示 Witch 刷新位置
+	"WitchPrompt"
+	{
+		"#format"	"{1:d},{2:d}"
+		"en"	"<{G}Boss{W}>: {W}Current {O}{1}%%{W}. {G}Witch {W}will spawn at {O}{2}%%"
+	}
+	
+	// 新增 TankPercent, 打印 Tank 位置时格式化 <Tank> xx% [Spawned]
+	"TankPercent"
+	{
+		"en"	"{O}%d%%"
+	}
+	// 新增 WitchPercent, 打印 Witch 位置时格式化 <Witch> xx% [Spawned]
+	"WitchPercent"
+	{
+		"en"	"{O}%d%%"
+	}
+	// 新增 NotSpawned, 打印 Boss 位置而 Boss 未刷新时的标签
+	"NotSpawned"
+	{
+		"en"	"{W}({G}Not Spawned{W})"
+	}
+	// 新增 Spawned, 打印 Boss 位置而 Boss 已刷新时的标签
+	"Spawned"
+	{
+		"en"	"{W}({G}Spawned{W})"
+	}
+	
+	"TagTank"
+	{
+		"en"	"<{G}Tank{W}>"
+	}
+	"TagWitch"
+	{
+		"en"	"<{G}Witch{W}>"
+	}
+	"TankOn"
+	{
+		"en"	"Tank: %d%%"
+	}
+	"WitchOn"
+	{
+		"en"	"Witch: %d%%"
+	}
+	"Disabled"
+	{
+		"en"	"Disabled"
+	}
+	"StaticSpawn"
+	{
+		"en"	"Static Spawn"
+	}
+	"None"
+	{
+		"en"	"None"
+	}
+	"TankDisabled"
+	{
+		"en"	"Tank: Disabled"
+	}
+	"TankStatic"
+	{
+		"en"	"Tank: Static Spawn"
+	}
+	"TankNone"
+	{
+		"en"	"Tank: None"
+	}
+	"WitchDisabled"
+	{
+		"en"	"Witch: Disabled"
+	}
+	"WitchStatic"
+	{
+		"en"	"Witch: Static Spawn"
+	}
+	"WitchNone"
+	{
+		"en"	"Witch: None"
+	}
+}

@@ -1,5 +1,5 @@
 # Boss Controller
-- 本插件是 `L4D2-Competitive-Rework` 插件包中 `witch_and_tankifier.smx` (读取 `MapInfo` 文件并设置随机 Tank 与 Witch 的刷新路程), `l4d_boss_percent.smx` (`!boss`, `!tank`, `!witch` 指令显示 Boss 刷新路程), `l4d_boss_vote.smx` (`!bossvote` 指令投票更改 Boss 刷新路程) 3 个插件的整合版本, 支持战役与对抗使用, 支持无 `MapInfo` 文件使用
+- 本插件是 `L4D2-Competitive-Rework` 插件包中 `witch_and_tankifier.smx` (读取 `MapInfo` 文件并设置随机 Tank 与 Witch 的刷新路程), `l4d_boss_percent.smx` (`!boss`, `!tank`, `!witch` 指令显示 Boss 刷新路程), `l4d_boss_vote.smx` (`!bossvote` 指令投票更改 Boss 刷新路程) 3 个插件的整合版本, 支持战役与对抗使用, 支持无 `MapInfo` 文件使用, 增加对 `ZoneMod` 相关插件的 `translation` 翻译文件支持
 
 ## Cvars
 ```java
@@ -103,15 +103,99 @@ sm_staticmap (!staticmap) [显示所有静态地图信息, 测试使用, 仅管�
     ``````
     在使用本插件时, 如需禁止一段 Tank 或 Witch 刷新的路程, 只需在配置 `tank_ban_flow` 与 `witch_ban_flow`, 增加对应需要禁止刷新的路程即可, 其中 `min` 为开始禁止刷新的路程, `max` 为结束禁止刷新的路程, 范围为 `1 - 100`
 3. **可选:** 在任意一个地图加载时会被读取到的 `.cfg` 文件中使用 `static_tank_map` 或 `static_witch_map` 指令注册静态 Tank 与 Witch 地图, 可参考 [ZoneMod SharedSettings](https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/cfg/cfgogl/zonemod/shared_settings.cfg) `331 - 350` 行位置, 在对应静态地图下插件不会接管对应 Boss 刷新 
-4. 编译本插件时请使用 [lib](https://github.com/GlowingTree880/L4D2_LittlePlugins/tree/main/lib) 中的 treeutil.inc 编译
+4. 将 `l4d_boss_percent.phrases.txt` 与 `l4d_boss_vote.phrases.txt` 丢到 `sourcemod\translations` 目录中
+5. 编译本插件时请使用 [lib](https://github.com/GlowingTree880/L4D2_LittlePlugins/tree/main/lib) 中的 treeutil.inc 编译
 
 ## 注意事项
 1. 在非对抗模式下, 如果允许插件随机 Boss 位置, 则插件会自动将 `director_no_bosses` 设置为 1 令导演系统不会刷新 Boss, 之后如需使用导演系统刷新 Boss, 请手动设置 `director_no_bosses` 为 0
 2. 对于 `Dark Carnival Remix (DKR)` 地图, 在 `ZoneMod SharedSettings` 已经被注册为静态 Tank 与 Witch 地图, 如使用 `ZoneMod SharedSettings` 的静态地图配置, 那么在使用非对抗模式游玩此地图时插件将不会接管 Boss 刷新, 如需插件接管 Boss 刷新请移除本地图静态地图的设定
 3. 对于 `Dark Carnival Remix (DKR)` 地图, 对抗模式下, 其使用脚本刷新 Boss, 因此本插件不会接管 Boss 刷新, Tank 与 Witch 路程显示均为获取在聊天框中脚本输出的 Tank 与 Witch 位置
-
-## 当前存在的问题
-1. 判断是否终局使用判断是否存在 `trigger_finale` 实体, 对于某些救援关不适用
+4. 默认 `translation` 翻译文件语言为英文 `en`, 若想手动新增其他语言的翻译文件, 请拷贝 `l4d_boss_percent.phrases.txt` 与 `l4d_boss_vote.phrases.txt` 并将 `en` 更改为 `chi`, 对应的英文键值更改为中文即可<br>
+   本插件在 `l4d_boss_percent.phrases.txt` 中新增以下键值
+   ```java
+    // !cur, !boss, !tank, !witch 等指令显示生还者当前路程
+   "Current"
+	{
+		"en"	"{G}Current: {O}%d%%"
+	}
+    // Tank 刷新前对生还者的提示
+    "TankPrompt"
+	{
+		"#format"	"{1:d},{2:d}"
+		"en"	"<{G}Boss{W}>: {W}Current {O}{1}%%{W}. {G}Tank {W}will spawn at {O}{2}%%"
+	}
+    // Witch 刷新前对生还者的提示
+    "WitchPrompt"
+	{
+		"#format"	"{1:d},{2:d}"
+		"en"	"<{G}Boss{W}>: {W}Current {O}{1}%%{W}. {G}Witch {W}will spawn at {O}{2}%%"
+	}
+    // 使用 !cur, !boss, !tank 指令显示 Tank 路程的路程格式
+    "TankPercent"
+	{
+		"en"	"{O}%d%%"
+	}
+    // 使用 !cur, !boss, !witch 指令显示 Witch 路程的路程格式
+    "WitchPercent"
+	{
+		"en"	"{O}%d%%"
+	}
+    // 使用 !cur, !boss, !tank, !witch 指令显示 Boss 路程但 Boss 未刷新时提示的格式
+    "NotSpawned"
+	{
+		"en"	"{W}({G}Not Spawned{W})"
+	}
+    // 使用 !cur, !boss, !tank, !witch 指令显示 Boss 路程但 Boss 已刷新时提示的格式
+    "Spawned"
+	{
+		"en"	"{W}({G}Spawned{W})"
+	}
+   ``````
+    在 `l4d_boss_vote.phrases.txt` 中新增以下键值
+	```java
+	// 发起一个 BossVote 时显示谁发起了一个更改 Boss 路程的投票格式
+    "VoteBoss"
+    {
+        "#format"	"{1:s}"
+        "en"        "{G}{1} {W}initiated a boss vote."
+    }
+    // BossVote 功能被禁止时发起 BossVote 的提示
+    "BossVoteDisable"
+    {
+        "en"        "BossVote is now disabled."
+    }
+    // 在离开安全区域后发起 BossVote 提示只允许在安全区中使用的格式
+    "AvailableOnlyInSafeArea"
+    {
+        "en"        "Boss voting is only available before leave safearea."
+    }
+    // Tank 刷新完成时发起 BossVote 更改 Tank 路程被禁止时的提示格式
+    "TankAlreadySpawned"
+	{
+		"en"		"Only can change {O}Tank {W}before Tank spawned."
+	}
+    // Witch 刷新完成时发起 BossVote 更改 Witch 路程被禁止时的提示格式
+    "WitchAlreadySpawned"
+	{
+		"en"		"Only can change {O}Witch {W}before Witch spawned."
+	}
+    // 发起 BossVote 更改 Tank 与 Witch 路程时新的 Witch 路程处在 Witch Avoid Tank 路程中, Witch 路程无效, 自动选择新的有效 Witch 路程的提示
+    "MoveToRandomValidWitchFlow"
+	{
+		"#format"	"{1:d}"
+		"en"		"New Witch Flow is banned by Tank flow, choose a random valid Witch flow {O}{1}%%"
+	}
+    // !ftank 使用方法提示
+    "ForceTankUseage"
+    {
+        "en"        "Usage: !ftank {G}<{W}tank{G}>{W}."
+    }
+    // fwitch 使用方法提示
+    "ForceTankUseage"
+    {
+        "en"        "Usage: !fwitch {G}<{W}witch{G}>{W}."
+    }
+	``````
 
 ## Tips
 1. `MapInfo` 文件可在 [ZoneMod MapInfo](https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/cfg/cfgogl/zonemod/mapinfo.txt) 获取
@@ -119,6 +203,7 @@ sm_staticmap (!staticmap) [显示所有静态地图信息, 测试使用, 仅管�
 
 ## 更新日志
 - 2023-08-13: 在老版本 Boss Controller 基础上优化结构, 并将老版本 Boss Controller 移到 .history 目录中, 上传新版本与 readme
+- 2023-08-14: 将 `isFinaleMap()` 判断是否终局的方法从获取 `trigger_finale` 实体更改为使用 `Left4Dhooks` 中的 `L4D_IsMissionFinalMap()`
 
 ---
 - 如在使用过程中发现任何 Bug，请提出 issue 说明 Bug 类型及发生时情况，如有报错请附上 log 文件信息 (｡･ω･｡)

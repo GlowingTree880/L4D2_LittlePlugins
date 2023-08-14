@@ -421,11 +421,11 @@ public Action timerSurvivorDistanceCheckHandler(Handle timer) {
 }
 
 public Action timerKickNonPluginTank(Handle timer, int tank) {
-	if (!IsValidClient(tank) || IsClientInKickQueue(tank)) {
+	if (!IsValidClient(tank) || IsClientInKickQueue(tank) || !IsFakeClient(tank)) {
 		return Plugin_Stop;
 	}
 
-	log.debugAndInfo("%s: 产生了一个非插件刷新的 Tank, 索引 %d, 已踢出", PLUGIN_PREFIX, tank);
+	log.debugAndInfo("%s: 产生了一个非插件刷新的 AI Tank, 索引 %d, 已踢出", PLUGIN_PREFIX, tank);
 	KickClient(tank, "踢出非插件刷新的 Tank");
 
 	return Plugin_Stop;
