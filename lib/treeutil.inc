@@ -747,9 +747,27 @@ stock float GetRandomFloatInRange(float min, float max)
  * @param: {len} 字符串数组长度
  * @return: {bool} 
  */
-stock bool isEmptyString(const char[] string, int len)
+stock bool IsEmptyString(const char[] string, int len)
 {
 	int i;
 	for (i = 0; i < len; i++) { if (string[i] != '\0') { return false; } }
+	return true;
+}
+
+/**
+* 判断输入的字符串是否是整数 (2023-08-10)
+* @param input 输入的字符串
+* @return bool
+**/
+stock bool IsInteger(const char[] input)
+{
+	if (!IsCharNumeric(input[0]) && input[0] != '-') {
+		return false;
+	}
+	for (int i = 1; i < strlen(input); i++) {
+		if (!IsCharNumeric(input[i])) {
+			return false;
+		}
+	}
 	return true;
 }
