@@ -39,7 +39,7 @@ public Action cmdStartSpawn(int client, int args) {
 **/
 public Action cmdInfectedLimit(int client, int args) {
 	if (args != 1) {
-		CReplyToCommand(client, "{O}%s: {W}请使用 {O}!limit <num> {W}来修改特感数量", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}请使用 {O}!limit <num> {W}来修改{G}特感数量", PLUGIN_PREFIX);
 		return Plugin_Handled;
 	}
 	char argStr[16];

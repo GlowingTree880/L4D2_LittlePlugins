@@ -571,7 +571,7 @@ void getInfectedQueuePositionList() {
 					// pos 代表这个特感的刷新位置, 为每一个数字
 					pos = StringToInt(temp[j]);
 					// 位置无效或这个特感已经存在于相应的刷新位置中，跳过
-					if (pos < ZC_SMOKER || pos > ZC_CHARGER ||
+					if (pos < ZC_SMOKER || pos > g_hInfectedLimit.IntValue ||
 						(infectedQueuePosition[pos] != null && infectedQueuePosition[pos].FindValue(infectedType) >= 0)) {
 						continue;
 					}
@@ -593,7 +593,7 @@ void getInfectedQueuePositionList() {
 	profiler.Stop();
 	log.debugAll("%s: 成功获取特感刷新位置集合, 耗时: %.3f s", PLUGIN_PREFIX, profiler.Time);
 	log.debugAll("%s: 当前特感刷新位置集合:", PLUGIN_PREFIX);
-	for (i = 0; i < INFECTED_ARRAY_SIZE; i++) {
+	for (i = 0; i <= g_hInfectedLimit.IntValue; i++) {
 		if (infectedQueuePosition[i] == null) {
 			continue;
 		}
