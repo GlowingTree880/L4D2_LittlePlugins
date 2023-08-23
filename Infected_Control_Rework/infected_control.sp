@@ -102,6 +102,9 @@ int
 	respawnFinishedCount,
 	// 分散刷新方式下, 允许开始刷新时的特感数量
 	targetCount;
+int
+	// 每次刷新一波时前统计这波强控特感的数量, 用于触发动态时钟
+	waveDominativeCount;
 
 // 刷新时间策略 SpawnStrategy
 enum {
@@ -718,7 +721,7 @@ stock void postProcessOnOnceSpawnFinished() {
 * @param 
 * @return int
 **/
-static int getDominativeInfectedCount() {
+stock int getDominativeInfectedCount() {
 	static int i;
 	int class, count = 0;
 	for (i = 1; i <= MaxClients; i++) {
@@ -738,7 +741,7 @@ static int getDominativeInfectedCount() {
 * @param 
 * @return int 
 **/
-static int getCvarDominativeInfectedCount() {
+stock static int getCvarDominativeInfectedCount() {
 	static int i;
 	int count = 0;
 	for (i = 0; i < INFECTED_ARRAY_SIZE - 1; i++) {
@@ -826,6 +829,11 @@ void resetTimersAndStates() {
 		playerIncapRecord[i] = false;
 		infectedStates[i].init();
 	}
+
+	alternateInfecteds[0] = 0;
+	alternateInfecteds[1] = 0;
+	
+	waveDominativeCount = 0;
 }
 
 /**
@@ -837,7 +845,8 @@ void resetTimersAndStates() {
 **/
 static bool canTriggerRegularInfectedSpawnTimer(int infectedCount, int dominativeCount, int dpsCount) {
 	// 触发条件 1: 当前特感小于等于 (设定数量 / 2) + 1 特
-	int threshold = infectedCount / 2 + 1;
+	static int threshold;
+	threshold = g_hInfectedLimit.IntValue / 2 + 1;
 	if (infectedCount <= threshold) {
 		return true;
 	}
@@ -856,10 +865,11 @@ static bool canTriggerAutoInfectedSpawnTimer(int infectedCount, int dominativeCo
 	if (canTriggerRegularInfectedSpawnTimer(infectedCount, dominativeCount, dpsCount)) {
 		return true;
 	}
-	// 触发条件 2: 当前强控数量 <= (强控总数 / 2) + 1 特
-	static int cvarDominativeCount;
-	cvarDominativeCount = getCvarDominativeInfectedCount();
-	if (dominativeCount <= (cvarDominativeCount >> 1 | 1)) {
+	// 触发条件 2: 当前强控数量 <= (这波的强控总数 / 2) + 1 特
+	// 如 6 特下 smoker, ht, ht, jockey, spitter, boomer, 强控总数 4 只, 在场强控小于等于 4 / 2 + 1 = 3 特即可触发动态时钟
+	static int threshold;
+	threshold = waveDominativeCount / 2 + 1;
+	if (dominativeCount <= threshold) {
 		return true;
 	}
 	return false;

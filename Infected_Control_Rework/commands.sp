@@ -15,7 +15,7 @@ public Action cmdStartSpawn(int client, int args) {
 	// 手动刷新控制模式, 允许刷新特感
 	if (g_hStartSpawnControl.IntValue == SSC_MANUAL) {
 		if (currentSpawnWaveCount > 1) {
-			ReplyToCommand(client, "%s: 当前非第一波特感刷新, 不可使用本指令", PLUGIN_PREFIX);
+			CReplyToCommand(client, "{O}%s: {W}当前非第一波特感刷新, 不可使用本指令", PLUGIN_PREFIX);
 			return Plugin_Handled;
 		}
 		// 第一波刷新
@@ -25,7 +25,7 @@ public Action cmdStartSpawn(int client, int args) {
 			canSpawnNewInfected = true;
 		}
 	} else {
-		ReplyToCommand(client, "%s: 当前已经为自动刷新控制模式, 不可使用指令刷新", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}当前已经为自动刷新控制模式, 不可使用指令刷新", PLUGIN_PREFIX);
 	}
 
 	return Plugin_Handled;
@@ -39,7 +39,7 @@ public Action cmdStartSpawn(int client, int args) {
 **/
 public Action cmdInfectedLimit(int client, int args) {
 	if (args != 1) {
-		ReplyToCommand(client, "%s: 请使用 !limit <num> 来修改特感数量", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}请使用 {O}!limit <num> {W}来修改特感数量", PLUGIN_PREFIX);
 		return Plugin_Handled;
 	}
 	char argStr[16];
@@ -47,11 +47,11 @@ public Action cmdInfectedLimit(int client, int args) {
 	
 	int newLimit = StringToInt(argStr);
 	if (newLimit < 0 || newLimit > MaxClients) {
-		ReplyToCommand(client, "%s: 新的数量 %d 无效, 请确认输入有效性", PLUGIN_PREFIX, newLimit);
+		CReplyToCommand(client, "{O}%s: {W}新的数量 {O}%d {G}无效, {W}请确认输入有效性", PLUGIN_PREFIX, newLimit);
 		return Plugin_Handled;
 	}
 	g_hInfectedLimit.SetInt(newLimit);
-	ReplyToCommand(client, "%s: 已调整特感刷新为 %d 特 %d 秒", PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnDuration.IntValue);
+	CReplyToCommand(client, "{O}%s: {W}已调整特感刷新为 {O}%d特%d秒", PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnDuration.IntValue);
 	return Plugin_Handled;
 }
 
@@ -63,7 +63,7 @@ public Action cmdInfectedLimit(int client, int args) {
 **/
 public Action cmdSpawnDuration(int client, int args) {
 	if (args != 1) {
-		ReplyToCommand(client, "%s: 请使用 !duration <sec> 来修改特感刷新时间", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}请使用 {O}!duration <sec> {W}来修改{G}特感刷新时间", PLUGIN_PREFIX);
 		return Plugin_Handled;
 	}
 	char argStr[16];
@@ -71,11 +71,11 @@ public Action cmdSpawnDuration(int client, int args) {
 
 	int newTime = StringToInt(argStr);
 	if (newTime < 0) {
-		ReplyToCommand(client, "%s: 新的特感刷新时间 %d 秒无效, 请确认输入有效性", PLUGIN_PREFIX, newTime);
+		CReplyToCommand(client, "{O}%s: {W}新的特感刷新时间 {O}%d {W}秒无效, 请确认输入有效性", PLUGIN_PREFIX, newTime);
 		return Plugin_Handled;
 	}
 	g_hSpawnDuration.SetInt(newTime);
-	ReplyToCommand(client, "%s: 已调整特感刷新为 %d 特 %d 秒", PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnDuration.IntValue);
+	CReplyToCommand(client, "{O}%s: {W}已调整特感刷新为 {O}%d特%d秒", PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnDuration.IntValue);
 	return Plugin_Handled;
 }
 
@@ -87,7 +87,7 @@ public Action cmdSpawnDuration(int client, int args) {
 **/
 public Action cmdSingleInfectedMode(int client, int args) {
 	if (args != 1) {
-		ReplyToCommand(client, "%s: 请使用 !type <num> 来指定使用哪种特感的单一特感模式, 0 为关闭", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}请使用 {O}!type <num> {W}来指定使用哪种特感的单一特感模式, 0 为关闭", PLUGIN_PREFIX);
 		return Plugin_Handled;
 	}
 	char argStr[16];
@@ -95,14 +95,14 @@ public Action cmdSingleInfectedMode(int client, int args) {
 
 	int newType = StringToInt(argStr);
 	if (newType < 0 || newType > 6) {
-		ReplyToCommand(client, "%s: 新的单一特感模式值 %d 秒无效, 请输入介于 0-6 之间的值", PLUGIN_PREFIX, newType);
+		CReplyToCommand(client, "{O}%s: {W}新的单一特感模式值 {O}%d {W}秒无效, 请输入{G}介于 0-6 之间的值", PLUGIN_PREFIX, newType);
 		return Plugin_Handled;
 	}
 	g_hSingleInfectedMode.SetInt(newType);
 	if (newType == 0) {
-		ReplyToCommand(client, "%s: 已关闭单一特感模式", PLUGIN_PREFIX);
+		CReplyToCommand(client, "{O}%s: {W}已{O}关闭{W}单一特感模式", PLUGIN_PREFIX);
 	} else {
-		ReplyToCommand(client, "%s: 已调整为单一特感 %s 模式", PLUGIN_PREFIX, INFECTED_NAME[newType]);
+		CReplyToCommand(client, "{O}%s: {W}已调整为单一特感 {O}%s {W}模式", PLUGIN_PREFIX, INFECTED_NAME[newType]);
 	}
 	return Plugin_Handled;
 }
