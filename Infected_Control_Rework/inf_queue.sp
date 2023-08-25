@@ -178,7 +178,7 @@ ArrayList getInfectedQueue() {
 	int spawnCount[7]; subtractArray(cvarCount, sizeof(cvarCount), infCount, sizeof(infCount), spawnCount, sizeof(spawnCount));
 
 	// 需要刷新的特感数量, 当前存活特感数量, 已经处理的特感数量, 特感等待队列为 null 数量
-	int needCount = 0, aliveCount = 0, generatedCount = 0, nullWaitingListCount = 0;
+	int i, needCount = 0, aliveCount = 0, generatedCount = 0, nullWaitingListCount = 0;
 	needCount = g_hInfectedLimit.IntValue - (aliveCount = getTeamClientCount(TEAM_INFECTED, true, false));
 
 	log.debugAndInfo("%s: 当前在场特感数量 %d 只, 需要刷新 %d 只特感", PLUGIN_PREFIX, aliveCount, needCount);
@@ -187,7 +187,7 @@ ArrayList getInfectedQueue() {
 	queue.Clear();
 
 	// 选中的特感类型, 选中特感类型当前在场数量, 有特感队列 kv 文件下当前正在处理的位置, 特感等待队列索引
-	int infectedType, infectedCount, handlingIndex = 1, waitingListIndex;
+	int infectedType, infectedCount, handlingIndex = 1, handlingListIndex;
 	int tankClient = isTankPresence();
 	// 是否正在处理特感等待队列, 有 kv 文件时是否可以随机选择特感
 	bool handling, canRandomSelect, tankPresence = (IsValidClient(tankClient) && IsPlayerAlive(tankClient));
@@ -204,8 +204,8 @@ ArrayList getInfectedQueue() {
 			SetFailState("\n==========\n 当前 %d 特模式, 未配置任何特感等待队列, 请在 %s 中配置 %d 特的特感等待队列 \n==========\n", g_hInfectedLimit.IntValue, kvFilePath, g_hInfectedLimit.IntValue);
 		}
 
-		// 特感需要的数量小于 0 或已经生成了对应需要数量的特感, 跳出
-		if (needCount <= 0 || generatedCount >= needCount) {
+		// 特感需要的数量小于 0 或已经生成了对应需要数量的特感, 或处理完毕所有位置, 跳出
+		if (needCount <= 0 || generatedCount >= needCount || handlingIndex > g_hInfectedLimit.IntValue) {
 			break;
 		}
 
@@ -233,71 +233,69 @@ ArrayList getInfectedQueue() {
 
 		// HACK: 多种特感模式下 Tank 在场的刷新控制, 初步完成功能, 检查修复 Bug
 		// 允许刷新多种特感模式
-		// 特感刷新队列处理完毕, 检查是否还可以加入新的特感, 可以则表示特感队列 kv 文件有位置没配置或配置特感种类过少, 允许随机获取特感种类
-		if (handlingIndex > g_hInfectedLimit.IntValue && generatedCount < needCount && !canRandomSelect) {
-			canRandomSelect = true;
-		}
-
 		if (isInfectedQueueKvFileExist && !handling && handlingIndex <= g_hInfectedLimit.IntValue) {
 			// 获取当前处理位置的特感等待队列
 			waitingList = infectedQueuePosition[handlingIndex];
-			// 当前特感等待队列为空, 跳过
+			// 当前特感位置集合为 null, 表示没有配置这个位置允许刷新的特感类型, null 位置集合数量加一, 开始随机分配
 			if (waitingList == null) {
-				handlingIndex++;
 				nullWaitingListCount++;
-				continue;
 			} else {
+				// 当前特感位置集合不为 null, 拷贝一份副本, 开始随机选择这个位置上允许刷新的特感
 				handlingList = waitingList.Clone();
 				handling = true;
 			}
 		}
 
-		// 没有配置特感队列 kv 文件, 随机选取特感
-		if (!isInfectedQueueKvFileExist || canRandomSelect) {
-			infectedType = GetRandomIntInRange(ZC_SMOKER, ZC_CHARGER);
-			
-			// Tank 在场, 且没有配置特感队列 kv 文件
-			if (tankPresence && banSpawnClassDurintTank[infectedType]) {
-				infectedType = getClassWithBanStrategyDuringTank(infectedType, spawnCount, sizeof(spawnCount));
-				// 无效替换 或 使用封锁策略, 跳过这个位置
-				if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
-					generatedCount++;
-					continue;
-				}
-			}
+		// 当前刷新位置的位置集合为空, 没有处理完所有位置, 则随机分配剩余有可刷新数量的特感类型
+		if (handlingIndex <= g_hInfectedLimit.IntValue && (waitingList == null || handlingList.Length < 1) && 
+			generatedCount < needCount && !canRandomSelect) {
 
-			// 该特感不允许刷新了, 进行下一轮循环
-			if (spawnCount[infectedType] <= 0) {
-				continue;
-			}
-			queue.Push(infectedType);
-			spawnCount[infectedType] = spawnCount[infectedType] == 0 ? 0 : spawnCount[infectedType] - 1;
-
-			strcopy(infectedName, sizeof(infectedName), INFECTED_NAME[infectedType]);
-			infectedCount = getSpecificInfectedCount(infectedType);
-			log.debugAndInfo("%s: 向特感刷新队列中加入一只：%s, 当前在场 %s 数量: %d 只, 剩余 %s 可刷新数量: %d", PLUGIN_PREFIX, infectedName, infectedName, infectedCount, infectedName, spawnCount[infectedType]);
-
-			if (isInfectedQueueKvFileExist) {
-				handlingIndex++;
-			}
-			generatedCount++;
-
-			continue;
+			canRandomSelect = true;
+			log.debugAndInfo("\n%s: 当前正在处理索引 %d 位置, 位置集合是否为 null %b, 是否为空 %b, 已处理完成 %d 只特感, 是否允许随机选取特感 %b", PLUGIN_PREFIX, handlingIndex, waitingList == null, waitingList == null ? false : handlingList.Length < 1 ? true : false, generatedCount, canRandomSelect);
 		}
 
-		// 当前位置等待队列为 null, 配置文件中没有配置此位置 或 处理队列为空, 表示此位置可以刷新的所有特感类型都达到在场上限, 无法刷新, 处理下一个位置
-		if (waitingList == null || handlingList.Length < 1) {
-			log.info("%s: 当前正在处理 %d 号位置, 该位置等待队列是否为 null: %b, 处理队列长度是否小于 1: %b, 跳过, 处理下一个位置", PLUGIN_PREFIX, handlingIndex, waitingList == null, (handlingList == null ? false : handlingList.Length < 1 ? true : false));
+		// 没有配置特感队列 kv 文件 或 本位置允许随机选取特感, 随机选取特感
+		if (!isInfectedQueueKvFileExist || canRandomSelect) {
 
+			for (i = ZC_SMOKER; i <= ZC_CHARGER; i++) {
+				if (spawnCount[i] <= 0)
+					continue;
+				// 找到了一个还有剩余数量的特感类型
+				if (tankPresence && banSpawnClassDurintTank[i]) {
+					i = getClassWithBanStrategyDuringTank(i, spawnCount, sizeof(spawnCount));
+					// 无效替换 或 使用封锁策略, 跳过这个位置
+					if (i < ZC_SMOKER || i > ZC_CHARGER) {
+						handlingIndex++;
+						handling = false;
+						break;
+					}
+				}
+				log.debugAndInfo("%s: 允许随机选取特感, Tank 在场 %b, 向刷新队列中加入一只 %s, 当前在场 %s 数量 %d", PLUGIN_PREFIX, tankPresence, INFECTED_NAME[i], INFECTED_NAME[i], getSpecificInfectedCount(i));
+
+				queue.Push(i);
+				spawnCount[i] = spawnCount[i] <= 0 ? 0 : spawnCount[i] - 1;
+				break;
+			}
+			delete handlingList;
+			handlingIndex++;
+			handling = false;
+			canRandomSelect = false;
+			continue;
+
+		}
+
+		// 配置了特感队列 kv 文件, 或 不允许随机选取, 则从当前位置集合中随机选取
+		infectedType = handlingList.Get((handlingListIndex = GetRandomIntInRange(0, handlingList.Length - 1)));
+
+		if (infCount[infectedType] > 0) {
+			log.debugAndInfo("%s: 当前正在处理索引 %d 位置, 是否允许随机选取特感 %b, 选取到的特感类型 %s, 在场数量 %d, 跳过这个位置", PLUGIN_PREFIX, handlingIndex, canRandomSelect, INFECTED_NAME[infectedType], getSpecificInfectedCount(infectedType));
+
+			infCount[infectedType] = infCount[infectedType] <= 0 ? 0 : infCount[infectedType] - 1;
 			delete handlingList;
 			handlingIndex++;
 			handling = false;
 			continue;
 		}
-
-		// 配置了特感队列 kv 文件，从等待队列中随机选取
-		waitingListIndex = GetRandomIntInRange(0, handlingList.Length - 1);
-		infectedType = handlingList.Get(waitingListIndex);
 
 		// Tank 在场, 且配置了特感队列 kv 文件, 当前随机到的特感类型不允许刷新
 		if (tankPresence && banSpawnClassDurintTank[infectedType]) {
@@ -306,37 +304,26 @@ ArrayList getInfectedQueue() {
 			if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
 				delete handlingList;
 				handlingIndex++;
-				generatedCount++;
 				handling = false;
 				continue;
 			}
 		}
 
-		// 如果选择到当前特感, 且当前特感种类有在场, 在场种类减一, 处理下一个位置
-		if (infCount[infectedType] > 0) {
-			infCount[infectedType] = infCount[infectedType] == 0 ? 0 : infCount[infectedType] - 1;
-
-			delete handlingList;
-			handlingIndex++;
-			handling = false;
-			continue;
-		}
-
-		// 选择到当前特感可刷数量小于等于 0, 擦除这一个特感类型, 随机下一个特感类型
+		// 选择到当前特感且当前特感类型允许刷数量小于等于 0, 擦除这一个特感类型, 随机下一个特感类型
 		if (spawnCount[infectedType] <= 0) {
-			handlingList.Erase(waitingListIndex);
+			handlingList.Erase(handlingListIndex);
 			continue;
 		}
 		queue.Push(infectedType);
 		spawnCount[infectedType] = spawnCount[infectedType] == 0 ? 0 : spawnCount[infectedType] - 1;
 
-		strcopy(infectedName, sizeof(infectedName), INFECTED_NAME[infectedType]);
-		infectedCount = getSpecificInfectedCount(infectedType);
-		log.debugAndInfo("%s: 向特感刷新队列中加入一只：%s, 当前在场 %s 数量: %d 只, 剩余 %s 可刷新数量: %d", PLUGIN_PREFIX, infectedName, infectedName, infectedCount, infectedName, spawnCount[infectedType]);
+		log.debugAndInfo("%s: 向特感刷新队列 (索引 %d) 中加入一只：%s, 当前在场 %s 数量: %d 只, 剩余 %s 可刷新数量: %d", PLUGIN_PREFIX, handlingIndex, INFECTED_NAME[infectedType], INFECTED_NAME[infectedType], infectedCount, INFECTED_NAME[infectedType], spawnCount[infectedType]);
 
 		handlingIndex++;
 		generatedCount++;
 		
+		log.debugAndInfo("%s: 即将开始处理特感刷新队列索引 %d 位置, 当前已处理完成 %d 只特感", PLUGIN_PREFIX, handlingIndex, generatedCount);
+
 		delete handlingList;
 		handling = false;
 	}
@@ -353,9 +340,8 @@ ArrayList getInfectedQueue() {
 
 	// 发布队列创建完成事件
 	int[] queueArray = new int[queue.Length];
-	for (int i = 0; i < queue.Length; i++) {
+	for (i = 0; i < queue.Length; i++)
 		queueArray[i] = queue.Get(i);
-	}
 	Call_StartForward(onInfectedQueueGenerated);
 	Call_PushArray(queueArray, queue.Length);
 	Call_PushCell(queue.Length);
@@ -733,8 +719,7 @@ void getBanSpawnClassDuringTank() {
 * @return int
 **/
 static int getClassWithBanStrategyDuringTank(int sourceClass, int[] spawnCount, int size) {
-	int i, newClass;
-	bool spawnCountAvailable;
+	int i;
 	// Tank 在场时, 随机到该特感, 该特感不允许刷新, 使用替换策略
 	if (g_hBanSpawnClassDuringTankStrategy.IntValue == BSDT_REPLACE) {
 		for (i = 1; i < size; i++) {
@@ -743,26 +728,16 @@ static int getClassWithBanStrategyDuringTank(int sourceClass, int[] spawnCount, 
 				continue;
 			}
 			if (spawnCount[i] > 0) {
-				newClass = i;
-				spawnCountAvailable = true;
-				break;
+				log.debugAndInfo("%s: Tank 在场, 特感 %s 不允许刷新, 使用替换策略, 新特感 %s", PLUGIN_PREFIX, INFECTED_NAME[sourceClass], INFECTED_NAME[i]);
+
+				return i;
 			}
-		}
-		// 可以被替换, 则加入一个替换后的特感
-		if (spawnCountAvailable) {
-			log.debugAndInfo("%s: Tank 在场, 当前特感: %s 不允许刷新, 使用替换策略, 新特感: %s", PLUGIN_PREFIX, INFECTED_NAME[sourceClass], INFECTED_NAME[newClass]);
-
-			return i;
-		} else {
-			log.debugAndInfo("%s: Tank 在场, 当前特感: %s 不允许刷新, 使用替换策略, 其他特感没有余量, 跳过此位置", PLUGIN_PREFIX, INFECTED_NAME[sourceClass]);
-
-			// 不能被替换, 其他特感都没有余量
-			return INVALID_CLIENT_INDEX;
 		}
 	} else if (g_hBanSpawnClassDuringTankStrategy.IntValue == BSDT_BAN) {
 		// Tank 在场时, 随机到该特感, 该特感不允许刷新, 使用封锁策略
 		log.debugAndInfo("%s: Tank 在场, 当前特感: %s 不允许刷新, 使用封锁策略, 跳过此位置", PLUGIN_PREFIX, INFECTED_NAME[sourceClass]);
 	}
+	// 找不到可以被替换的特感或使用封锁策略, 返回 -1
 	return INVALID_CLIENT_INDEX;
 }
 

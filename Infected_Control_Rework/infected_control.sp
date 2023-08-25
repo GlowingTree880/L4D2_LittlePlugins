@@ -329,6 +329,9 @@ public void OnPluginEnd() {
 	// 其他模块
 	// 特感刷新队列模块
 	infectedQueueOnModuleEnd();
+
+	for (int i = 1; i <= MaxClients; i++)
+		SDKUnhook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
 }
 
 public void OnMapStart() {
@@ -482,7 +485,7 @@ void sdkHookFindPosHandler(int client) {
 	}
 
 	// 不允许刷新新的特感, 返回
-	if (!canSpawnNewInfected || isInFindPosFailedDelay || isInSpawnFinishedTime) {
+	if (!isLeftSafeArea || !canSpawnNewInfected || isInFindPosFailedDelay || isInSpawnFinishedTime) {
 		return;
 	}
 

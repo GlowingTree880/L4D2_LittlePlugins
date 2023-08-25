@@ -103,7 +103,7 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 
 	static int i;
 	// 客户端位置, 找位网格左边界, 找位网格右边界, 射线坐标, 射线撞击位置坐标, 射线撞击位置与最近生还者位置的 Nav 距离
-	static float pos[3], expandLeftPos[2][3], expandRightPos[2][3], rayPos[3], rayEndPos[3], navDistance;
+	static float pos[3], expandLeftPos[2][3], expandRightPos[2][3], rayPos[3], rayEndPos[3], visiblePos[3];
 
 	GetClientAbsOrigin(client, pos);
 	CopyVectors(pos, expandLeftPos[POS_UP]);	CopyVectors(pos, expandLeftPos[POS_DOWN]);
@@ -155,39 +155,33 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 			continue;
 		}
 		TR_GetEndPosition(rayEndPos, traceRay);
-
 		delete traceRay;
+		CopyVectors(rayEndPos, visiblePos);
 
 		rayEndPos[2] += RAY_Z_OFFSET;
+		visiblePos[2] += PLAYER_HEIGHT;
 
 		// HACK: 位置有效性检测, 性能测试, Bug 排除
-		Address
-			rayEndPosNav = isOnValidNavArea(rayEndPos),
-			targetSurvivorNav = isOnValidNavArea(pos),
-			nearestSurvivorNav;
-		static int nearestSurvivor;
-		nearestSurvivor = INVALID_CLIENT_INDEX;
+		static Address rayEndPosNav, nearestSurvivorNav;
+		rayEndPosNav = isOnValidNavArea(rayEndPos);
 
 		// 检测射线撞击位置是否在无效 Nav 上
-		if (rayEndPosNav == Address_Null || posWillStuckClient(rayEndPos)) {
+		if (rayEndPosNav == Address_Null || posWillStuckClient(rayEndPos))
 			continue;
-		}
-
-		// 位置可以被生还者看见则无效
-		rayEndPos[2] = rayEndPos[2] + PLAYER_HEIGHT;
-		if (isVisibleToSurvivor(rayEndPos, rayEndPosNav)) {
+		// 位置是否可以被任何生还者看见
+		if (isVisibleToSurvivor(visiblePos, rayEndPosNav))
 			continue;
-		}
 
-		// 位置与最近生还者的直线距离小于限制距离或大于限制距离
-		nearestSurvivor = checkPosVectorDistanceWithAllSurvivors(rayEndPos, g_hMinDistance.FloatValue, g_hMaxDistance.FloatValue);
-		if (!IsValidSurvivor(nearestSurvivor) || !IsPlayerAlive(nearestSurvivor)) {
+		static int nearestSurvivor;
+		nearestSurvivor = getNearestSurvivorFromPos(rayEndPos);
+		if (!IsValidClient(nearestSurvivor))
 			continue;
-		}
-
-		// 获取最近的生还者所在的位置与 Nav 地址, 判断是否有路径可达
-		GetClientAbsOrigin(nearestSurvivor, pos);
-		nearestSurvivorNav = isOnValidNavArea(pos);
+		// 射线撞击位置与距离射线撞击位置最近的生还者 是否满足直线距离
+		static float distance, targetPos[3];
+		GetClientAbsOrigin(nearestSurvivor, targetPos);
+		distance = GetVectorDistance(rayEndPos, targetPos);
+		if (distance < g_hMinDistance.FloatValue || distance > g_hMaxDistance.FloatValue)
+			continue;
 
 		// NOTE: 高位 Nav 距离补偿
 		static float maxNavDistance;
@@ -196,29 +190,25 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 		} else {
 			maxNavDistance = g_hMaxNavDistance.FloatValue;
 		}
-		// 最近的生还者不在有效 Nav 上 或 从刷特位置到最近生还者没有路可走, 跳过
-		if (nearestSurvivorNav == Address_Null || !L4D2_NavAreaBuildPath(rayEndPosNav, nearestSurvivorNav, maxNavDistance, TEAM_INFECTED, false)) {
+		// 从射线撞击位置到最近生还者 Nav 处无路可走, 跳过
+		nearestSurvivorNav = L4D_GetNearestNavArea(targetPos, 120.0, false, false, false, TEAM_INFECTED);
+		if (!L4D2_NavAreaBuildPath(rayEndPosNav, nearestSurvivorNav, maxNavDistance, TEAM_INFECTED, false))
 			continue;
-		}
 
 		// 获取 Nav 距离, 判断射线撞击位置 Nav 与最近生还所在的 Nav 距离是否在有效 Nav 距离之间
-		navDistance = L4D2_NavAreaTravelDistance(rayEndPos, pos, false);
-		if (navDistance < g_hMinNavDistance.FloatValue || navDistance > maxNavDistance) {
+		distance = L4D2_NavAreaTravelDistance(rayEndPos, pos, false);
+		if (distance < g_hMinNavDistance.FloatValue || distance > maxNavDistance)
 			continue;
-		}
 
 		// 是否启用位置必须在目标前方
-		if (g_hPosShouldAheadSurvivor.BoolValue && !navIsAheadAnotherNav(rayEndPosNav, targetSurvivorNav)) {
+		if (g_hPosShouldAheadSurvivor.BoolValue && !navIsAheadAnotherNav(rayEndPosNav, nearestSurvivorNav))
 			continue;
-		}
 
 		// 是否启用安全区域刷新
-		if (!g_hAllowSpawnInSafeArea.BoolValue && (L4D_GetNavArea_SpawnAttributes(rayEndPosNav) & NAV_SPAWN_CHECKPOINT)) {
+		if (!g_hAllowSpawnInSafeArea.BoolValue && (L4D_GetNavArea_SpawnAttributes(rayEndPosNav) & NAV_SPAWN_CHECKPOINT))
 			continue;
-		}
 
 		// 位置有效, 返回坐标
-		rayEndPos[2] -= RAY_Z_OFFSET + 5.0;
 		CopyVectors(rayEndPos, spawnPos);
 		break;
 	}
@@ -250,32 +240,37 @@ static bool traceRayNoPlayerFilter(int entity, int contentsMask, any data) {
     return true;
 }
 
-static int checkPosVectorDistanceWithAllSurvivors(const float pos[3], const float minDistance, const float maxDistance) {
+/**
+* 获取距离给定位置最近的生还者
+* @param pos 给定位置坐标
+* @return int
+**/
+static int getNearestSurvivorFromPos(const float pos[3]) {
 	static int i;
-	static float clientPos[3];
-	static ArrayList distanceList;
-	distanceList = new ArrayList(2);
+	static ArrayList list;
+	list = new ArrayList(2);
+	float targetPos[3];
 	for (i = 1; i <= MaxClients; i++) {
-		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) {
+		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i))
 			continue;
-		}
-		GetClientAbsOrigin(i, clientPos);
-		distanceList.Set(distanceList.Push(GetVectorDistance(pos, clientPos)), i, 1);
+		GetClientAbsOrigin(i, targetPos);
+		list.Set(list.Push(GetVectorDistance(pos, targetPos)), i, 1);
 	}
-	// 按照生还者位置与被检测的位置距离升序排序
-	distanceList.Sort(Sort_Ascending, Sort_Float);
-	if (distanceList.Length < 1) {
-		delete distanceList;
+	if (list.Length < 1) {
+		delete list;
 		return INVALID_CLIENT_INDEX;
 	}
-	// 如果被检测的位置到离其最近的生还者的距离大于最小距离且小于最大距离则有效
-	if (distanceList.Get(0, 0) >= minDistance && distanceList.Get(0, 0) <= maxDistance) {
-		i = distanceList.Get(0, 1);
-	}
-	delete distanceList;
+	list.Sort(Sort_Ascending, Sort_Float);
+	i = list.Get(0, 1);
+	delete list;
 	return i;
 }
 
+/**
+* 判断给定坐标是否在有效 Nav Area 上
+* @param pos 给定坐标
+* @return Address, 有效返回 Nav Address, 无效返回 Address_Null
+**/
 static Address isOnValidNavArea(float pos[3]) {
 	return L4D2Direct_GetTerrorNavArea(pos);
 }

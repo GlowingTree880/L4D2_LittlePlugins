@@ -127,6 +127,7 @@ sm_infqueue (!infqueue <num [10]>)
         ... 此处省略 7 - 31 的配置, 插件默认生成的 infected_queue.cfg 默认生成到 31, 相当于 31 特的配置, 实际使用时请按实际游玩需要特感数量配置
     }
    ``````
+3. 更改 Cvar `inf_spawn_method_strategy` 后请重启当前地图，否则可能会出现更改完成后无法刷新下一波特感的情况
 
 ## 更新日志
 - 2023-08-09: 上传插件与 readme 文件
@@ -135,6 +136,11 @@ sm_infqueue (!infqueue <num [10]>)
 1. 修复超过 6 特无法读取特感位置队列的问题<br>
 2. 增加 Cvar: inf_unreach_six_alternative 控制是否开启 6 特以下特感轮换 (1,5 特最后一个刷新的特感类型下一波不会出现, 2,3,4 特最后两个刷新的特感类型下一波不会出现, 需要保证该特感类型允许刷新, 即 z_xxx_limit 不为 0)<br>
 3. 修复检查基准时钟及动态时钟是否允许被触发相关函数中特感总数及强控阈值获取错误的问题
+</details>
+<details>
+<summary>2023-08-25</summary>
+1. 更改一些特感刷新队列的生成策略与 Tank 在场时特感的替换策略<br>
+2. 修复特感实际刷新位置为 rayEndPos + PLAYER_HEIGHT 的问题
 </details>
 
 ---
