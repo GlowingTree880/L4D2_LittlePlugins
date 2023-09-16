@@ -14,6 +14,7 @@
 #include <sdktools>
 #include <left4dhooks>
 #include <logger>
+#include <colors>
 #include "treeutil/treeutil.sp"
 
 #define CVAR_FLAG FCVAR_NOTIFY
@@ -56,6 +57,9 @@ ConVar
 	g_hTransParentTeleport,
 	g_hEnableLog;
 
+ConVar
+	g_hAllowTeleportPlayer;
+
 // 目标策略
 enum
 {
@@ -73,6 +77,14 @@ enum
 	BLOCK_TYPE_PLAYER_INFECTED,
 	BLOCK_TYPE_ALL_INFECTED,
 	BLOCK_TYPE_ALL_PLAYERS_AND_PHYSICS_OBJECTS
+};
+
+enum
+{
+	TP_PLAYER_DISABLE,
+	TP_PLAYER_ENABLE,
+	TP_PLAYER_GHOST,
+	TP_PLAYER_SIZE
 };
 
 int
@@ -141,7 +153,9 @@ public void OnPluginStart()
 	g_hTargetType = CreateConVar("teleport_target_type", "2", "特感传送目标选择: 1=随机生还者, 2=离自身最近的生还者, 3=路程最高的生还者, 4=路程最低的生还者", CVAR_FLAG, true, float(TARGET_RANDOM), true, float(TARGET_STRATERGY_SIZE - 1));
 	g_hAllowInSaferoom = CreateConVar("teleport_allow_in_saferoom", "0", "特感传送时是否允许传送到安全屋内", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hTransParentTeleport = CreateConVar("teleport_transparent", "1", "是否在特感传送前将其设置为透明，传送后恢复", CVAR_FLAG, true, 0.0, true, 1.0);
-	g_hEnableLog = CreateConVar("teleport_log_level", "6", "插件日志记录级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hAllowTeleportPlayer = CreateConVar("teleport_allow_player", "2", "是否允许传送特感玩家, 0: 不允许, 1: 允许传送, 2: 允许传送并在传送后设置灵魂状态", CVAR_FLAG, true, float(TP_PLAYER_DISABLE), true, float(TP_PLAYER_SIZE - 1));
+	// 日志记录
+	g_hEnableLog = CreateConVar("teleport_log_level", "38", "插件日志记录级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加", CVAR_FLAG, true, 0.0);
 
 	log = new Logger(g_hEnableLog.IntValue);
 
@@ -158,9 +172,8 @@ public void OnPluginStart()
 	// 插件延迟加载
 	if (pluginLateLoad) {
 		for (int i = 1; i <= MaxClients; i++) {
-			if (!IsClientInGame(i)) {
+			if (!IsClientInGame(i))
 				continue;
-			}
 			OnClientPutInServer(i);
 		}
 		RequestFrame(nextFrameOnPluginStart);
@@ -199,12 +212,14 @@ public void roundStartHandler(Event event, const char[] name, bool dontBroadcast
 }
 
 public void OnClientPutInServer(int client) {
-	SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
-	if (client > 0 && client <= MaxClients && teleportInfecteds[client] == null) {
+	if (client < 0 || client > MaxClients)
+		return;
+	if (teleportInfecteds[client] == null)
 		teleportInfecteds[client] = new ArrayList();
-	} else {
+	else
 		teleportInfecteds[client].Clear();
-	}
+	// start SDKHook
+	SDKHook(client, SDK_HOOK_TYPE, sdkHookThinkCallback);
 }
 
 public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
@@ -218,36 +233,40 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
  * @param: {timer} 时钟句柄
  * @return: {Action} 
  */
-public Action checkInfectedCanBeTeleportHandler(Handle timer)
-{
+public Action checkInfectedCanBeTeleportHandler(Handle timer) {
 	static int
 				i,
 				target;
-	for (i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_INFECTED || !IsPlayerAlive(i) || IsInGhostState(i)) {
+	for (i = 1; i <= MaxClients; i++) {
+		// 无效特感
+		if (!IsClientInGame(i) || GetClientTeam(i) != TEAM_INFECTED || !IsPlayerAlive(i) || IsInGhostState(i))
+			continue;
+
+		// 无效传送目标
+		target = getTargetSurvivor(i);
+		if (!IsValidSurvivor(target) || !IsPlayerAlive(target))
+			continue;
+		
+		// 当前不允许传送
+		if (!canBeTeleport(i, target)) {
+			teleportCheckTime[i] = 0;
+			canFindTeleportPos[i] = false;
 			continue;
 		}
 
-		target = getTargetSurvivor(i);
-		if (!IsValidSurvivor(target) || !IsPlayerAlive(target)) {
-			continue;
-		}
-		if (!canBeTeleport(i, target)) {
-			teleportCheckTime[i] = 0;
-			continue;
-		}
-		// 检查通过，增加传送次数
+		// 允许传送, 增加传送次数
 		teleportCheckTime[i]++;
 		if (teleportCheckTime[i] > g_hCheckTime.IntValue) {
 			canFindTeleportPos[target] = true;
+			
+			if (teleportInfecteds[target] == null)
+				teleportInfecteds[target] = new ArrayList();
+
 			// 当前特感 UserId 不在目标的传送集合中，则添加
 			int userId = GetClientUserId(i);
-			if (teleportInfecteds[target].FindValue(userId) < 0) {
+			if (teleportInfecteds[target].FindValue(userId) < 0)
 				teleportInfecteds[target].Push(userId);
-			}
 		}
-		canFindTeleportPos[target] = canFindTeleportPos[target] ? true : false;
 	}
 	return Plugin_Continue;
 }
@@ -260,18 +279,17 @@ public Action checkInfectedCanBeTeleportHandler(Handle timer)
 void sdkHookThinkCallback(int client)
 {
 	// 插件未开启或不允许找位，返回
-	if (!g_hEnable.BoolValue || !canFindTeleportPos[client] || GetGameTime() - resetFindPosTime[client] < FIND_POS_DELAY) {
+	if (!g_hEnable.BoolValue || !canFindTeleportPos[client] || GetGameTime() - resetFindPosTime[client] < FIND_POS_DELAY)
 		return;
-	}
-	if (!IsPlayerAlive(client)) {
+	if (!IsPlayerAlive(client))
 		return;
-	}
+	if (teleportInfecteds[client] == null)
+		return;
+
 	// 这个生还者的待传送特感集合中没有特感，返回
-	if (teleportInfecteds[client].Length < 1)
-	{
-		if (expandFrame[client][0] > 0) {
+	if (teleportInfecteds[client].Length < 1) {
+		if (expandFrame[client][0] > 0)
 			expandFrame[client][0] = expandFrame[client][1] = 0;
-		}
 		return;
 	}
 	// 可以传送
@@ -373,18 +391,21 @@ void sdkHookThinkCallback(int client)
 			if (g_hAllowInSaferoom.BoolValue && L4D_GetNavArea_SpawnAttributes(rayEndNav) & NAV_SPAWN_CHECKPOINT) {
 				continue;
 			}
-			log.info("%s: 即将传送特感 %N 到目标 %N 旁, 检测 %d 次", PLUGIN_PREFIX, teleportInfected, client, teleportCheckTime[teleportInfected]);
 			if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected)) {
 				teleportInfecteds[client].Erase(0);
 				teleportInfected = INVALID_CLIENT;
 				break;
 			}
 			// 当前特感不允许被传送，传送检测设置为 0 并跳出
-			if (!canBeTeleport(teleportInfected, client))
-			{
+			if (!canBeTeleport(teleportInfected, client)) {
 				teleportCheckTime[teleportInfected] = 0;
 				break;
 			}
+			log.info("%s: 即将传送特感 %N 到目标 %N 旁, 检测 %d 次", PLUGIN_PREFIX, teleportInfected, client, teleportCheckTime[teleportInfected]);
+			// 玩家特感传送前提示
+			if (!IsFakeClient(teleportInfected))
+				CPrintToChat(teleportInfected, "{B}[{W}提示{B}]: {W}由于您距离生还者过远, 即将将您传送到目标 {G}%N {W}处...", client);
+
 			navPos[2] -= 15.0;
 			// 实体传送时是否设置透明，传送完成恢复
 			if (g_hTransParentTeleport.BoolValue)
@@ -402,6 +423,8 @@ void sdkHookThinkCallback(int client)
 			else
 			{
 				TeleportEntity(teleportInfected, navPos, NULL_VECTOR, NULL_VECTOR);
+				// 检查是否玩家特感传送
+				RequestFrame(nextFrameDoCheckIsPlayerTeleport, teleportInfected);
 			}
 			teleportInfecteds[client].Erase(0);
 			log.info("%s: 即将传送落后特感 %N, 直线距离 %.1f, Nav 距离 %.1f, 检测 %d 次", PLUGIN_PREFIX, teleportInfected, vecDistance, navDistance, teleportCheckTime[teleportInfected]);
@@ -444,6 +467,53 @@ void nextFrameDoTeleportInfected(DataPack pack)
 	if (!IsValidInfected(teleportInfected) || !IsPlayerAlive(teleportInfected)) { return; }
 	TeleportEntity(teleportInfected, navPos, NULL_VECTOR, NULL_VECTOR);
 	SetEntityRenderColor(teleportInfected, renderColor[0], renderColor[1], renderColor[2], renderColor[3]);
+	// 检查是否玩家特感传送
+	RequestFrame(nextFrameDoCheckIsPlayerTeleport, teleportInfected);
+}
+
+/**
+* 特感传送检查是否玩家传送回调函数
+* @param client 传送的客户端索引
+* @return void
+**/
+void nextFrameDoCheckIsPlayerTeleport(int client) {
+	if (!IsValidInfected(client) || !IsPlayerAlive(client))
+		return;
+	if (IsFakeClient(client))
+		return;
+
+	// 人类玩家特感, 检查是否需要设置为灵魂状态
+	if (g_hAllowTeleportPlayer.IntValue != TP_PLAYER_GHOST)
+		return;
+	int preType = GetEntProp(client, Prop_Send, "m_zombieClass");
+	if (preType < ZC_SMOKER || preType > ZC_CHARGER)
+		return;
+
+	// 设置玩家特感灵魂状态
+	L4D_State_Transition(client, STATE_GHOST);
+
+	DataPack pack = new DataPack();
+	pack.WriteCell(client);
+	pack.WriteCell(preType);
+
+	// 下一帧设置该玩家特感的类型, 否则类型会改变
+	RequestFrame(nextFrameSetClass, pack);
+}
+
+void nextFrameSetClass(DataPack pack) {
+	if (pack == null)
+		return;
+	pack.Reset();
+	
+	int client, preType;
+	client = pack.ReadCell();
+	preType = pack.ReadCell();
+	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_INFECTED || !IsPlayerAlive(client))
+		return;
+	if (preType < ZC_SMOKER || preType > ZC_CHARGER)
+		return;
+	
+	L4D_SetClass(client, preType);
 }
 
 /*
@@ -662,6 +732,7 @@ void getAllowedTeleportInfected()
 
 void onSurvivorLeftSafeArea()
 {
+	PrintToConsoleAll("生还者出门, 创建时钟");
 	delete teleportCheckTimer;
 	teleportCheckTimer = CreateTimer(g_hCheckInterval.FloatValue, checkInfectedCanBeTeleportHandler, _, TIMER_REPEAT);
 }
@@ -675,15 +746,21 @@ void onSurvivorLeftSafeArea()
 static bool canBeTeleport(int client, int target)
 {
 	// 不是有效特感，不允许传送
-	if (!IsValidInfected(client) || IsInGhostState(client) || !IsPlayerAlive(client)) { return false; }
+	if (!IsValidInfected(client) || IsInGhostState(client) || !IsPlayerAlive(client))
+		return false;
 	// 当前特感不在地上或正在控人，不允许传送
-	if (!IsClientOnGround(client) || IsPinningSurvivor(client)) { return false; }
+	if (!IsClientOnGround(client) || IsPinningSurvivor(client))
+		return false;
 	// 当前特感类型不允许传送
-	if (!allowedTeleportInfected[GetEntProp(client, Prop_Send, "m_zombieClass")]) { return false; }
+	if (!allowedTeleportInfected[GetEntProp(client, Prop_Send, "m_zombieClass")])
+		return false;
 	// 最大允许传送次数不为 -1，且当前特感达到最大允许传送次数，不允许传送
-	if (g_hMaxTeleportCount.IntValue > -1 && teleportCount[client] > g_hMaxTeleportCount.IntValue) { return false; }
-	// 当前特感目标无效，不允许传送
-	if (!IsValidSurvivor(target) || !IsPlayerAlive(target)) { return false; }
+	if (g_hMaxTeleportCount.IntValue > -1 && teleportCount[client] > g_hMaxTeleportCount.IntValue)
+		return false;
+	// 当前特感的传送目标无效，不允许传送
+	if (!IsValidSurvivor(target) || !IsPlayerAlive(target))
+		return false;
+
 	// 当前特感直线距离小于允许传送距离，且速度大于允许传送速度，不允许传送
 	static float
 				selfPos[3],
@@ -691,10 +768,17 @@ static bool canBeTeleport(int client, int target)
 				targetPos[3];
 	GetClientAbsOrigin(client, selfPos);
 	GetEntPropVector(target, Prop_Send, "m_vecOrigin", targetPos);
-	if (GetVectorDistance(selfPos, targetPos) < g_hTeleportDistance.FloatValue && GetClientCurrentSpeed(client) > g_hAllowTeleportSpeed.FloatValue) { return false; }
+	if (GetVectorDistance(selfPos, targetPos) < g_hTeleportDistance.FloatValue &&
+	 	GetClientCurrentSpeed(client) > g_hAllowTeleportSpeed.FloatValue)
+		return false;
 	// 当前特感可以被生还者看见，不允许传送
-	GetClientEyePosition(client, selfEyePos);
-	if (isVisibleTo(selfEyePos)) { return false; }
+	if (GetClientEyePosition(client, selfEyePos) && isVisibleTo(selfEyePos))
+		return false;
+
+	// 2023-09-14: 是否允许玩家特感传送
+	if (!IsFakeClient(client) && g_hAllowTeleportPlayer.IntValue < TP_PLAYER_ENABLE)
+		return false;
+
 	return true;
 }
 
