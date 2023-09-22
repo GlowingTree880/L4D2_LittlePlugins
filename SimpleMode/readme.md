@@ -59,8 +59,8 @@
 simple_mode_config_path [configs/match_modes.cfg]
 // 模式主目录所在位置
 simple_mode_dir_path [../../cfg/cfgogl]
-// 是否开启插件日志记录
-simple_mode_enable_logging [1]
+// 插件日志记录级别 1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR, 数字相加
+simple_mode_log_level [38]
 // 首个玩家连接服务器时默认加载哪个配置模式，为空则不加载任何配置模式
 simple_mode_autoload_config [""]
 // 使用 !addmode 创建新模式时会创建模式子目录以及这些配置文件，使用英文分号 ; 分割
@@ -94,6 +94,12 @@ simple_mode_vote_player_limit [1]
 
 ## 更新日志
 - 2023-07-05：上传插件、源码与 Readme 文件
+- <details>
+    <summary>2023-09-22</summary>
+    1. 将 simple_mode_enable_logging 是否开启日志记录更改为使用日志记录级别控制日志记录<br>
+    2. 将 #include "simple_mode_vote/simple_mode_vote.sp" 路径更改为 #include "simple_mode_vote.sp", 重新编译时请注意<br>
+    3. 修复目前已有模式情况下直接使用 !match 命令无法选择新模式, 需要使用 !rmatch 卸载当前模式再使用 !match 选择新模式的问题
+  </details>
 
 ---
 如在使用过程中发现 Bug 或报错请提出 issue

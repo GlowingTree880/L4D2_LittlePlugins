@@ -15,16 +15,22 @@
 #include <left4dhooks>
 #include <builtinvotes>
 #include <logger>
-#include "treeutil/treeutil.sp"
+#include <treeutil>
 
 #define MODULE_PREFIX "SimpleMode"
 
 #define CVAR_FLAG FCVAR_NOTIFY
 
+// cfg 目录相对路径
 #define CFG_PATH "../../cfg"
+// 创建模式文件夹的权限, 默认 rwx
 #define PERM_DIR 777
+// 一次最大读取的配置文件数量
 #define MAX_CONFIG_COUNT 32
+// 默认地图重启时间
 #define MAP_RESTART_TIME 3.0
+// 卸载当前模式并加载新模式时检测地图重启并加载新模式的时钟周期
+#define MODE_LOAD_AFTER_UNLOAD_DELAY 1.0
 
 ConVar
 	g_hModeConfig,
@@ -54,13 +60,18 @@ bool
 	isModePluginLoaded,
 	// 当前地图是否重启过
 	isMapRestarted;
+bool
+	// 是否有模式准备被卸载并加载新的模式
+	isModeReadyUnload,
+	// 当前模式卸载后是否已经重启地图
+	isUnloadMapRestarted;
 
 char
 	modeFilePath[PLATFORM_MAX_PATH],
 	modeDirPath[PLATFORM_MAX_PATH],
 	thisPluginName[PLATFORM_MAX_PATH];
 
-Handle
+GlobalForward
 	fwdMatchLoaded,
 	fwdMatchUnloaded;
 
@@ -89,26 +100,33 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		return APLRes_SilentFailure;
 	}
 
-	fwdMatchLoaded = CreateGlobalForward("LGO_OnMatchModeLoaded", ET_Ignore);
-	fwdMatchUnloaded = CreateGlobalForward("LGO_OnMatchModeUnloaded", ET_Ignore);
+	fwdMatchLoaded = new GlobalForward("LGO_OnMatchModeLoaded", ET_Ignore);
+	fwdMatchUnloaded = new GlobalForward("LGO_OnMatchModeUnloaded", ET_Ignore);
 	CreateNative("LGO_IsMatchModeLoaded", native_IsMatchModeLoaded);
 	return APLRes_Success;
 }
 
+public void OnAllPluginsLoaded() {
+	if (!LibraryExists("left4dhooks")) {
+		LogMessage("\n==========\n本插件需要前置插件 \"[L4D & L4D2] Left 4 DHooks Direct\" 方可运行\n");
+		SetFailState("\n==========\n本插件需要前置插件 \"[L4D & L4D2] Left 4 DHooks Direct\" 方可运行\n");
+	}
+}
+
 // 模式投票模块
-#include "simple_mode_vote/simple_mode_vote.sp"
+#include "simple_mode_vote.sp"
 
 public void OnPluginStart()
 {
 	g_hModeConfig = CreateConVar("simple_mode_config_path", "configs/match_modes.cfg", "模式选择文件所在目录", CVAR_FLAG);
 	g_hModeDir = CreateConVar("simple_mode_dir_path", "../../cfg/cfgogl", "模式配置文件目录", CVAR_FLAG);
-	g_hLogging = CreateConVar("simple_mode_enable_logging", "1", "是否开启插件日志记录", CVAR_FLAG, true, 0.0, true, 1.0);
+	g_hLogging = CreateConVar("simple_mode_log_level", "38", "插件日志记录级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加", CVAR_FLAG, true, 1.0);
 	g_hAutoLoadConfig = CreateConVar("simple_mode_autoload_config", "", "玩家连接时默认加载哪个模式的配置文件, 为空则不默认加载模式", CVAR_FLAG);
 	g_hAutoCreateConfig = CreateConVar("simple_mode_autocreate_config", "confogl.cfg;confogl_plugins.cfg;confogl_off.cfg;shared_plugins.cfg;shared_settings.cfg;shared_cvars.cfg", "创建新模式时默认创建哪些配置文件, 为空则不默认创建（; 分割）", CVAR_FLAG);
 	g_hMatchStartOnceConfig = CreateConVar("simple_mode_modestart_once_config", "generalfixes.cfg;confogl_plugins.cfg;sharedplugins.cfg", "每个模式加载时默认加载哪个配置文件（配置在这里的配置文件只会在每个模式加载时加载一次, 用于初始化模式，; 分割）", CVAR_FLAG);
 	g_hMatchStartConfig = CreateConVar("simple_mode_modestart_config", "confogl.cfg", "每个模式加载时及每个地图加载时默认加载哪个配置文件", CVAR_FLAG);
 	g_hMatchEndConfig = CreateConVar("simple_mode_modeend_config", "confogl_off.cfg", "每个模式卸载时加载哪个配置文件", CVAR_FLAG);
-	g_hRestartMap = CreateConVar("simple_mode_restart_map", "3", "是否在模式加载完成及卸载完成后重启地图, 0:不重启, 1:模式加载完成后重启, 2:模式卸载完成后重启, 3:加载完成及卸载完成后重启", CVAR_FLAG, true, view_as<float>(RESTART_START), true, view_as<float>(RESTART_BOTH));
+	g_hRestartMap = CreateConVar("simple_mode_restart_map", "3", "是否在模式加载完成及卸载完成后重启地图, 0:不重启, 1:模式加载完成后重启, 2:模式卸载完成后重启, 3:加载完成及卸载完成后重启", CVAR_FLAG, true, float(RESTART_START), true, float(RESTART_BOTH));
 	g_hAllBotGame = FindConVar("sb_all_bot_game");
 	
 	g_hIsReloaded = FindConVar("simple_mode_is_reloaded");
@@ -138,7 +156,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_delmode", deleteModeCmdHandler, ADMFLAG_CONFIG, "删除一个已有的模式");
 	GetPluginFilename(null, thisPluginName, sizeof(thisPluginName));
 	// 日志记录
-	log = new Logger(g_hLogging.BoolValue);
+	log = new Logger(g_hLogging.IntValue);
 	// 文件校验
 	if (!validateFile()) {
 		SetFailState("[%s]: 配置文件路径错误, 插件将不会正确加载, 请重新配置", MODULE_PREFIX);
@@ -272,7 +290,8 @@ public Action forceMatchCmdHandler(int client, int args)
 
 	char modeName[PLATFORM_MAX_PATH], tempPath[PLATFORM_MAX_PATH];
 	g_hModeName.GetString(modeName, sizeof(modeName));
-	// 模式已经加载则需要先卸载再重新加载新的模式
+	
+	// 模式已经加载则需要先卸载再重新加载新的模式, 先要 !rmatch 再 !match
 	// if (isModeLoaded) {
 	// 	CPrintToChat(client, "{O}[%s]: {G}当前已经加载: {O}%s {G}模式, 请先卸载模式再重新加载新的模式", MODULE_PREFIX, modeName);
 	// 	return Plugin_Handled;
@@ -313,13 +332,37 @@ public Action forceMatchCmdHandler(int client, int args)
 	}
 
 	if (isModeLoaded) {
+		isModeReadyUnload = true;
+
 		log.info("[%s]: 当前已经加载: %s 模式, 准备加载: %s 模式, 正在卸载: %s 模式", MODULE_PREFIX, modeName, cmdModeName, modeName);
 		CPrintToChatAll("{B}[{W}%s{B}]: {G}准备卸载当前: {O}%s {G}模式, 加载: {O}%s 模式", MODULE_PREFIX, modeName, cmdModeName);
 		doUnloadMatchMode(true);
 	}
 
-	doLoadMatchMode(cmdModeName);
+	DataPack pack = new DataPack();
+	pack.WriteString(cmdModeName);
+
+	CreateTimer(MODE_LOAD_AFTER_UNLOAD_DELAY, timerLoadModeAfterUnload, pack, TIMER_REPEAT);
 	return Plugin_Continue;
+}
+
+public Action timerLoadModeAfterUnload(Handle timer, DataPack pack) {
+	if (pack == null)
+		return Plugin_Stop;
+	
+	char modeName[64];
+
+	pack.Reset();
+	pack.ReadString(modeName, sizeof(modeName));
+
+	if ((g_hRestartMap.IntValue == RESTART_END || g_hRestartMap.IntValue == RESTART_BOTH) &&
+		 isModeReadyUnload && !isUnloadMapRestarted)
+		return Plugin_Continue;
+	
+	log.info("%s: 当前现有模式卸载完毕, 地图重启完成, 触发 OnMapStart, 开始加载新模式 %s", MODULE_PREFIX, modeName);
+	doLoadMatchMode(modeName);
+
+	return Plugin_Stop;
 }
 
 /**
@@ -343,6 +386,12 @@ public Action resetMatchCmdHandler(int client, int args)
 }
 
 public void OnMapStart() {
+	isUnloadMapRestarted = false;
+	if (isModeReadyUnload) {
+		isModeReadyUnload = false;
+		isUnloadMapRestarted = true;
+	}
+
 	if (!isModeLoaded) {
 		return;
 	}
@@ -525,6 +574,8 @@ public Action mapRestartHandler(Handle timer, DataPack pack)
 	delete pack;
 
 	ServerCommand("changelevel %s", mapName);
+
+	log.info("%s: 重启地图时钟回调, 开始重启当前地图: %s", MODULE_PREFIX, mapName);
 	isMapRestarted = true;
 	return Plugin_Stop;
 }
