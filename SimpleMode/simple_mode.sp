@@ -346,15 +346,23 @@ public Action forceMatchCmdHandler(int client, int args)
 	return Plugin_Continue;
 }
 
+/**
+* 加载新模式时钟回调
+* @param timer 时钟句柄
+* @param pack 数据包
+* @return Action
+**/
 public Action timerLoadModeAfterUnload(Handle timer, DataPack pack) {
 	if (pack == null)
 		return Plugin_Stop;
 	
+	// 新的模式名称
 	char modeName[64];
 
 	pack.Reset();
 	pack.ReadString(modeName, sizeof(modeName));
 
+	// 重启类型涉及卸载模式后重启, 判断当前是否已经加载了模式并准备加载新模式 与 卸载模式后地图是否重启完成
 	if ((g_hRestartMap.IntValue == RESTART_END || g_hRestartMap.IntValue == RESTART_BOTH) &&
 		 isModeReadyUnload && !isUnloadMapRestarted)
 		return Plugin_Continue;
@@ -362,6 +370,7 @@ public Action timerLoadModeAfterUnload(Handle timer, DataPack pack) {
 	log.info("%s: 当前现有模式卸载完毕, 地图重启完成, 触发 OnMapStart, 开始加载新模式 %s", MODULE_PREFIX, modeName);
 	doLoadMatchMode(modeName);
 
+	delete pack;
 	return Plugin_Stop;
 }
 
