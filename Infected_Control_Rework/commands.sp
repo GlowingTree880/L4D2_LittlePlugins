@@ -130,3 +130,41 @@ public Action cmdStateList(int client, int args) {
 	}
 	return Plugin_Handled;
 }
+
+/**
+* sm_entmap 指令回调
+* @param client 执行指令的客户端索引
+* @param args 指令参数
+* @return Action
+**/
+public Action cmdEntMap(int client, int args) {
+	if (infEntRefMap == null) {
+		ReplyToCommand(client, "当前特感实体 Map 为 null");
+		return Plugin_Handled;
+	}
+
+	static int i, value;
+	static char key[64];
+	if (client == 0) {
+		PrintToServer("\n========== 特感实体 Map ==========\n");
+		StringMapSnapshot snapShot = infEntRefMap.Snapshot();
+		for (i = 0; i < snapShot.Length; i++) {
+			snapShot.GetKey(i, key, sizeof(key));
+			if (!infEntRefMap.GetValue(key, value))
+				value = -1;
+			PrintToServer("\t索引 %d, key %s, value %d", i, key, value);
+		}
+		PrintToServer("\n================================\n");
+	} else {
+		PrintToConsoleAll("\n========== 特感实体 Map ==========\n");
+		StringMapSnapshot snapShot = infEntRefMap.Snapshot();
+		for (i = 0; i < snapShot.Length; i++) {
+			snapShot.GetKey(i, key, sizeof(key));
+			if (!infEntRefMap.GetValue(key, value))
+				value = -1;
+			PrintToConsoleAll("\t索引 %d, key %s, value %d", i, key, value);
+		}
+		PrintToConsoleAll("\n================================\n");
+	}
+	return Plugin_Handled;
+}

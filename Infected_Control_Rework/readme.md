@@ -48,8 +48,10 @@ inf_pos_min_distance 150
 inf_pos_min_nav_distance 100
 // 特感刷新位置距离目标的最大直线距离
 inf_pos_max_distance 1000
-// 特感刷新位置距离目标的最大 Nav 距离
-inf_pos_max_nav_distance 1500
+// 特感刷新位置距离目标的初始 Nav 距离
+inf_pos_init_nav_distance 1500
+// 特感刷新位置距离目标的最大 Nav 距离 (从 inf_pos_init_nav_distance 开始, 经过 inf_pos_start_expand_time 时间开始以每帧 inf_pos_nav_expand_unit 值进行 Nav 距离增加, 直到增加到 inf_pos_max_nav_distance 为止)
+inf_pos_max_nav_distance 2800
 // 特感是否允许在安全区域刷新
 inf_pos_allow_in_safearea 0
 // 特感找位是否需要在目标生还者前方
@@ -66,6 +68,8 @@ inf_pos_find_max_time 8.0
 inf_pos_fail_delay 2.5
 // 逐帧进行找位网格拓展时每帧网格拓展多少单位
 inf_pos_expand_unit 3
+// 逐帧进行 Nav 距离拓展时每帧拓展多少单位
+inf_pos_nav_expand_unit 3
 
 ``````
 
@@ -128,6 +132,8 @@ sm_infqueue (!infqueue <num [10]>)
     }
    ``````
 3. 更改 Cvar `inf_spawn_method_strategy` 后请重启当前地图，否则可能会出现更改完成后无法刷新下一波特感的情况
+4. 如特感刷新不完全情况, 请检查所有特感的 `z_xxx_limit` 值相加是否大于或等于 `inf_limit` 值, 插件刷新的最大特感数量为所有特感 `z_xxx_limit` 之和
+5. 生还者数量与 `inf_limit` 特感刷新数量之和大于 `MaxClients (31)` 则超过 `MaxClients` 的特感将会无法刷新并在服务器控制台显示 `CreateFakeClient() returned Null`
 
 ## 更新日志
 - 2023-08-09: 上传插件与 readme 文件
@@ -141,6 +147,12 @@ sm_infqueue (!infqueue <num [10]>)
 <summary>2023-08-25</summary>
 1. 更改一些特感刷新队列的生成策略与 Tank 在场时特感的替换策略<br>
 2. 修复特感实际刷新位置为 rayEndPos + PLAYER_HEIGHT 的问题
+</details>
+<details>
+<summary>2023-10-12</summary>
+1. 增加 Cvar: inf_pos_init_nav_distance 与 inf_pos_nav_expand_unit 实现找位时 Nav 距离随着时间增大而增大<br>
+2. 更改 6 特以下特感轮换实现方式为使用 InfectedEntityReferenceMap 与记录击杀顺序实现<br>
+3. 增加特感刷出时实体有效性检验
 </details>
 
 ---

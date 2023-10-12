@@ -25,6 +25,7 @@ ConVar
 	g_hDefaultGridMinDistance,
 	g_hDefaultGridMaxDistance,
 	g_hMaxDistance,
+	g_hInitialNavDistance,
 	g_hMaxNavDistance,
 	g_hAllowSpawnInSafeArea,
 	g_hPosShouldAheadSurvivor,
@@ -34,7 +35,8 @@ ConVar
 	g_hStartExpandTime,
 	g_hFindPosMaxTime,
 	g_hFailedFindPosNextDelay,
-	g_hExpandUnit;
+	g_hExpandUnit,
+	g_hNaxExpandUnit;
 
 int
 	expandCount;
@@ -61,7 +63,8 @@ void infectedPosFindOnModuleStart() {
 	g_hMinDistance = CreateConVar("inf_pos_min_distance", "150", "特感刷新位置距离目标的最小直线距离", CVAR_FLAG, true, 0.0);
 	g_hMinNavDistance = CreateConVar("inf_pos_min_nav_distance", "100", "特感刷新位置距离目标的最小 Nav 距离", CVAR_FLAG, true, 0.0);
 	g_hMaxDistance = CreateConVar("inf_pos_max_distance", "1000", "特感刷新位置距离目标的最大直线距离", CVAR_FLAG, true, 0.0);
-	g_hMaxNavDistance = CreateConVar("inf_pos_max_nav_distance", "1500", "特感刷新位置距离目标的最大 Nav 距离", CVAR_FLAG, true, 0.0);
+	g_hInitialNavDistance = CreateConVar("inf_pos_init_nav_distance", "1500", "特感刷新位置距离目标初始 Nav 距离", CVAR_FLAG, true, 0.0);
+	g_hMaxNavDistance = CreateConVar("inf_pos_max_nav_distance", "2800", "特感刷新位置距离目标的最大 Nav 距离 [从初始 Nav 距离开始, 网格开始拓展时拓展, 直到最大 Nav 距离停止拓展]", CVAR_FLAG, true, 0.0);
 	g_hAllowSpawnInSafeArea = CreateConVar("inf_pos_allow_in_safearea", "0", "特感是否允许在安全区域刷新", CVAR_FLAG, true, 0.0, true, 1.0);
 	g_hPosShouldAheadSurvivor = CreateConVar("inf_pos_should_ahead", "0", "特感找位是否需要在目标生还者前方", CVAR_FLAG, true, 0.0, true, 1.0);
 	// 找位网格大小
@@ -72,6 +75,7 @@ void infectedPosFindOnModuleStart() {
 	g_hFindPosMaxTime = CreateConVar("inf_pos_find_max_time", "8.0", "允许一次找位刷新的最大时间, 超过这个时间则暂停 g_hFailedFindPosNextDelay 时间后继续启动找位 (0: 无上限)", CVAR_FLAG, true, 0.0);
 	g_hFailedFindPosNextDelay = CreateConVar("inf_pos_fail_delay", "2.5", "一次找位刷新失败找位的暂停时间", CVAR_FLAG, true, 0.0);
 	g_hExpandUnit = CreateConVar("inf_pos_expand_unit", "3", "逐帧进行找位网格拓展时每帧网格拓展多少单位", CVAR_FLAG, true, 0.0);
+	g_hNaxExpandUnit = CreateConVar("inf_pos_nav_expand_unit", "3", "逐帧进行 Nav 距离拓展时每帧拓展多少单位", CVAR_FLAG, true, 0.0);
 	// 跑男检测
 	g_hRunnerCheckDistance = CreateConVar("inf_pos_runner_check_distance", "1500.0", "跑男检测距离 (0: 不检测跑男, 否则某个生还者在这个范围内的生还者密度小于 [2 个生还者的生还者密度] 则视为跑男, 特感优先以其进行找位)", CVAR_FLAG, true, 0.0);
 }
@@ -91,11 +95,12 @@ void infectedPosFindOnModuleStart() {
 /**
 * 根据客户端位置使用射线找位并返回找到的一个有效位置
 * @param client 需要找位的客户端索引
-* @param increment 网格增量
+* @param gridIncrement 网格增量
+* @param navIncrement Nav 增量
 * @param spawnPos 刷新位置
 * @return void
 **/
-void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
+void getSpawnPos(int client, const float gridIncrement = 0.0, const float navIncrement = 0.0, float spawnPos[3]) {
 	spawnPos = NULL_VECTOR;
 	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR || !IsPlayerAlive(client)) {
 		return;
@@ -122,10 +127,17 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 	expandRightPos[POS_DOWN][X] += g_hDefaultGridMinDistance.FloatValue;
 	expandRightPos[POS_DOWN][Y] -= g_hDefaultGridMinDistance.FloatValue;
 	
-	// 是否需要拓展网格
-	if (increment > 0.0 && (expandCount * increment <= g_hDefaultGridMaxDistance.FloatValue - g_hDefaultGridMinDistance.FloatValue)) {
-		static float offset;
-		offset = expandCount * increment;
+	// expandCount 是否需要增加, 拓展网格 或 拓展 Nav 任意一个场景开启 expandCount 都需要增加
+	// 1 为允许拓展, 2 为网格拓展完成
+	static int shouldIncreaseExpandCount;
+	shouldIncreaseExpandCount = FloatCompare(gridIncrement, 0.0) > 0 || FloatCompare(navIncrement, 0.0) > 0;
+	// 是否需要拓展网格, 且 expandCount 拓展次数 * gridIncrement 每次拓展的距离在网格最大范围与初始范围内
+	static float offset, maxNavDistance;
+	maxNavDistance = g_hInitialNavDistance.FloatValue;
+	if (FloatCompare(gridIncrement, 0.0) > 0 &&
+		(expandCount * gridIncrement <= g_hDefaultGridMaxDistance.FloatValue - g_hDefaultGridMinDistance.FloatValue)) {
+
+		offset = expandCount * gridIncrement;
 		
 		// 左上角
 		expandLeftPos[POS_UP][X] -= offset;
@@ -140,7 +152,23 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 		expandRightPos[POS_DOWN][X] += offset;
 		expandRightPos[POS_DOWN][Y] -= offset;
 		
-		expandCount++;
+		if ((shouldIncreaseExpandCount & 0x01) == 1) {
+			expandCount++;
+			// 修改为 2, 表示已经完成网格拓展
+			shouldIncreaseExpandCount <<= 1;
+		}
+	}
+	// 是否需要拓展 Nav 距离
+	if (FloatCompare(navIncrement, 0.0) > 0 &&
+		expandCount * navIncrement <= g_hMaxNavDistance.FloatValue - g_hInitialNavDistance.FloatValue) {
+		
+		// 已经被网格拓展过, expandCount 先修改为原来的值, 接着进行 Nav 拓展, 保证完成网格和 Nav 拓展 expandCount 只增加一次
+		if ((shouldIncreaseExpandCount & 0x02) == 2)
+			offset = (expandCount - 1) * navIncrement;
+		maxNavDistance += offset;
+
+		if ((shouldIncreaseExpandCount & 0x01) == 1)
+			expandCount++;
 	}
 
 	static Handle traceRay;
@@ -151,9 +179,9 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 		rayPos[Z] = GetRandomFloatInRange(pos[Z], pos[Z] + RAY_Z_HEIGHT);
 
 		traceRay = TR_TraceRayFilterEx(rayPos, TRACE_RAY_ANGLE, TRACE_RAY_FLAG, TRACE_RAY_TYPE, traceRayFilter, client);
-		if (traceRay == null) {
+		if (traceRay == null)
 			continue;
-		}
+		
 		TR_GetEndPosition(rayEndPos, traceRay);
 		delete traceRay;
 		CopyVectors(rayEndPos, visiblePos);
@@ -183,13 +211,10 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 		if (distance < g_hMinDistance.FloatValue || distance > g_hMaxDistance.FloatValue)
 			continue;
 
-		// NOTE: 高位 Nav 距离补偿
-		static float maxNavDistance;
-		if (FloatAbs(rayEndPos[2] - pos[2]) >= HIGH_POS_HEIGHT) {
-			maxNavDistance = g_hMaxNavDistance.FloatValue + HIGH_POS_COMP_DISTANCE;
-		} else {
-			maxNavDistance = g_hMaxNavDistance.FloatValue;
-		}
+		// NOTE: 高位 Nav 距离补偿, Nav 最大距离已经确定
+		if (FloatAbs(rayEndPos[2] - pos[2]) >= HIGH_POS_HEIGHT)
+			maxNavDistance += HIGH_POS_COMP_DISTANCE;
+
 		// 从射线撞击位置到最近生还者 Nav 处无路可走, 跳过
 		nearestSurvivorNav = L4D_GetNearestNavArea(targetPos, 120.0, false, false, false, TEAM_INFECTED);
 		if (!L4D2_NavAreaBuildPath(rayEndPosNav, nearestSurvivorNav, maxNavDistance, TEAM_INFECTED, false))
@@ -208,7 +233,7 @@ void getSpawnPos(int client, const float increment = 0.0, float spawnPos[3]) {
 		if (!g_hAllowSpawnInSafeArea.BoolValue && (L4D_GetNavArea_SpawnAttributes(rayEndPosNav) & NAV_SPAWN_CHECKPOINT))
 			continue;
 
-		// 位置有效, 返回坐标
+		// 位置有效, 返回坐标, 跳出
 		CopyVectors(rayEndPos, spawnPos);
 		break;
 	}

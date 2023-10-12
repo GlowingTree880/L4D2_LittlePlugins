@@ -49,6 +49,32 @@ public void eventReviveSucessHandler(Event event, const char[] name, bool dontBr
 }
 
 /**
+* 玩家断开连接事件, 仅检测特感 (由插件踢出或管理员踢出)
+* @param 
+* @return void
+**/
+public void eventPlayerDisconnectHandler(Event event, const char[] name, bool dontBroadcast) {
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (client < 1 || client > MaxClients || !IsClientInGame(client) || GetClientTeam(client) != TEAM_INFECTED)
+		return;
+	
+	int class = GetInfectedClass(client);
+	if (class < ZC_SMOKER || class > ZC_CHARGER)
+		return;
+	
+	char reason[64];
+	event.GetString("reason", reason, sizeof(reason));
+
+	// 特感玩家离开游戏, 检查是否已经存在于 Map 中, 存在则替换为击杀顺序
+	int ref = EntIndexToEntRef(client);
+	if (infEntRefMapOperation.containsKey(client)) {
+		waveKillIndex++;
+		infEntRefMapOperation.replaceByIndex(ref, waveKillIndex, class);
+		log.debugAndInfo("%s: 特感 %N(类型 %s/ 实体索引 %d) 断开连接, 原因 %s, 已在实体 Map 中找到, 更改为击杀顺序 %d", PLUGIN_PREFIX, client, INFECTED_NAME[class], ref, reason, waveKillIndex);
+	}
+}
+
+/**
 * 玩家倒地开始事件
 * @param 
 * @return void
@@ -151,6 +177,20 @@ public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBro
 		return;
 	}
 
+	// 需要进行特感轮换, 将记录的特感实体索引更改为击杀顺序
+	if (g_hInfectedLimit.IntValue < 6 && g_hUnreachSixAlternate.BoolValue && !g_hSingleInfectedMode.BoolValue) {
+		static int ref;
+		ref = EntIndexToEntRef(client);
+		// 击杀顺序自增
+		waveKillIndex++;
+
+		log.debugAndInfo("%s: 特感 %s(%d/ EntRef: %d) 死亡, 当前开启特感轮换, 在实体 Map 中是否存在 %b, 击杀顺序 %d", PLUGIN_PREFIX, INFECTED_NAME[class], client, ref, infEntRefMapOperation.containsKey(ref), waveKillIndex);
+		// 存在则更改为击杀顺序与特感类型
+		if (infEntRefMapOperation.containsKey(ref))
+			infEntRefMapOperation.replaceByIndex(ref, waveKillIndex, class);
+	}
+
+	// 分散刷新方式
 	if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
 		// 重生完成特感数量减少 1
 		respawnFinishedCount = respawnFinishedCount > 0 ? respawnFinishedCount - 1 : 0;

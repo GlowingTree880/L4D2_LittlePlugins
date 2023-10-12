@@ -34,6 +34,10 @@
 #define MAX_SPECIAL_SET_DELAY 1.0
 // 分散刷新模式时, 新增的特感复活延迟
 #define NEW_INFECTED_RESPAWN_DELAY 0.5
+// 刷新特感最小尝试次数
+#define MIN_SPAWN_ATTEMPT 5
+// 刷新特感最大尝试次数
+#define MAX_SPAWN_ATTEMPT 15
 
 ConVar
 	g_hInfectedLimit,
@@ -59,6 +63,9 @@ ConVar
 ArrayList
 	// 特感刷新队列
 	infectedQueue;
+
+StringMap
+	infEntRefMap;
 
 Logger
 	log;
@@ -105,6 +112,11 @@ int
 int
 	// 每次刷新一波时前统计这波强控特感的数量, 用于触发动态时钟
 	waveDominativeCount;
+int
+	// 每一波击杀特感的顺序, 用于每波特感轮换
+	waveKillIndex,
+	// 每一波刷新特感失败的次数
+	waveSpawnFailedCount;
 
 // 刷新时间策略 SpawnStrategy
 enum {
@@ -205,6 +217,116 @@ BaseTimer
 	regularInfectedSpawnTimer,
 	autoInfectedSpawnTimer;
 
+methodmap InfEntRefMapOperation {
+
+	/**
+	* 向 infEntRefMap 中存入一个特感的实体引用与刷新时的时间戳
+	* @param ref 实体引用
+	* @param timeStamp 时间戳
+	* @return bool
+	**/
+	public bool putRef(int ref, float timeStamp = -1.0) {
+		if (timeStamp < 0)
+			return false;
+
+		char refStr[64];
+		IntToString(ref, refStr, sizeof(refStr));
+		return infEntRefMap.SetValue(refStr, timeStamp);
+	}
+
+	/**
+	* 根据实体引用获取存入的时间戳
+	* @param ref 实体引用
+	* @param value 值的引用
+	* @return int
+	**/
+	public float getTimeStamp(int ref) {
+		char refStr[64];
+		IntToString(ref, refStr, sizeof(refStr));
+		// 获取失败
+		float stamp;
+		if (!infEntRefMap.GetValue(refStr, stamp))
+			return -1.0;
+		return stamp;
+	}
+
+	/**
+	* 检查 infEntRefMap 中是否存在某个实体引用
+	* @param ref 实体引用
+	* @return bool
+	**/
+	public bool containsKey(int ref) {
+		char refStr[64];
+		IntToString(ref, refStr, sizeof(refStr));
+		return infEntRefMap.ContainsKey(refStr);
+	}
+
+	/**
+	* 将实体引用与时间戳更换为 击杀顺序与特感类型
+	* @param ref 原本保存的实体引用
+	* @param index 击杀顺序
+	* @param type 特感类型
+	* @return void
+	**/
+	public bool replaceByIndex(int ref, int index, int type) {
+		// 无效 key
+		if (!this.containsKey(ref))
+			return false;
+		
+		char refStr[64];
+		IntToString(ref, refStr, sizeof(refStr));
+		// 删除旧的 k 是 entRef 的 entry
+		infEntRefMap.Remove(refStr);
+		// 增加一个新的 entry, k 是击杀顺序, v 是 type
+		IntToString(index, refStr, sizeof(refStr));
+		return infEntRefMap.SetValue(refStr, type);
+	}
+
+	public int getByIndex(int index) {
+		if (!this.containsKey(index))
+			return -1;
+
+		int type;
+		char indexStr[64];
+		IntToString(index, indexStr, sizeof(indexStr));
+		if (!infEntRefMap.GetValue(indexStr, type))
+			return -1;
+		return type;
+	}
+
+	public bool remove(int key) {
+		if (!this.containsKey(key))
+			return false;
+		
+		char keyStr[64];
+		IntToString(key, keyStr, sizeof(keyStr));
+		return infEntRefMap.Remove(keyStr);
+	}
+
+	public bool removeByIndex(int index) {
+		if (!this.containsKey(index))
+			return false;
+
+		char indexStr[64];
+		IntToString(index, indexStr, sizeof(indexStr));
+		return infEntRefMap.Remove(indexStr);
+	}
+
+	public void removeAll() {
+		infEntRefMap.Clear();
+	}
+
+	public int size() {
+		return infEntRefMap.Size;
+	}
+
+	public StringMap getRawMap() {
+		return infEntRefMap;
+	}
+
+}
+InfEntRefMapOperation infEntRefMapOperation;
+
 public Plugin myinfo = 
 {
 	name 			= "[Infected-Control] 特感刷新控制",
@@ -281,6 +403,7 @@ public void OnPluginStart() {
 	RegAdminCmd("sm_type", cmdSingleInfectedMode, ADMFLAG_BAN, "启用单一特感模式");
 
 	RegAdminCmd("sm_statelist", cmdStateList, ADMFLAG_BAN, "展示特感状态数组情况");
+	RegAdminCmd("sm_entmap", cmdEntMap, ADMFLAG_BAN, "展示特感实体索引 Map 情况");
 
 	g_hInfectedLimit.AddChangeHook(changeHookInfectedLimit);
 	g_hSpawnDuration.AddChangeHook(changeHookSpawnDuration);
@@ -294,7 +417,9 @@ public void OnPluginStart() {
 	HookEvent("player_death", eventPlayerDeathHandler);
 	HookEvent("player_incapacitated", eventPlayerIncapStartHandler);
 	HookEvent("revive_success", eventReviveSucessHandler);
+	HookEvent("player_disconnect", eventPlayerDisconnectHandler, EventHookMode_Pre);
 
+	infEntRefMap = new StringMap();
 	log = new Logger(g_hLoggingLevel.IntValue);
 
 	// 其他模块
@@ -442,7 +567,6 @@ public Action timerInfectedCountCheckHandler(Handle timer) {
 			regularInfectedSpawnTimer.timer = CreateTimer(regularTimerInterval, timerRegularInfectedSpawnHandler, _, _);
 			// 设置固定刷特时钟参数
 			regularInfectedSpawnTimer.interval = g_hSpawnDuration.FloatValue;
-			regularInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 			regularInfectedSpawnTimer.nextTriggerTime = GetGameTime() + g_hSpawnDuration.FloatValue;
 		}
 	} else if (g_hSpawnStrategy.IntValue == SPS_AUTO && 
@@ -463,7 +587,6 @@ public Action timerInfectedCountCheckHandler(Handle timer) {
 			autoInfectedSpawnTimer.timer = CreateTimer(autoTimerInterval, timerAutoInfectedSpawnHandler, _, _);
 			// 设置动态时钟参数
 			autoInfectedSpawnTimer.interval = g_hSpawnDuration.FloatValue;
-			autoInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 			autoInfectedSpawnTimer.nextTriggerTime = GetGameTime() + g_hSpawnDuration.FloatValue;
 		}
 	}
@@ -577,7 +700,7 @@ void sdkHookFindPosHandler(int client) {
 	float spawnPos[3];
 	if (GetEngineTime() - findPosSpawnTimeCost <= g_hStartExpandTime.FloatValue) {
 		// 不进行网格拓展
-		getSpawnPos(client, _, spawnPos);
+		getSpawnPos(client, _, _, spawnPos);
 	} else if (FloatCompare(g_hFindPosMaxTime.FloatValue, 0.0) > 0 &&
 			 GetEngineTime() - findPosSpawnTimeCost >= g_hFindPosMaxTime.FloatValue) {
 		log.debugAndInfo("%s: 当前找位超出一次找位最大限制时长, 当前耗时 %.2f s, 限制 %.2fs", PLUGIN_PREFIX, GetEngineTime() - findPosSpawnTimeCost, g_hFindPosMaxTime.FloatValue);
@@ -588,7 +711,7 @@ void sdkHookFindPosHandler(int client) {
 		CreateTimer(g_hFailedFindPosNextDelay.FloatValue, timerFindPosFailedHandler, _, _);
 	} else {
 		// 开始进行网格拓展
-		getSpawnPos(client, g_hExpandUnit.FloatValue, spawnPos);
+		getSpawnPos(client, g_hExpandUnit.FloatValue, g_hNaxExpandUnit.FloatValue, spawnPos);
 	}
 
 	// 无效刷新位置, 返回
@@ -597,22 +720,40 @@ void sdkHookFindPosHandler(int client) {
 	}
 
 	// 开始刷新特感
-	static int infectedType, queueIndex;
+	static int infectedType, queueIndex, infEntIndex;
+	static char infEntRefStr[64];
 	for (i = 0; i < g_hEachPosInfectedCount.IntValue; i++) {
 		// 集中刷新方式, 从特感刷新队列头部获取特感类型刷新
 		if (g_hSpawnMethodStrategy.IntValue == SMS_CENTERALIZE) {
-			if (infectedQueue.Length < 1) {
+			if (infectedQueue == null || infectedQueue.Length < 1) {
 				return;
 			}
 
 			infectedType = infectedQueue.Get(0);
 			if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
+				log.error("%s: 当前为集中刷新模式, 当前特感类型为 %d, 非法类型, 将不会继续刷新", PLUGIN_PREFIX, infectedType);
 				infectedQueue.Erase(0);
 				return;
 			}
 
 			infectedQueue.Erase(0);
-			L4D2_SpawnSpecial(infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0}));
+			infEntIndex = doSpawnInfected(infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0}));
+			if (!IsValidEntity(infEntIndex)) {
+				waveSpawnFailedCount++;
+				continue;
+			}
+
+			// 2023-10-10 集中刷新方式, 如果开启 6 特以下特感轮换, 则记录刷新的特感实体引用
+			if (g_hUnreachSixAlternate.BoolValue && !g_hSingleInfectedMode.BoolValue) {
+				// 将 entIndex 转为 entRef 放入 map 中
+				infEntIndex = EntIndexToEntRef(infEntIndex);
+				if (infEntIndex != -1) {
+					IntToString(infEntIndex, infEntRefStr, sizeof(infEntRefStr));
+					infEntRefMap.SetValue(infEntRefStr, true);
+					log.debugAndInfo("%s: 当前为集中刷新模式并已开启特感轮换, 特感类型 %s, 实体引用 %d 有效, 加入到特感实体引用集合中", PLUGIN_PREFIX, INFECTED_NAME[infectedType], infEntIndex);
+				}
+			}
+
 		} else if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
 			static int stateArrIndex = -1;
 			bool findRespawnFinished;
@@ -642,7 +783,12 @@ void sdkHookFindPosHandler(int client) {
 			// 找到相同特感类型, 刷新该特感, 第一波 state 中的 type 为 0, 直接从刷新队列中刷新
 			if ((queueIndex = infectedQueue.FindValue(state.infectedType)) > -1) {
 				infectedType = state.infectedType;
-				L4D2_SpawnSpecial(state.infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0}));
+				
+				if (!IsValidEntity(doSpawnInfected(state.infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0})))) {
+					waveSpawnFailedCount++;
+					continue;
+				}
+
 				if (stateArrIndex > -1) {
 					infectedStates[stateArrIndex].init();
 				}
@@ -656,6 +802,7 @@ void sdkHookFindPosHandler(int client) {
 				// 没有找到 或 是第一波刷特, 从刷新队列头部获取一个特感类型刷新
 				infectedType = infectedQueue.Get(0);
 				if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
+					log.error("%s: 当前为分散刷新模式, 当前特感类型为 %d, 非法类型, 将不会继续刷新", PLUGIN_PREFIX, infectedType);
 					infectedQueue.Erase(0);
 					return;
 				}
@@ -665,7 +812,11 @@ void sdkHookFindPosHandler(int client) {
 				}
 				
 				infectedQueue.Erase(0);
-				L4D2_SpawnSpecial(infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0}));
+				if (!IsValidEntity(doSpawnInfected(state.infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0})))) {
+					waveSpawnFailedCount++;
+					continue;
+				}
+
 				if (stateArrIndex > -1) {
 					infectedStates[stateArrIndex].init();
 				}
@@ -679,6 +830,37 @@ void sdkHookFindPosHandler(int client) {
 			log.debugAndInfo("%s: 分散刷新模式, 在 [%.2f, %.2f, %.2f] 处刷新一只 %s, 当前在场 %s 数量 %d 只, 耗时 %.3f s", PLUGIN_PREFIX, spawnPos[0], spawnPos[1], spawnPos[2], INFECTED_NAME[infectedType], INFECTED_NAME[infectedType], getSpecificInfectedCount(infectedType), GetEngineTime() - findPosSpawnTimeCost);
 	}
 
+}
+
+/**
+* 在指定位置刷新特感
+* @param class 特感类型
+* @param pos 位置坐标
+* @param ang 角度坐标
+* @return int
+**/
+static int doSpawnInfected(int class, const float pos[3], const float angle[3] = {0.0, 0.0, 0.0}) {
+	if (class < ZC_SMOKER || class > ZC_CHARGER)
+		return false;
+	
+	// 计算尝试次数, 失败了一次从最大尝试次数开始 / 2 得到新的尝试次数, 快速失败
+	static int i, attempt, infEntIndex;
+	attempt = MAX_SPAWN_ATTEMPT;
+	for (i = waveSpawnFailedCount; i > 0; i--) {
+		attempt /= 2;
+		if (attempt <= MIN_SPAWN_ATTEMPT) {
+			attempt = MIN_SPAWN_ATTEMPT;
+			break;
+		}
+	}
+
+	for (i = 0; i < attempt; i++) {
+		infEntIndex = L4D2_SpawnSpecial(class, pos, angle);
+		if (IsValidEntity(infEntIndex))
+			return infEntIndex;
+	}
+	log.error("%s: 无法于指定位置 [%.2f, %.2f, %.2f], 角度 [%.2f, %.2f, %.2f], 刷新特感 %s, 尝试 %d 次", PLUGIN_PREFIX, pos[0], pos[1], pos[2], angle[0], angle[1], angle[2], INFECTED_NAME[class], attempt);
+	return CLIENT_INVALID;
 }
 
 // ********** Interface Start **********
@@ -713,6 +895,9 @@ stock void postProcessOnOnceSpawnFinished() {
 	}
 	// ***** Timer Sync End *****
 
+	// 重置波次击杀顺序与波次特感刷新失败次数
+	waveKillIndex = 0;
+	waveSpawnFailedCount = 0;
 }
 
 // ********** Interface End **********
@@ -832,11 +1017,12 @@ void resetTimersAndStates() {
 		playerIncapRecord[i] = false;
 		infectedStates[i].init();
 	}
-
-	alternateInfecteds[0] = 0;
-	alternateInfecteds[1] = 0;
 	
 	waveDominativeCount = 0;
+
+	infEntRefMap.Clear();
+	waveKillIndex = 0;
+	waveSpawnFailedCount = 0;
 }
 
 /**

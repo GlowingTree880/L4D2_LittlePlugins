@@ -36,10 +36,6 @@ bool
 	// Tank 在场时禁止刷新的特感类型记录, 如禁止刷新 Spitter 则 4 号位置为 true
 	banSpawnClassDurintTank[INFECTED_ARRAY_SIZE];
 
-int
-	// 上一波刷新过, 且在轮换位上的特感类型记录, 如 5 特轮换最后一个位置的 Boomer, 则索引 0 位置为 2, 4 特轮换最后两个 Boomer, Spitter, 则索引 0 位置为 2, 1 位置为 4, 最多只会轮换 2 个特感, 如有其他需求需要自行增加数组大小
-	alternateInfecteds[2];
-
 char
 	kvFilePath[PLATFORM_MAX_PATH];
 
@@ -339,12 +335,8 @@ ArrayList getInfectedQueue() {
 	postProcessInfectedQueue(queue, spawnCount);
 
 	// 发布队列创建完成事件
-	int[] queueArray = new int[queue.Length];
-	for (i = 0; i < queue.Length; i++)
-		queueArray[i] = queue.Get(i);
 	Call_StartForward(onInfectedQueueGenerated);
-	Call_PushArray(queueArray, queue.Length);
-	Call_PushCell(queue.Length);
+	Call_PushCell(queue);
 	Call_Finish();
 
 	// 返回特感刷新队列
@@ -749,12 +741,188 @@ static int getClassWithBanStrategyDuringTank(int sourceClass, int[] spawnCount, 
 * @return void
 **/
 // 2023-08-23: 更改函数签名, ArrayList, int[]
+// 2023-10-10: 将接口中每个功能独立为单个方法, 6 特以下特感轮换采用 map 实现
 static void postProcessInfectedQueue(ArrayList queue, int spawnCount[INFECTED_ARRAY_SIZE]) {
-	if (queue == null) {
+	if (queue == null || queue.Length < 1) {
 		return;
 	}
+	// 配置超过 6 特每种特感产生一只
+	postProcessOverSix(queue);
+	// 配置 6 以下特感轮换
+	postProcessAlternate(queue, spawnCount);
+
+	// 获取本波强控特感的数量, 首先获取在场强控特感数量, 接着在特感队列中获取
+	static int i, infectedType;
+	waveDominativeCount = getDominativeInfectedCount();
+	for (i = 0; i < queue.Length; i++) {
+		infectedType = queue.Get(i);
+		if (infectedType == ZC_SMOKER || infectedType == ZC_HUNTER || infectedType == ZC_JOCKEY || infectedType == ZC_CHARGER) {
+			waveDominativeCount++;
+		}
+	}
+}
+
+/**
+* 后处理特感刷新队列 - 6 特以下特感轮换
+* @param queue 特感刷新队列
+* @return void
+**/
+static void postProcessAlternate(ArrayList queue, int spawnCount[INFECTED_ARRAY_SIZE]) {
+	if (g_hInfectedLimit.IntValue >= 6 || !g_hUnreachSixAlternate.BoolValue || g_hSingleInfectedMode.BoolValue)
+		return;
+	if (queue == null || queue.Length < 1)
+		return;
+	// 实体 Map 中的 size 小于 1, 返回
+	if (infEntRefMapOperation.size() < 1)
+		return;
 	
-	int i, j, infectedType;
+	static int i, maxIndex, class;
+	static ArrayList targetClasses;
+	targetClasses = new ArrayList();
+	switch (g_hInfectedLimit.IntValue) {
+		case 1,2,5: {
+			// 获取最大击杀顺序号
+			maxIndex = getMaxEntRefMapIndex();
+			if (maxIndex <= 0)
+				return;
+
+			// 1, 2, 5 特, 替换 1 个特感
+			class = infEntRefMapOperation.getByIndex(maxIndex);
+			if (class < ZC_SMOKER || class > ZC_CHARGER)
+				return;
+			
+			targetClasses.Push(class);
+			// 将 Map 中的特感击杀顺序 Entry 移除, 接着进行特感替换
+			infEntRefMapOperation.remove(maxIndex);
+			doInfectedAlternate(queue, spawnCount, targetClasses);
+		} case 3,4: {
+			// 3, 4 特, 替换 2 个特感
+			// 找出最后击杀的两个特感顺序号
+			for (i = 0; i < 2; i++) {
+				maxIndex = getMaxEntRefMapIndex();
+				// 如果 infEntRefMap 的 size 小于需要轮换的数量, 则 index 获取无效则跳过本次循环, 替换少于需要替换的特感数量
+				if (maxIndex <= 0)
+					continue;
+				class = infEntRefMapOperation.getByIndex(maxIndex);
+				if (class < ZC_SMOKER || class > ZC_CHARGER)
+					return;
+
+				targetClasses.Push(class);
+				infEntRefMapOperation.remove(maxIndex);
+			}
+			doInfectedAlternate(queue, spawnCount, targetClasses);
+		}
+	}
+
+	// 配置完毕, 清空 Map
+	infEntRefMapOperation.removeAll();
+	delete targetClasses;
+
+	log.debugAndInfo("%s: 特感刷新队列后处理完成 (内容: 当前 %d 特, 特感轮换)", PLUGIN_PREFIX, g_hInfectedLimit.IntValue);
+	// 重新打印特感刷新队列
+	printInfectedQueue(queue);
+}
+
+static void doInfectedAlternate(ArrayList queue, int spawnCount[INFECTED_ARRAY_SIZE], ArrayList targetClasses) {
+	if (queue == null || queue.Length < 1 || targetClasses == null || targetClasses.Length < 1)
+		return;
+	
+	static int i, j, targetClass, class;
+	bool exist[INFECTED_ARRAY_SIZE];
+	for (i = 0; i < targetClasses.Length; i++) {
+		targetClass = targetClasses.Get(i);
+		if (targetClass < ZC_SMOKER || targetClass > ZC_CHARGER)
+			return;
+
+		// 将传入的目标队列中的特感类型设置为已存在, 遍历刷新队列, 例如 上一波最后死亡 boomer, smoker, 则将 boomer, smoker 的存在设置为 true
+		exist[targetClass] = true;
+	}
+	for (i = 0; i < queue.Length; i++) {
+		class = queue.Get(i);
+		if (class < ZC_SMOKER || class > ZC_CHARGER)
+			continue;
+		
+		exist[class] = true;
+	}
+
+	for (i = 0; i < targetClasses.Length; i++) {
+		targetClass = targetClasses.Get(i);
+
+		for (;;) {
+			class = CLIENT_INVALID;
+			// 找到未出现的特感种类, 将目标特感种类换为未出现的特感种类
+			for (j = 1; j < INFECTED_ARRAY_SIZE; j++) {
+				// 发现了未出现的特感种类, 且仍有可刷新数量
+				if (!exist[j] && spawnCount[j] > 0) {
+					class = j;
+					log.debugAndInfo("%s: 找到一个未在刷新队列中出现的特感类型 %s", PLUGIN_PREFIX, INFECTED_NAME[class]);
+					break;
+				}
+			}
+			if (class == CLIENT_INVALID) {
+				log.debugAndInfo("%s: 未找到未出现的特感类型, 将不会进行任何替换", PLUGIN_PREFIX);
+				return;
+			}
+			
+			while ((j = queue.FindValue(targetClass)) > -1) {
+				log.debugAndInfo("%s: 将刷新队列中的目标特感类型 %s(索引 %d), 替换为未出现的特感类型 %s", PLUGIN_PREFIX, INFECTED_NAME[targetClass], j, INFECTED_NAME[class]);
+
+				if (spawnCount[class] > 0) {
+					queue.Set(j, class);
+					spawnCount[class]--;
+					// 替换完成, 将原来特感类型的可刷新数量增加
+					spawnCount[targetClass]++;
+				} else {
+					// 这个特感没有余量, 跳出, 继续寻找下一个
+					break;
+				}
+			}
+		}
+
+	}
+}
+
+/**
+* 获取特感实体索引 Map 中最大击杀次序的次序号
+* @param void
+* @return int
+**/
+static int getMaxEntRefMapIndex() {
+	if (infEntRefMap == null || infEntRefMap.Size < 1)
+		return -1;
+	
+	static int i, index;
+	StringMapSnapshot snapShot = infEntRefMap.Snapshot();
+	ArrayList keys = new ArrayList();
+	static char key[16];
+
+	for (i = 0; i < snapShot.Length; i++) {
+		snapShot.GetKey(i, key, sizeof(key));
+		TrimString(key);
+		index = StringToInt(key);
+		if (index < ZC_SMOKER || index > ZC_CHARGER)
+			continue;
+		keys.Push(index);
+	}
+	if (keys.Length < 1) {
+		delete keys;
+		delete snapShot;
+		return -1;
+	}
+	keys.Sort(Sort_Descending, Sort_Integer);
+	i = keys.Get(0);
+	delete keys;
+	delete snapShot;
+	return i;
+}
+
+/**
+* 后处理特感刷新队列 - 6 特以上每种特感产生一只
+* @param queue 特感刷新队列
+* @return viod
+**/
+static void postProcessOverSix(ArrayList queue) {
+	int i, j;
 	// 配置特感数量大于 6 特且开启每种特感产生一只且非单一特感模式, 开始后处理
 	if (g_hInfectedLimit.IntValue > 6 && g_hOverSixEveryClassOne.BoolValue) {
 		if (g_hSingleInfectedMode.BoolValue) {
@@ -827,80 +995,6 @@ static void postProcessInfectedQueue(ArrayList queue, int spawnCount[INFECTED_AR
 		}
 		log.debugAndInfo("%s: 特感刷新队列后处理完成 (内容: 当前 %d 特, 每种特感均刷新一只)", PLUGIN_PREFIX, g_hInfectedLimit.IntValue);
 		printInfectedQueue(queue);
-	}
-	// 配置 6 特以下特感轮换, 且非单一特感模式, 开始后处理
-	if (g_hInfectedLimit.IntValue < 6 && g_hUnreachSixAlternate.BoolValue) {
-		if (g_hSingleInfectedMode.BoolValue) {
-			return;
-		}
-
-		switch (g_hInfectedLimit.IntValue) {
-			// 1,5 特, 替换一只特感
-			case 1, 5: {
-				if (queue.Length < 1) {
-					return;
-				}
-				if (alternateInfecteds[0] < ZC_SMOKER) {
-					// 还没有记录轮换特感, 是第一波刷新, 开始记录轮换特感
-					alternateInfecteds[0] = queue.Get(queue.Length - 1);
-				} else {
-					// 已经记录了轮换的特感, 替换最后一只
-					infectedType = queue.Get(queue.Length - 1);
-					if (infectedType == alternateInfecteds[0]) {
-						for (i = ZC_SMOKER; i <= ZC_CHARGER; i++) {
-							// 该特感上一波已经刷新过了, 剩余可刷新数量小于等于 0, 跳过
-							if (i == infectedType || spawnCount[i] <= 0) {
-								continue;
-							}
-							log.debugAndInfo("%s: 当前刷新队列中索引 %d 的特感类型为 %s, 与上一波记录的轮换类型 %s 相同, 替换为新类型 %s", PLUGIN_PREFIX, queue.Length - 1, INFECTED_NAME[queue.Get(queue.Length - 1)], INFECTED_NAME[alternateInfecteds[0]], INFECTED_NAME[i]);
-							
-							queue.Set(queue.Length - 1, i);
-							break;
-						}
-					}
-					// 没有找到需要轮换的特感, 也记录本波待轮换的特感
-					alternateInfecteds[0] = queue.Get(queue.Length - 1);
-				}
-			} case 2,3,4: {
-				// 2,3,4 特, 替换两只特感
-				if (queue.Length < 2) {
-					return;
-				}
-				if (alternateInfecteds[0] < ZC_SMOKER && alternateInfecteds[1] < ZC_SMOKER) {
-					alternateInfecteds[0] = queue.Get(queue.Length - 2);
-					alternateInfecteds[1] = queue.Get(queue.Length - 1);
-				} else {
-					for (i = 1; i <= 2; i++) {
-						infectedType = queue.Get(queue.Length - i);
-						if (infectedType == alternateInfecteds[2 - i]) {
-							for (j = ZC_SMOKER; j <= ZC_CHARGER; j++) {
-								if (j == infectedType || spawnCount[j] <= 0) {
-									continue;
-								}
-								log.debugAndInfo("%s: 当前刷新队列中索引 %d 的特感类型为 %s, 与上一波记录的轮换类型 %s 相同, 替换为新类型 %s", PLUGIN_PREFIX, queue.Length - 1, INFECTED_NAME[queue.Length - 1], INFECTED_NAME[alternateInfecteds[0]], INFECTED_NAME[j]);
-								
-								queue.Set(queue.Length - i, j);
-								break;
-							}
-						}
-					}
-					// 记录新的轮换特感
-					alternateInfecteds[0] = queue.Get(queue.Length - 2);
-					alternateInfecteds[1] = queue.Get(queue.Length - 1);
-				}
-			}
-		}
-		log.debugAndInfo("%s: 特感刷新队列后处理完成 (内容: 当前 %d 特, 替换特感)", PLUGIN_PREFIX, g_hInfectedLimit.IntValue);
-		printInfectedQueue(queue);
-	}
-
-	// 获取本波强控特感的数量, 首先获取在场强控特感数量, 接着在特感队列中获取
-	waveDominativeCount = getDominativeInfectedCount();
-	for (i = 0; i < queue.Length; i++) {
-		infectedType = queue.Get(i);
-		if (infectedType == ZC_SMOKER || infectedType == ZC_HUNTER || infectedType == ZC_JOCKEY || infectedType == ZC_CHARGER) {
-			waveDominativeCount++;
-		}
 	}
 }
 
