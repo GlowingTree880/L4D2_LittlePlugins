@@ -144,16 +144,9 @@ public Action timerGetFirstWaveInfectedQueue(Handle timer) {
 		return Plugin_Stop;
 	}
 
-	// HACK: 没办法传 ArrayList 引用
-	// 发布自定义事件, 第一波特感刷新队列生成完成
-	int[] queueArray = new int[infectedQueue.Length];
-	for (int i = 0; i < infectedQueue.Length; i++) {
-		queueArray[i] = infectedQueue.Get(i);
-	}
-
+	// FIXED: 没办法传 ArrayList 引用 (2023-08-30)
 	Call_StartForward(onFirstWaveInfectedQueueGenerated);
-	Call_PushArray(queueArray, infectedQueue.Length);
-	Call_PushCell(infectedQueue.Length);
+	Call_PushCell(infectedQueue);
 	Call_Finish();
 
 	return Plugin_Continue;

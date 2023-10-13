@@ -78,18 +78,16 @@ native int Inf_GetAutoTimerRecordWaveCount();
 /**
 * 特感队列创建完成后触发本事件
 * @param infectedQueue 创建完成的特感队列
-* @param len 队列长度
 * @return void
 **/
-forward void Inf_OnInfectedQueueGenerated(int[] infectedQueue, int len);
+forward void Inf_OnInfectedQueueGenerated(Handle infectedQueue);
 
 /**
 * 第一波特感队列创建完成后触发本事件
 * @param infectedQueue 创建完成的特感队列
-* @param len 队列长度
 * @return void
 **/
-forward void Inf_OnFirstWaveInfectedQueueGenerated(int[] infectedQueue, int len);
+forward void Inf_OnFirstWaveInfectedQueueGenerated(Handle infectedQueue);
 
 /**
 * 一次特感开始找位刷新前触发本事件
