@@ -755,9 +755,25 @@ void sdkHookFindPosHandler(int client) {
 			}
 
 		} else if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
-			static int stateArrIndex = -1;
+			static int count, stateArrIndex = -1;
+			count = 0;
 			bool findRespawnFinished;
 			InfectedState state;
+
+			// 如果当前刷新队列长度比状态数组少, 重新获取
+			for (i = 1; i <= MaxClients; i++) {
+				state = infectedStates[i];
+				if (!state.valid || !state.isRespawnFinished)
+					continue;
+				count++;
+			}
+			if (infectedQueue != null && infectedQueue.Length < count) {
+				log.debugAndInfo("%s: 当前为分散刷新模式, 当前状态数组数量 %d, 刷新队列长度 %d, 长度不匹配, 重新获取刷新队列", PLUGIN_PREFIX, count, infectedQueue.Length);
+
+				delete infectedQueue;
+				infectedQueue = getInfectedQueue();
+			}
+
 			// 分散刷新时, 可以刷新新的特感, 遍历状态数组, 找到一个已经重生完毕的特感, 从下一波刷新队列中寻找相同类型的特感
 			if (currentSpawnWaveCount > 1) {
 				for (i = 1; i <= MaxClients; i++) {
@@ -812,7 +828,7 @@ void sdkHookFindPosHandler(int client) {
 				}
 				
 				infectedQueue.Erase(0);
-				if (!IsValidEntity(doSpawnInfected(state.infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0})))) {
+				if (!IsValidEntity(doSpawnInfected(infectedType, spawnPos, view_as<float>({0.0, 0.0, 0.0})))) {
 					waveSpawnFailedCount++;
 					continue;
 				}
