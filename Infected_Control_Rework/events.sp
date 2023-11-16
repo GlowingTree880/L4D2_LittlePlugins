@@ -9,8 +9,6 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-bool playerIncapRecord[MAXPLAYERS + 1];
-
 /**
 * 回合开始事件处理
 * @param 
@@ -32,20 +30,6 @@ public void eventRoundStartHandler(Event event, const char[] name, bool dontBroa
 **/
 public void eventRoundEndHandler(Event event, const char[] name, bool dontBroadcast) {
 	resetTimersAndStates();
-}
-
-/**
-* 玩家救起成功事件
-* @param 
-* @return void
-**/
-public void eventReviveSucessHandler(Event event, const char[] name, bool dontBroadcast) {
-	// person who was revived
-	int client = GetClientOfUserId(event.GetInt("subject"));
-	playerIncapRecord[client] = false;
-	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR) {
-		return;
-	}
 }
 
 /**
@@ -83,81 +67,71 @@ public void eventPlayerIncapStartHandler(Event event, const char[] name, bool do
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	int attacker = GetClientOfUserId(event.GetInt("attacker"));
 	// 正在刷新一波特感, 或 分散刷新时 不增时
-	if (canSpawnNewInfected || g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
+	if (canSpawnNewInfected || g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE)
 		return;
-	}
-	// 倒地的不是有效生还者且击倒生还的不是感染者, 不增时
-	if (!IsValidClient(client) || !IsValidClient(attacker) || GetClientTeam(client) != TEAM_SURVIVOR || GetClientTeam(attacker) != TEAM_INFECTED || !IsPlayerAlive(client)) {
+	// 倒地的不是有效生还者, 不增时
+	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR || !IsPlayerAlive(client))
 		return;
-	}
 
-	log.debugAndInfo("%s: 生还者 %N 倒地, 攻击者 %N", PLUGIN_PREFIX, client, attacker);
+	log.debugAndInfo("%s: 生还者 %N 倒地, 攻击者 %N, 增加一波中倒地生还者的数量, 当前时间 %.2f", PLUGIN_PREFIX, client, attacker, GetEngineTime());
 
-	// 检查当前有多少个倒地生还者
-	static int i;
-	int count = 0, recordCount = 0;
-	for (i = 1; i <= MaxClients; i++) {
-		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) {
-			continue;
+	// 增加一波中倒地生还者数量
+	waveIncapCount++;
+
+	// 开始增时
+	doDelayInfectedSpawnTimerNextTriggerTime();
+}
+
+/**
+* 玩家倒地后延迟刷特时钟
+* @param timer 刷特时钟父类
+* @param type 时钟类型
+* @param nextTriggerTime 新的时钟周期
+* @return void
+**/
+static void delayAndSetSpawnTimer(BaseTimer baseTimer, int type, float nextTriggerTime) {
+	if (baseTimer.timer == null)
+		return;
+	delete baseTimer.timer;
+
+	switch (type) {
+		case TIMER_STANDARD: {
+			baseTimer.timer = CreateTimer(nextTriggerTime, timerStandardInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
+
+			log.debugAndInfo("%s: 当前存在基准时钟, 开始增时 %.2f 秒, 时钟周期 %.2f, 下次触发在 %.2f (%.2f 秒后)", PLUGIN_PREFIX, g_hIncapExtraTime.FloatValue, nextTriggerTime, GetGameTime() + nextTriggerTime, g_hIncapExtraTime.FloatValue);
+		} case TIMER_REGULAR: {
+			baseTimer.timer = CreateTimer(nextTriggerTime, timerRegularInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
+
+			log.debugAndInfo("%s: 当前存在固定时钟, 开始增时 %.2f 秒, 时钟周期 %.2f, 下次触发在 %.2f (%.2f 秒后)", PLUGIN_PREFIX, g_hIncapExtraTime.FloatValue, nextTriggerTime, GetGameTime() + nextTriggerTime, g_hIncapExtraTime.FloatValue);
+		} case TIMER_AUTO: {
+			baseTimer.timer = CreateTimer(nextTriggerTime, timerAutoInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
+
+			log.debugAndInfo("%s: 当前存在动态时钟, 开始增时 %.2f 秒, 时钟周期 %.2f, 下次触发在 %.2f (%.2f 秒后)", PLUGIN_PREFIX, g_hIncapExtraTime.FloatValue, nextTriggerTime, GetGameTime() + nextTriggerTime, g_hIncapExtraTime.FloatValue);
 		}
-		if (IsClientIncapped(i)) {
-			count++;
-		}
 	}
-	// 统计已经记录过的倒地玩家
-	for (i = 1; i <= MaxClients; i++) {
-		if (playerIncapRecord[i]) {
-			recordCount++;
-		}
-	}
+	// 设置下次触发时间, nextTriggerTime 是时钟周期, 需要加上当前时间
+	baseTimer.nextTriggerTime = GetGameTime() + nextTriggerTime;
+}
 
-	playerIncapRecord[client] = true;
-
-	static float extraTime, newInterval, offset;
-	extraTime = (count - recordCount) * g_hIncapExtraTime.FloatValue;
-
-	// 存在基准时钟, 基准时钟开始增时
+static void doDelayInfectedSpawnTimerNextTriggerTime() {
+	static float nextTriggerTime;
+	// 时钟周期等于原本记录的下次触发时间加上倒地延时减去当前时间
 	if (standardInfectedSpawnTimer.timer != null) {
-		delete standardInfectedSpawnTimer.timer;
-		newInterval = extraTime + (standardInfectedSpawnTimer.nextTriggerTime - GetGameTime());
-		standardInfectedSpawnTimer.timer = CreateTimer(newInterval, timerStandardInfectedSpawnHandler, _, _);
-		standardInfectedSpawnTimer.nextTriggerTime = GetGameTime() + newInterval;
-		log.debugAndInfo("%s: 当前基准时钟不为 null, 基准时钟开始增时, 下次触发在 %.2f", PLUGIN_PREFIX, newInterval);
+		nextTriggerTime = (standardInfectedSpawnTimer.nextTriggerTime + g_hIncapExtraTime.FloatValue) - GetGameTime();
+		delayAndSetSpawnTimer(standardInfectedSpawnTimer, TIMER_STANDARD, nextTriggerTime);
 	}
-	// 存在固定时钟, 固定时钟开始增时
 	if (regularInfectedSpawnTimer.timer != null) {
-		delete regularInfectedSpawnTimer.timer;
-		newInterval = extraTime + (regularInfectedSpawnTimer.nextTriggerTime - GetGameTime());
-		regularInfectedSpawnTimer.timer = CreateTimer(newInterval, timerRegularInfectedSpawnHandler, _, _);
-		regularInfectedSpawnTimer.nextTriggerTime = GetGameTime() + newInterval;
-		log.debugAndInfo("%s: 当前固定时钟不为 null, 固定时钟开始增时, 下次触发在 %.2f", PLUGIN_PREFIX, newInterval);
-		if (FloatCompare(standardInfectedSpawnTimer.nextTriggerTime, regularInfectedSpawnTimer.nextTriggerTime) > 0) {
-			// 基准时钟下次触发时间晚于固定时钟
-			offset = regularInfectedSpawnTimer.nextTriggerTime - GetGameTime();
-		} else {
-			offset = standardInfectedSpawnTimer.nextTriggerTime - GetGameTime();
-		}
+		nextTriggerTime = (regularInfectedSpawnTimer.nextTriggerTime + g_hIncapExtraTime.FloatValue) - GetGameTime();
+		delayAndSetSpawnTimer(regularInfectedSpawnTimer, TIMER_REGULAR, nextTriggerTime);
 	}
-	// 存在动态时钟, 动态时钟开始增时
 	if (autoInfectedSpawnTimer.timer != null) {
-		delete autoInfectedSpawnTimer.timer;
-		newInterval = extraTime + (autoInfectedSpawnTimer.nextTriggerTime - GetGameTime());
-		autoInfectedSpawnTimer.timer = CreateTimer(newInterval, timerAutoInfectedSpawnHandler, _, _);
-		autoInfectedSpawnTimer.nextTriggerTime = GetGameTime() + newInterval;
-		log.debugAndInfo("%s: 当前动态时钟不为 null, 动态时钟开始增时, 下次触发在 %.2f", PLUGIN_PREFIX, newInterval);
-		if (FloatCompare(standardInfectedSpawnTimer.nextTriggerTime, autoInfectedSpawnTimer.nextTriggerTime) > 0) {
-			// 基准时钟下次触发时间晚于动态时钟
-			offset = autoInfectedSpawnTimer.nextTriggerTime - GetGameTime();
-		} else {
-			offset = standardInfectedSpawnTimer.nextTriggerTime - GetGameTime();
-		}
+		nextTriggerTime = (autoInfectedSpawnTimer.nextTriggerTime + g_hIncapExtraTime.FloatValue) - GetGameTime();
+		delayAndSetSpawnTimer(autoInfectedSpawnTimer, TIMER_AUTO, nextTriggerTime);
 	}
-	// 只存在基准时钟
-	if (FloatCompare(offset, 0.0) == 0) {
-		offset = standardInfectedSpawnTimer.nextTriggerTime - GetGameTime();
-	}
-	log.debugAndInfo("%s: 当前有 %d 个倒地生还者, 当前已经刷新完成 %d 波特感, 下一波特感刷新将延迟 %.2f 秒, 在 %.2f 秒后", PLUGIN_PREFIX, count, currentSpawnWaveCount, extraTime, offset);
-	CPrintToChatAll("{B}[{W}自动增时{B}]: 当前存在{O}%d{W}个{G}倒地生还者, {W}下一波特感刷新将被延迟{O}%d{W}秒, 在{O}%d{W}秒后", count, RoundToNearest(extraTime), RoundToNearest(offset));
+
+	// 增时提示
+	log.debugAndInfo("%s: 当前存在 %d 名倒地玩家, 已经刷新完成 %d 波特感, 下一波特感延迟 %.2f 秒刷新", PLUGIN_PREFIX, waveIncapCount, currentSpawnWaveCount, waveIncapCount * g_hIncapExtraTime.FloatValue);
+	CPrintToChatAll("{B}[{W}自动增时{B}]: 本波次中存在{O}%d{W}个{G}倒地生还者, {W}下一波特感刷新将延迟{O}%d{W}秒刷新", waveIncapCount, RoundToNearest(waveIncapCount * g_hIncapExtraTime.FloatValue));
 }
 
 /**
@@ -168,7 +142,6 @@ public void eventPlayerIncapStartHandler(Event event, const char[] name, bool do
 public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBroadcast) {
 	static int i, client, class;
 	client = GetClientOfUserId(event.GetInt("userid"));
-	playerIncapRecord[client] = false;
 	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_INFECTED || !IsFakeClient(client)) {
 		return;
 	}

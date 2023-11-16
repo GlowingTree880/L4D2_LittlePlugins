@@ -26,6 +26,8 @@
 
 #define INVALID_CLIENT_INDEX -1
 
+#define SPAN_INFECTED_TIMER_FLAG TIMER_REPEAT
+
 // 场上特感数量检测时钟周期 (默认 1 秒检测一次场上特感数量, 分散刷新模式下不检测)
 #define SPAWN_CHECK_TIMER_INTERVAL 1.0
 // round_start 事件触发多少秒后获取第一波刷特队列
@@ -115,8 +117,18 @@ int
 int
 	// 每一波击杀特感的顺序, 用于每波特感轮换
 	waveKillIndex,
-	// 每一波刷新特感失败的次数
-	waveSpawnFailedCount;
+	// 每一波刷新特感失败的次数, 用于调整每一次失败后新的特感重试刷新次数
+	waveSpawnFailedCount,
+	// 每一波倒地的生还者数量, 用于特感刷新时钟创建时延时
+	waveIncapCount;
+
+// 时钟类型枚举类 TimerType
+enum {
+	TIMER_NONE,
+	TIMER_STANDARD,
+	TIMER_REGULAR,
+	TIMER_AUTO
+}
 
 // 刷新时间策略 SpawnStrategy
 enum {
@@ -171,7 +183,7 @@ enum struct BaseTimer {
 	float nextTriggerTime;
 	// 初始化函数
 	void init() {
-		this.timer = null;
+		delete this.timer;
 		this.recordSpawnWaveCount = 0;
 		this.flag = 0;
 		this.interval = 0.0;
@@ -200,7 +212,7 @@ enum struct InfectedState {
 	bool valid;
 	// 初始化函数
 	void init() {
-		this.timer = null;
+		delete this.timer;
 		this.infectedType = 0;
 		this.deathTime = 0.0;
 		this.nextRespawnTime = 0.0;
@@ -208,7 +220,6 @@ enum struct InfectedState {
 		this.valid = false;
 	}
 }
-
 InfectedState infectedStates[MAXPLAYERS + 1];
 
 // 基准时钟, 固定时钟, 动态时钟
@@ -416,7 +427,6 @@ public void OnPluginStart() {
 	HookEvent("round_end", eventRoundEndHandler);
 	HookEvent("player_death", eventPlayerDeathHandler);
 	HookEvent("player_incapacitated", eventPlayerIncapStartHandler);
-	HookEvent("revive_success", eventReviveSucessHandler);
 	HookEvent("player_disconnect", eventPlayerDisconnectHandler, EventHookMode_Pre);
 
 	infEntRefMap = new StringMap();
@@ -551,43 +561,48 @@ public Action timerInfectedCountCheckHandler(Handle timer) {
 	if (g_hSpawnStrategy.IntValue == SPS_REGULAR &&
 	 	isInSpawnFinishedTime && 
 		canTriggerRegularInfectedSpawnTimer(count, dominativeCount, dpsCount)) {
-		// 满足固定时钟创建条件, 但有生还者倒地, 不创建固定时钟
-		if (g_hIncapExtraTime.BoolValue && hasAnySurvivorIncap()) {
-			return Plugin_Continue;
-		}
 
 		// 未创建固定刷特时钟则创建
 		if (regularInfectedSpawnTimer.timer == null) {
+			
+			if (waveIncapCount > 0) {
+				log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 且满足固定时钟触发条件且当前固定时钟为 null, 创建固定时钟, 本波次内共有 %d 名生还者倒地, 周期 %.2f, 距离上次创建固定时钟经过 %.3f s\n", PLUGIN_PREFIX, waveIncapCount, g_hSpawnDuration.FloatValue + (waveIncapCount * g_hIncapExtraTime.FloatValue), GetEngineTime() - regularTimerCreatedTime);
+			} else {
+				log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 满足固定时钟触发条件且当前固定时钟为 null, 创建固定时钟, 周期 %.2f, 距离上次创建固定时钟经过 %.3f s\n", PLUGIN_PREFIX, g_hSpawnDuration.FloatValue, GetEngineTime() - regularTimerCreatedTime);
+			}
+			
 			regularTimerCreatedTime = GetEngineTime();
 
-			log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 满足固定时钟触发条件且当前固定时钟为 null, 创建固定时钟, 周期 %.2f, 距离上次创建固定时钟经过 %.3f s\n", PLUGIN_PREFIX, g_hSpawnDuration.FloatValue, GetEngineTime() - regularTimerCreatedTime);
-
-			regularInfectedSpawnTimer.init();
-
-			regularInfectedSpawnTimer.timer = CreateTimer(regularTimerInterval, timerRegularInfectedSpawnHandler, _, _);
+			// 固定时钟因为生还者倒地而增时, 周期是固定时钟周期 + (本波次倒地人数 * 一个倒地生还者的增时)
+			if (waveIncapCount > 0)
+				regularInfectedSpawnTimer.timer = CreateTimer(regularTimerInterval + (waveIncapCount * g_hIncapExtraTime.FloatValue), timerRegularInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
+			else
+				regularInfectedSpawnTimer.timer = CreateTimer(regularTimerInterval, timerRegularInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
 			// 设置固定刷特时钟参数
-			regularInfectedSpawnTimer.interval = g_hSpawnDuration.FloatValue;
-			regularInfectedSpawnTimer.nextTriggerTime = GetGameTime() + g_hSpawnDuration.FloatValue;
+			regularInfectedSpawnTimer.nextTriggerTime = GetGameTime() + regularTimerInterval;
 		}
 	} else if (g_hSpawnStrategy.IntValue == SPS_AUTO && 
 		isInSpawnFinishedTime && 
 		canTriggerAutoInfectedSpawnTimer(count, dominativeCount, dpsCount)) {
-		// 满足动态时钟创建条件, 但有生还者倒地, 不创建动态时钟
-		if (g_hIncapExtraTime.BoolValue && hasAnySurvivorIncap()) {
-			return Plugin_Continue;
-		}
 
 		// 触发自动刷特时钟, 未创建自动刷特时钟则创建
 		if (autoInfectedSpawnTimer.timer == null) {
+			
+			if (waveIncapCount > 0) {
+				log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 且满足动态时钟触发条件且当前动态时钟为 null, 创建动态时钟, 本波次内共有 %d 名生还者倒地, 周期 %.2f, 距离上次创建动态时钟经过 %.3f s\n", PLUGIN_PREFIX, waveIncapCount, autoTimerInterval + (waveIncapCount * g_hIncapExtraTime.FloatValue), GetEngineTime() - autoTimerCreatedTime);
+			} else {
+				log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 且满足动态时钟触发条件且当前动态时钟为 null, 创建动态时钟, 周期 %.2f, 距离上次创建动态时钟经过 %.3f s\n", PLUGIN_PREFIX, autoTimerInterval, GetEngineTime() - autoTimerCreatedTime);
+			}
+			
 			autoTimerCreatedTime = GetEngineTime();
 
-			log.debugAndInfo("\n%s: 检测到当前在刷特间隔内, 且满足动态时钟触发条件且当前动态时钟为 null, 创建动态时钟, 周期 %.2f, 距离上次创建动态时钟经过 %.3f s\n", PLUGIN_PREFIX, autoTimerInterval, GetEngineTime() - autoTimerCreatedTime);
-
-			autoInfectedSpawnTimer.init();
-			autoInfectedSpawnTimer.timer = CreateTimer(autoTimerInterval, timerAutoInfectedSpawnHandler, _, _);
+			// 动态时钟因为生还者倒地而增时
+			if (waveIncapCount > 0)
+				autoInfectedSpawnTimer.timer = CreateTimer(autoTimerInterval + (waveIncapCount * g_hIncapExtraTime.FloatValue), timerAutoInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
+			else
+				autoInfectedSpawnTimer.timer = CreateTimer(autoTimerInterval, timerAutoInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
 			// 设置动态时钟参数
-			autoInfectedSpawnTimer.interval = g_hSpawnDuration.FloatValue;
-			autoInfectedSpawnTimer.nextTriggerTime = GetGameTime() + g_hSpawnDuration.FloatValue;
+			autoInfectedSpawnTimer.nextTriggerTime = GetGameTime() + autoTimerInterval;
 		}
 	}
 
@@ -897,23 +912,21 @@ stock void postProcessOnOnceSpawnFinished() {
 			log.debugAndInfo("%s: 当前是第 1 波特感刷新, 创建基准时钟, 时钟周期为: %.2f s", PLUGIN_PREFIX, standardTimerInterval);
 			// 设置基准时钟参数, 出门刷新第一波, 基准时钟波次设置为 1
 			standardInfectedSpawnTimer.init();
-			standardInfectedSpawnTimer.interval = standardTimerInterval;
 			standardInfectedSpawnTimer.recordSpawnWaveCount = 1;
 		} else {
 			// 不是第一波刷特, 刷新完成, 删除基准时钟并重新创建
 			delete standardInfectedSpawnTimer.timer;
-			standardInfectedSpawnTimer.isTriggered = false;
 			log.debugAndInfo("\n%s: 当前是第 %d 波特感刷新, 重新创建基准时钟, 时钟周期 %.2f s, 下次触发时间 %.2f s\n", PLUGIN_PREFIX, currentSpawnWaveCount, standardTimerInterval, standardInfectedSpawnTimer.nextTriggerTime);
 		}
-		standardInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 		standardInfectedSpawnTimer.nextTriggerTime = GetGameTime() + standardTimerInterval;
-		standardInfectedSpawnTimer.timer = CreateTimer(standardTimerInterval, timerStandardInfectedSpawnHandler, _, _);
+		standardInfectedSpawnTimer.timer = CreateTimer(standardTimerInterval, timerStandardInfectedSpawnHandler, _, SPAN_INFECTED_TIMER_FLAG);
 	}
 	// ***** Timer Sync End *****
 
 	// 重置波次击杀顺序与波次特感刷新失败次数
 	waveKillIndex = 0;
 	waveSpawnFailedCount = 0;
+	waveIncapCount = 0;
 }
 
 // ********** Interface End **********
@@ -1027,18 +1040,13 @@ void resetTimersAndStates() {
 	targetCount = 0;
 
 	setDirectorNoSpecials(true);
-
-	static int i;
-	for (i = 1; i <= MaxClients; i++) {
-		playerIncapRecord[i] = false;
-		infectedStates[i].init();
-	}
 	
 	waveDominativeCount = 0;
 
 	infEntRefMap.Clear();
 	waveKillIndex = 0;
 	waveSpawnFailedCount = 0;
+	waveIncapCount = 0;
 }
 
 /**
@@ -1085,7 +1093,7 @@ static bool canTriggerAutoInfectedSpawnTimer(int infectedCount, int dominativeCo
 * @param void
 * @return bool
 **/
-static bool hasAnySurvivorIncap() {
+stock bool hasAnySurvivorIncap() {
 	static int i;
 	for (i = 1; i <= MaxClients; i++) {
 		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) {
@@ -1107,6 +1115,10 @@ void getInfectedSpawnTimerInterval() {
 	regularTimerInterval = float(g_hSpawnDuration.IntValue == 0 ? 4 : g_hSpawnDuration.IntValue);
 	// 动态时钟间隔: SpawnDuration + (Limit / 2 - 1 == 0 ? 1 : Limit / 2 - 1) * 4 (保底 4 s)
 	autoTimerInterval = g_hSpawnDuration.FloatValue + (half - 1 > 0 ? half - 1 : 1) * 4;
+
+	standardInfectedSpawnTimer.interval = standardTimerInterval;
+	regularInfectedSpawnTimer.interval = regularTimerInterval;
+	autoInfectedSpawnTimer.interval = autoTimerInterval;
 }
 
 void getDisperseTargetInfectedCount() {

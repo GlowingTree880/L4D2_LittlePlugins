@@ -143,11 +143,13 @@ sm_infqueue (!infqueue <num [10]>)
 2. 增加 Cvar: inf_unreach_six_alternative 控制是否开启 6 特以下特感轮换 (1,5 特最后一个刷新的特感类型下一波不会出现, 2,3,4 特最后两个刷新的特感类型下一波不会出现, 需要保证该特感类型允许刷新, 即 z_xxx_limit 不为 0)<br>
 3. 修复检查基准时钟及动态时钟是否允许被触发相关函数中特感总数及强控阈值获取错误的问题
 </details>
+
 <details>
 <summary>2023-08-25</summary>
 1. 更改一些特感刷新队列的生成策略与 Tank 在场时特感的替换策略<br>
 2. 修复特感实际刷新位置为 rayEndPos + PLAYER_HEIGHT 的问题
 </details>
+
 <details>
 <summary>2023-10-12</summary>
 1. 增加 Cvar: inf_pos_init_nav_distance 与 inf_pos_nav_expand_unit 实现找位时 Nav 距离随着时间增大而增大<br>
@@ -155,7 +157,18 @@ sm_infqueue (!infqueue <num [10]>)
 3. 增加特感刷出时实体有效性检验
 </details>
 
-- 2023-10-13：上传插件及 inc 文件，修复 `2023-10-12` 更新导致的分散刷新无法刷特的问题
+<details>
+<summary>2023-10-13</summary>
+1. 上传插件及 inc 文件，修复 `2023-10-12` 更新导致的分散刷新无法刷特的问题
+</details>
+
+<details>
+<summary>2023-11-16</summary>
+1. 更新 natives_and_forwards.sp 修复直接拉取源码编译由于部分 forward 签名与调用时传参不一而导致的无法刷新特感的情况<br>
+2. 修复开启生还者倒地增时时增时时间不准确的问题<br>
+3. 修复固定/动态时钟触发时间早于本波次基准时钟触发时间时并未删除基准时钟导致连续刷新两波特感的问题<br>
+4. 修复特感刷新时钟部分参数，日志记录不准确的问题
+</details>
 
 ---
 - 如在使用过程中发现任何 Bug，请提出 issue 说明 Bug 类型及发生时情况，如有报错请附上 log 文件信息 (｡･ω･｡)

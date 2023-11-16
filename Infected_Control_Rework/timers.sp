@@ -20,7 +20,8 @@ public Action timerStandardInfectedSpawnHandler(Handle timer) {
 		standardInfectedSpawnTimer.timer = null;
 		return Plugin_Stop;
 	}
-	log.debugAndInfo("\n%s: 基准时钟时钟周期, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s\n", PLUGIN_PREFIX, standardInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval);
+
+	log.debugAndInfo("\n%s: 基准时钟触发, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s\n", PLUGIN_PREFIX, standardInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval);
 
 	// 如果在一次找位刷新失败后的延迟时间, 触发了任何刷新时钟, 或 正在刷特中 都不允许刷新下一波
 	if (isInFindPosFailedDelay || canSpawnNewInfected) {
@@ -39,10 +40,10 @@ public Action timerStandardInfectedSpawnHandler(Handle timer) {
 	}
 
 	// 如果基准时钟还没有被触发, 则设置触发状态为 true 已触发
-	if (!standardInfectedSpawnTimer.isTriggered) {
+	if (!standardInfectedSpawnTimer.isTriggered)
 		standardInfectedSpawnTimer.isTriggered = true;
-	}
 	// 基准时钟触发次数自增
+	standardInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 	standardInfectedSpawnTimer.recordSpawnWaveCount++;
 	standardInfectedSpawnTimer.triggerCount++;
 	// 可以使用基准时钟刷新新一波特感
@@ -54,7 +55,7 @@ public Action timerStandardInfectedSpawnHandler(Handle timer) {
 	log.debugAndInfo("%s: 基准时钟允许刷新新一波特感, 当前基准时钟记录波次 %d", PLUGIN_PREFIX, standardInfectedSpawnTimer.recordSpawnWaveCount);
 	// 基准时钟本次触发结束, 置 null 返回
 	standardInfectedSpawnTimer.timer = null;
-	return Plugin_Continue;
+	return Plugin_Stop;
 }
 
 /**
@@ -71,14 +72,20 @@ public Action timerRegularInfectedSpawnHandler(Handle timer) {
 
 	if (isInFindPosFailedDelay || canSpawnNewInfected) {
 		log.debugAndInfo("%s: 当前正在一次找位失败后延迟时间或正在刷新特感, 不处理固定时钟逻辑", PLUGIN_PREFIX);
+
 		regularInfectedSpawnTimer.timer = null;
 		return Plugin_Stop;
 	}
-
-	if (!regularInfectedSpawnTimer.isTriggered) {
-		regularInfectedSpawnTimer.isTriggered = true;
+	// 基准时钟只可能与固定时钟或动态时钟的一种并存, 因此固定时钟中不需要判断动态时钟, 只需要判断基准时钟即可
+	if (standardInfectedSpawnTimer.timer != null) {
+		log.debugAndInfo("%s: 当前基准时钟不为 null, 基准时钟下次触发慢于固定时钟, 删除基准时钟", PLUGIN_PREFIX);
+		delete standardInfectedSpawnTimer.timer;
 	}
 
+	if (!regularInfectedSpawnTimer.isTriggered)
+		regularInfectedSpawnTimer.isTriggered = true;
+
+	regularInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 	regularInfectedSpawnTimer.recordSpawnWaveCount++;
 	regularInfectedSpawnTimer.triggerCount++;
 
@@ -90,7 +97,7 @@ public Action timerRegularInfectedSpawnHandler(Handle timer) {
 	log.debugAndInfo("%s: 固定时钟允许刷新新一波特感, 当前固定时钟记录波次 %d", PLUGIN_PREFIX, regularInfectedSpawnTimer.recordSpawnWaveCount);
 
 	regularInfectedSpawnTimer.timer = null;
-	return Plugin_Continue;
+	return Plugin_Stop;
 }
 
 /**
@@ -107,14 +114,20 @@ public Action timerAutoInfectedSpawnHandler(Handle timer) {
 
 	if (isInFindPosFailedDelay || canSpawnNewInfected) {
 		log.debugAndInfo("%s: 当前正在一次找位失败后延迟时间或正在刷新特感, 不处理动态时钟逻辑", PLUGIN_PREFIX);
+
 		autoInfectedSpawnTimer.timer = null;
 		return Plugin_Stop;
 	}
-
-	if (!autoInfectedSpawnTimer.isTriggered) {
-		autoInfectedSpawnTimer.isTriggered = true;
+	if (standardInfectedSpawnTimer.timer != null) {
+		log.debugAndInfo("%s: 当前基准时钟不为 null, 基准时钟下次触发慢于动态时钟, 删除基准时钟", PLUGIN_PREFIX);
+		delete standardInfectedSpawnTimer.timer;
 	}
 
+	// 如果动态时钟没有触发过, 则设置触发位为 true
+	if (!autoInfectedSpawnTimer.isTriggered)
+		autoInfectedSpawnTimer.isTriggered = true;
+
+	autoInfectedSpawnTimer.lastTriggerTime = GetGameTime();
 	autoInfectedSpawnTimer.recordSpawnWaveCount++;
 	autoInfectedSpawnTimer.triggerCount++;
 
@@ -126,7 +139,7 @@ public Action timerAutoInfectedSpawnHandler(Handle timer) {
 	log.debugAndInfo("%s: 动态时钟允许刷新新一波特感, 当前动态时钟记录波次 %d", PLUGIN_PREFIX, autoInfectedSpawnTimer.recordSpawnWaveCount);
 	
 	autoInfectedSpawnTimer.timer = null;
-	return Plugin_Continue;
+	return Plugin_Stop;
 }
 
 /**
