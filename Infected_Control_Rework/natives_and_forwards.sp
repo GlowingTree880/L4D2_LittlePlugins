@@ -108,8 +108,12 @@ GlobalForward
 	onOnceSpawnFinished;
 
 void nativesAndForwardsOnModuleStart() {
-	onFirstWaveInfectedQueueGenerated = new GlobalForward("Inf_OnFirstWaveInfectedQueueGenerated", ET_Ignore, Param_Array, Param_Cell);
-	onInfectedQueueGenerated = new GlobalForward("Inf_OnInfectedQueueGenerated", ET_Ignore, Param_Array, Param_Cell);
+	// 第一波特感队列生成完成后事件
+	onFirstWaveInfectedQueueGenerated = new GlobalForward("Inf_OnFirstWaveInfectedQueueGenerated", ET_Ignore, Param_Cell);
+	// 除第一波外感队列生成完成后事件
+	onInfectedQueueGenerated = new GlobalForward("Inf_OnInfectedQueueGenerated", ET_Ignore, Param_Cell);
+	// 一次刷新开始时事件
 	onOnceSpawnStarted = new GlobalForward("Inf_OnOneSpawnStarted", ET_Ignore);
+	// 一次刷新结束后事件
 	onOnceSpawnFinished = new GlobalForward("Inf_OnOneSpawnFinished", ET_Ignore);
 }
