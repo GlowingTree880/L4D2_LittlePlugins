@@ -102,13 +102,13 @@ void infectedPosFindOnModuleStart() {
 **/
 void getSpawnPos(int client, const float gridIncrement = 0.0, const float navIncrement = 0.0, float spawnPos[3]) {
 	spawnPos = NULL_VECTOR;
-	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR || !IsPlayerAlive(client)) {
+	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
 		return;
-	}
 
 	static int i;
 	// 客户端位置, 找位网格左边界, 找位网格右边界, 射线坐标, 射线撞击位置坐标, 射线撞击位置与最近生还者位置的 Nav 距离
 	static float pos[3], expandLeftPos[2][3], expandRightPos[2][3], rayPos[3], rayEndPos[3], visiblePos[3];
+	static float tempPos[3];
 
 	GetClientAbsOrigin(client, pos);
 	CopyVectors(pos, expandLeftPos[POS_UP]);	CopyVectors(pos, expandLeftPos[POS_DOWN]);
@@ -177,6 +177,12 @@ void getSpawnPos(int client, const float gridIncrement = 0.0, const float navInc
 		rayPos[X] = GetRandomFloatInRange(expandLeftPos[POS_UP][X], expandRightPos[POS_UP][X]);
 		rayPos[Y] = GetRandomFloatInRange(expandLeftPos[POS_UP][Y], expandRightPos[POS_DOWN][Y]);
 		rayPos[Z] = GetRandomFloatInRange(pos[Z], pos[Z] + RAY_Z_HEIGHT);
+
+		// 进行射线初始位置到目标生还者的直线距离的判断, 不符合直接跳过
+		CopyVectors(rayPos, tempPos);
+		tempPos[Z] = pos[Z];
+		if (GetVectorDistance(pos, tempPos) < g_hMinDistance.FloatValue)
+			continue;
 
 		traceRay = TR_TraceRayFilterEx(rayPos, TRACE_RAY_ANGLE, TRACE_RAY_FLAG, TRACE_RAY_TYPE, traceRayFilter, client);
 		if (traceRay == null)

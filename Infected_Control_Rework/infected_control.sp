@@ -67,6 +67,7 @@ ArrayList
 	infectedQueue;
 
 StringMap
+	// 特感实体索引 Map 集合
 	infEntRefMap;
 
 Logger
@@ -103,6 +104,8 @@ bool
 	isLateLoad;
 
 int
+	// 针对一个人找位模式下目标生还者索引
+	targetIndex,
 	// 跑男客户端索引
 	runnerIndex,
 	// 当前刷新特感的波数
@@ -418,8 +421,9 @@ public void OnPluginStart() {
 
 	g_hInfectedLimit.AddChangeHook(changeHookInfectedLimit);
 	g_hSpawnDuration.AddChangeHook(changeHookSpawnDuration);
-	g_hSpawnMethodStrategy.AddChangeHook(changeHookSpawnMethodStrategy);
 	g_hLoggingLevel.AddChangeHook(changeHookLoggingLevel);
+	g_hSpawnStrategy.AddChangeHook(changeHookSpawnStrategy);
+	g_hSpawnMethodStrategy.AddChangeHook(changeHookSpawnMethodStrategy);
 
 	// 事件挂钩
 	HookEvent("round_start", eventRoundStartHandler);
@@ -429,7 +433,7 @@ public void OnPluginStart() {
 	HookEvent("player_incapacitated", eventPlayerIncapStartHandler);
 	HookEvent("player_disconnect", eventPlayerDisconnectHandler, EventHookMode_Pre);
 
-	infEntRefMap = new StringMap();
+	infEntRefMap = new StringMap(); 
 	log = new Logger(g_hLoggingLevel.IntValue);
 
 	// 其他模块
@@ -446,12 +450,17 @@ public void OnPluginStart() {
 	// 设置最大特感数量
 	CreateTimer(MAX_SPECIAL_SET_DELAY, timerSetMaxSpecialHandler, _, _);
 
+	// 插件延迟加载
 	if (isLateLoad) {
-		for (int i = 1; i <= MaxClients; i++) {
-			if (!IsClientInGame(i)) {
-				continue;
+		if (g_hFindPosStrategy.IntValue == FPS_ALL_SURVIVOR) {
+			for (int i = 1; i <= MaxClients; i++) {
+				if (IsClientInGame(i))
+					SDKHook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
 			}
-			SDKHook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
+		} else {
+			targetIndex = getRandomSurvivor();
+			if (IsValidSurvivor(targetIndex) && IsPlayerAlive(targetIndex))
+				SDKHook(targetIndex, SDK_HOOK_TYPE, sdkHookFindPosHandler);
 		}
 	}
 }
@@ -476,17 +485,16 @@ public void OnMapStart() {
 	getDisperseTargetInfectedCount();
 }
 
+// NOTE: 针对所有人找位时, 这里进行 Hook
 /**
-* 玩家连接服务器
+* 玩家连接服务器, 如果是针对所有人找位, 则 Hook 进入的每一个玩家
 * @param client 连接服务器的玩家
 * @return void
 **/
 public void OnClientPutInServer(int client) {
-	if (g_hFindPosStrategy.IntValue != FPS_ALL_SURVIVOR) {
-		return;
-	}
-	// 集中刷新模式, Hook 加入的生还者
-	SDKHook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
+	// 找位模式不是针对一个人找位, Hook 加入的生还者
+	if (g_hFindPosStrategy.IntValue == FPS_ALL_SURVIVOR)
+		SDKHook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
 }
 
 /**
@@ -505,25 +513,21 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client) {
 	infectedCountCheckTimer = CreateTimer(SPAWN_CHECK_TIMER_INTERVAL, timerInfectedCountCheckHandler, _, TIMER_REPEAT);
 
 	// 开始刷新第一波特感
-	static int i;
 	if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR) {
-		i = getRandomSurvivor();
-		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) {
-			log.debugAndInfo("\n%s: 当前找位策略为针对某个生还者找位, 目标生还者 %d (%N) 无效, 将不会触发找位!\n", PLUGIN_PREFIX, i, i);
-			return Plugin_Continue;
-		}
-		SDKHook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-		log.debugAndInfo("%s: 当前找位策略为针对某个生还者找位, 目标生还者 %N", PLUGIN_PREFIX, i);
+
+		targetIndex = getRandomSurvivor();
+		if (IsValidSurvivor(targetIndex) && IsPlayerAlive(targetIndex))
+			SDKHook(targetIndex, SDK_HOOK_TYPE, sdkHookFindPosHandler);
+		
+		log.debugAndInfo("%s:当前找位策略为针对某个生还者找位, 随机一个目标生还者 %d (%N), 是否有效 %b, 无效不会触发找位!", PLUGIN_PREFIX, targetIndex, (IsValidSurvivor(targetIndex) ? targetIndex : 0), (IsValidSurvivor(targetIndex) && IsPlayerAlive(targetIndex)));
 	}
 
-	// 自动控制模式, 允许刷新特感
+	// 自动控制模式, 允许刷新特感, 判断是否需要延迟刷新第一波特感, 否则手动控制模式需要输入指令才允许刷新第一波特感
 	if (g_hStartSpawnControl.IntValue == SSC_AUTO) {
-		// 允许刷新新的特感, 是否需要延迟刷新第一波特感
-		if (g_hFirstWaveDelay.BoolValue) {
+		if (g_hFirstWaveDelay.BoolValue)
 			CreateTimer(g_hFirstWaveDelay.FloatValue, timerFirstWaveDelaySpawnHandler, _, _);
-		} else {
+		else
 			canSpawnNewInfected = true;
-		}
 	}
 
 	log.debugAndInfo("%s: 第一个玩家 %N 出安全区域, 当前刷新控制模式 %d, 是否允许刷新第 1 波特感 %b, 延迟 %.2f s", PLUGIN_PREFIX, client, g_hStartSpawnControl.IntValue, canSpawnNewInfected, g_hFirstWaveDelay.FloatValue);
@@ -617,36 +621,34 @@ public Action timerInfectedCountCheckHandler(Handle timer) {
 * @return void
 **/
 void sdkHookFindPosHandler(int client) {
-	// 生还者无效, 停止 Hook
-	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR || !IsPlayerAlive(client)) {
+	// 生还者无效, 返回
+	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
 		return;
-	}
-
 	// 不允许刷新新的特感, 返回
-	if (!isLeftSafeArea || !canSpawnNewInfected || isInFindPosFailedDelay || isInSpawnFinishedTime) {
+	if (!isLeftSafeArea || !canSpawnNewInfected || isInFindPosFailedDelay || isInSpawnFinishedTime)
 		return;
-	}
-
-	// 存在跑男, UnHook 不是跑男的生还者
-	if (runnerIndex != INVALID_CLIENT_INDEX && runnerIndex != client) {
-		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
+	// 存在跑男但是当前生还者不是跑男, 返回
+	if (IsValidSurvivor(runnerIndex) && IsPlayerAlive(runnerIndex) && client != runnerIndex)
 		return;
-	}
+	// 针对某个生还者找位时但是当前生还者不是目标, 返回
+	if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR &&
+		(IsValidSurvivor(targetIndex) &&
+		IsPlayerAlive(targetIndex)) && client != targetIndex)
+		return;
 
 	// 特感刷新队列为 null, 重新获取一个
-	if (infectedQueue == null) {
+	if (infectedQueue == null)
 		infectedQueue = getInfectedQueue();
-	}
 
+	// 第一波特感刷新
 	static int i;
 	if (FloatCompare(findPosSpawnTimeCost, 0.0) == 0) {
 		// 当前是第一波刷特, 时间还没有记录, 将距离上一波刷特完成时间记为当前时间
-		if (FloatCompare(spawnInterval, 0.0) == 0) {
+		if (FloatCompare(spawnInterval, 0.0) == 0)
 			spawnInterval = GetEngineTime();
-		}
 
 		if (g_hSpawnMethodStrategy.IntValue == SMS_CENTERALIZE)
-			log.debugAndInfo("\n%s: 开始第 %d 次特感刷新, 开始记录找位刷新时间, 当前时间: %.2f, 距离上一波刷特完成经过 %.3f s", PLUGIN_PREFIX, currentSpawnWaveCount, GetEngineTime(), GetEngineTime() - spawnInterval);
+			log.debugAndInfo("\n%s: 当前为集中刷新模式, 开始第 %d 波特感刷新, 记录找位刷新时间, 当前时间: %.2f, 距离上一波刷特完成经过 %.3f s", PLUGIN_PREFIX, currentSpawnWaveCount, GetEngineTime(), GetEngineTime() - spawnInterval);
 		else if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE)
 			log.debugAndInfo("\n%s: 当前为分散刷新模式, 开始刷新特感, 记录找位刷新时间, 当前时间: %.2f, 距离上一波刷特完成经过 %.3f s", PLUGIN_PREFIX, GetEngineTime(), GetEngineTime() - spawnInterval);
 
@@ -660,54 +662,48 @@ void sdkHookFindPosHandler(int client) {
 		Call_Finish();
 	}
 	
-	// 没有新的特感可以刷新, 返回
+	// 一波特感刷新完成, 进行后处理
 	if (infectedQueue.Length < 1) {
-		// 找位刷新计时未启动, 返回
+		// 找位刷新计时未启动, 出现并记录异常
 		if (FloatCompare(findPosSpawnTimeCost, 0.0) == 0) {
+			log.debugAndInfo("%s: 第 %d 波特感刷新完成, 出现异常, 并未记录本波次特感找位刷新耗时, 请检查代码正确性!", PLUGIN_PREFIX, currentSpawnWaveCount);
 			return;
-		} else if (FloatCompare(GetEngineTime(), findPosSpawnTimeCost) > 0) {
-			// 当前是第一波刷特, 将距离上一波刷特完成时间记为当前时间
-			if (currentSpawnWaveCount == 1) {
-				spawnInterval = GetEngineTime();
-			}
-
-			// 找位刷新计时大于 0 时, 判断为找位刷新已经开始, 队列中没有特感可以刷新, 判断为刷新完成
-			log.debugAndInfo("%s: 第 %d 波特感刷新完成, 当前时间 %.2f, 共耗时: %.3f s, 距离上一波刷特完成经过 %.3f s", PLUGIN_PREFIX, currentSpawnWaveCount, GetEngineTime(), GetEngineTime() - findPosSpawnTimeCost, GetEngineTime() - spawnInterval);
-
-			// 刷新完成, 删除当前刷新队列, 并置是否可以刷新新的特感为 false, 记录这波特感刷新完成时间, 网格拓展次数置 0
-			delete infectedQueue;
-			infectedQueue = null;
-
-			// 刷新完成后处理接口
-			postProcessOnOnceSpawnFinished();
-
-			// 发布一波特感刷新完成自定义事件
-			Call_StartForward(onOnceSpawnFinished);
-			Call_Finish();
-
-			canSpawnNewInfected = false;
-			isInSpawnFinishedTime = true;
-			spawnInterval = GetEngineTime();
-			respawnFinishedCount = 0;
-			expandCount = 0;
-
-			// 重置找位刷特消耗时间
-			findPosSpawnTimeCost = 0.0;
-
-			// 全局记录特感刷新波次自增, 不是第一波刷特允许自增
-			if (currentSpawnWaveCount >= 1) {
-				currentSpawnWaveCount++;
-			}
-
-			// 针对某个生还者找位, 找位完成 UnHook
-			if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR) {
-				SDKUnhook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-			}
-			// 解除本波次的跑男检测
-			if (runnerIndex != INVALID_CLIENT_INDEX) {
-				runnerIndex = INVALID_CLIENT_INDEX;
-			}
 		}
+
+		// 当前是第一波刷特, 将距离上一波刷特完成时间记为当前时间
+		if (currentSpawnWaveCount == 1)
+			spawnInterval = GetEngineTime();
+
+		// 找位刷新计时大于 0 时, 判断为找位刷新已经开始, 队列中没有特感可以刷新, 判断为刷新完成
+		log.debugAndInfo("%s: 第 %d 波特感刷新完成, 当前时间 %.2f, 共耗时: %.3f s, 距离上一波刷特完成经过 %.3f s", PLUGIN_PREFIX, currentSpawnWaveCount, GetEngineTime(), GetEngineTime() - findPosSpawnTimeCost, GetEngineTime() - spawnInterval);
+
+		// 刷新完成, 删除当前刷新队列, 并置是否可以刷新新的特感为 false, 记录这波特感刷新完成时间, 网格拓展次数置 0
+		delete infectedQueue;
+
+		// 刷新完成后处理接口
+		postProcessOnOnceSpawnFinished();
+
+		// 发布一波特感刷新完成自定义事件
+		Call_StartForward(onOnceSpawnFinished);
+		Call_Finish();
+
+		canSpawnNewInfected = false;
+		isInSpawnFinishedTime = true;
+		spawnInterval = GetEngineTime();
+		respawnFinishedCount = 0;
+		expandCount = 0;
+
+		// 重置找位刷特消耗时间
+		findPosSpawnTimeCost = 0.0;
+
+		// 全局记录特感刷新波次自增, 不是第一波刷特允许自增
+		if (currentSpawnWaveCount >= 1)
+			currentSpawnWaveCount += 1;
+
+		// 一波找位刷新完成后, 重置针对某个生还者找位时的目标生还者索引和跑男索引
+		targetIndex = INVALID_CLIENT_INDEX;
+		runnerIndex = INVALID_CLIENT_INDEX;
+		// 一波特感找位刷新后处理完毕后, 返回, 下面是找位刷新逻辑
 		return;
 	}
 
@@ -730,9 +726,8 @@ void sdkHookFindPosHandler(int client) {
 	}
 
 	// 无效刷新位置, 返回
-	if (IsZeroVector(spawnPos)) {
+	if (IsZeroVector(spawnPos))
 		return;
-	}
 
 	// 开始刷新特感
 	static int infectedType, queueIndex, infEntIndex;
@@ -765,7 +760,7 @@ void sdkHookFindPosHandler(int client) {
 				if (infEntIndex != -1) {
 					IntToString(infEntIndex, infEntRefStr, sizeof(infEntRefStr));
 					infEntRefMap.SetValue(infEntRefStr, true);
-					log.debugAndInfo("%s: 当前为集中刷新模式并已开启特感轮换, 特感类型 %s, 实体引用 %d 有效, 加入到特感实体引用集合中", PLUGIN_PREFIX, INFECTED_NAME[infectedType], infEntIndex);
+					log.debugAndInfo("%s: 当前为集中刷新模式并已开启特感轮换, 特感类型 %s, 实体引用 %d 有效, 加入特感实体引用集合中", PLUGIN_PREFIX, INFECTED_NAME[infectedType], infEntIndex);
 				}
 			}
 
@@ -806,7 +801,6 @@ void sdkHookFindPosHandler(int client) {
 					log.debugAndInfo("\n%s: 当前为分散刷新模式, 遍历完成状态数组, 没有找到重生完成的特感, 不允许刷新新的特感, 删除特感队列\n", PLUGIN_PREFIX);
 					canSpawnNewInfected = false;
 					delete infectedQueue;
-					infectedQueue = null;
 					return;
 				}
 			}
@@ -1047,6 +1041,10 @@ void resetTimersAndStates() {
 	waveKillIndex = 0;
 	waveSpawnFailedCount = 0;
 	waveIncapCount = 0;
+
+	// 重置特感状态数组
+	for (int i = 0; i <= MaxClients; i++)
+		infectedStates[i].init();
 }
 
 /**
@@ -1226,34 +1224,23 @@ void changeHookSpawnDuration(ConVar convar, const char[] oldValue, const char[] 
 	getInfectedSpawnTimerInterval();
 }
 
+void changeHookSpawnStrategy(ConVar convar, const char[] oldValue, const char[] newValue) {
+	int newV = StringToInt(newValue);
+	switch (newV) {
+		case SPS_REGULAR:
+			log.debugAndInfo("%s: 当前特感刷新策略更改为固定时间间隔刷新", PLUGIN_PREFIX);
+		case SPS_AUTO:
+			log.debugAndInfo("%s: 当前特感刷新策略跟改为动态时间间隔刷新", PLUGIN_PREFIX);
+	}
+}
+
 void changeHookSpawnMethodStrategy(ConVar convar, const char[] oldValue, const char[] newValue) {
-	int i, oldV = StringToInt(oldValue), newV = StringToInt(newValue);
-	if (newV == SMS_CENTERALIZE) {
-		// 更改为集中刷新模式, Hook 所有人
-		if (canSpawnNewInfected) {
-			CreateTimer(1.0, timerChangeSpawnMethodStrategyHandler, true, TIMER_REPEAT);
-		} else {
-			for (i = 1; i <= MaxClients; i++) {
-				if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR) {
-					continue;
-				}
-				SDKHook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-			}
-		}
-		log.debugAndInfo("%s: 特感刷新方式变更, 旧值 %d, 新值 %d, Hook 所有人", PLUGIN_PREFIX, oldV, newV);
-	} else if (newV == SMS_DISPERSE) {
-		// 更改为分散刷新, UnHook 所有人
-		if (canSpawnNewInfected) {
-			CreateTimer(1.0, timerChangeSpawnMethodStrategyHandler, false, TIMER_REPEAT);
-		} else {
-			for (i = 1; i <= MaxClients; i++) {
-				if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR) {
-					continue;
-				}
-				SDKUnhook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-			}
-		}
-		log.debugAndInfo("%s: 特感刷新方式变更, 旧值 %d, 新值 %d, UnHook 所有人", PLUGIN_PREFIX, oldV, newV);
+	int newV = StringToInt(newValue);
+	switch (newV) {
+		case SMS_CENTERALIZE:
+			log.debugAndInfo("%s: 当前特感刷新方式更改为集中刷新方式", PLUGIN_PREFIX);
+		case SMS_DISPERSE:
+			log.debugAndInfo("%s: 当前特感刷新方式更改为分散刷新方式", PLUGIN_PREFIX);
 	}
 }
 

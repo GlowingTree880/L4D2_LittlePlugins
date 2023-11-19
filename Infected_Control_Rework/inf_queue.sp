@@ -999,9 +999,10 @@ static void postProcessOverSix(ArrayList queue) {
 }
 
 public void changeHookSingleInfectedMode(ConVar convar, const char[] oldValue, const char[] newValue) {
-	if (canSpawnNewInfected) {
+	// 正在刷新特感, 不产生新的特感队列
+	if (canSpawnNewInfected)
 		return;
-	}
+	
 	delete infectedQueue;
 	infectedQueue = getInfectedQueue();
 	log.debugAndInfo("%s: 单一特感模式 Cvar 变动, 旧值 %s, 新值 %s, 处于刷新间隔内, 重新获取特感刷新队列", PLUGIN_PREFIX, oldValue, newValue);

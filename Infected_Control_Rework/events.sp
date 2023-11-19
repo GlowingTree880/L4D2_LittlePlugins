@@ -188,51 +188,65 @@ public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBro
 		char clientName[64];
 		GetClientName(client, clientName, sizeof(clientName));
 		strcopy(state.name, sizeof(state.name), clientName);
+		
+		// 下次重生时间
+		switch (g_hSpawnStrategy.IntValue) {
+			case SPS_REGULAR:
+				state.nextRespawnTime = GetGameTime() + regularTimerInterval;
+			case SPS_AUTO:
+				state.nextRespawnTime = GetGameTime() + autoTimerInterval;
+		}
 
+		state.valid = true;
 		state.deathTime = GetGameTime();
-		state.nextRespawnTime = GetGameTime() + g_hSpawnDuration.FloatValue;
 		state.isRespawnFinished = false;
 
-		static int index;
-		index = -1;
-		// 该位置已经被别的特感注册有效, 寻找一个未被注册的位置
 		if (infectedStates[client].valid) {
+			// 如果该特感索引的位置已经被其他特感占用了, 则寻找一个新的位置
+			static int index;
 			for (i = 1; i <= MaxClients; i++) {
-				if (infectedStates[i].valid) {
+				if (infectedStates[i].valid)
 					continue;
-				}
 				index = i;
 				break;
 			}
-		}
+			if (index < 1) {
+				log.debugAndInfo("%s: 当前特感 %N, 索引 %d, 在状态数组中的位置已被占用, 未找到新的空闲位置, 将不会进入复活倒计时", PLUGIN_PREFIX, client, client);
+			} else {
+				log.debugAndInfo("%s: 当前特感 %N, 索引 %d, 在状态数组中的位置已被占用, 找到新的空闲位置, 索引 %d", PLUGIN_PREFIX, client, client, index);
 
-		if (index > -1) {
-			state.valid = true;
-			state.timer = CreateTimer(g_hSpawnDuration.FloatValue, timerRespawnFinishHandler, index, _);
-			infectedStates[index] = state;
-			log.debugAndInfo("%s: 当前特感 %s, 索引 %d, 在状态数组中的位置已经被占用, 新位置索引 %d", PLUGIN_PREFIX, client, client, index);
+				switch (g_hSpawnStrategy.IntValue) {
+					case SPS_REGULAR:
+						state.timer = CreateTimer(regularTimerInterval, timerRespawnFinishHandler, index, _);
+					case SPS_AUTO:
+						state.timer = CreateTimer(autoTimerInterval, timerRespawnFinishHandler, index, _);
+				}
+				infectedStates[index] = state;
+			}
 		} else {
-			state.valid = true;
-			state.timer = CreateTimer(g_hSpawnDuration.FloatValue, timerRespawnFinishHandler, client, _);
+			switch (g_hSpawnStrategy.IntValue) {
+				case SPS_REGULAR:
+					state.timer = CreateTimer(regularTimerInterval, timerRespawnFinishHandler, client, _);
+				case SPS_AUTO:
+					state.timer = CreateTimer(autoTimerInterval, timerRespawnFinishHandler, client, _);
+			}
 			infectedStates[client] = state;
+			log.debugAndInfo("%s: 当前特感 %N 死亡, 索引 %d 加入状态数组对应位置", PLUGIN_PREFIX, client, client);
 		}
-
-		log.debugAndInfo("\n%s: 当前为分散刷新方式, 特感 %N 死亡, 加入状态数组中, 索引 %d", PLUGIN_PREFIX, client, index > -1 ? index : client);
+		
+		// 打印特感状态数组
 		log.debugAndInfo("%s: 当前状态数组", PLUGIN_PREFIX);
 		for (i = 1; i <= MaxClients; i++) {
-			if (!infectedStates[i].valid) {
+			if (!infectedStates[i].valid)
 				continue;
-			}
 			log.debugAndInfo("\t\t%索引 %d, %s 类型 %s, 有效 %b, 重生完成 %b", i, infectedStates[i].name, INFECTED_NAME[infectedStates[i].infectedType], infectedStates[i].valid, infectedStates[i].isRespawnFinished);
 		}
 	}
 
-	if (class == ZC_SPITTER) {
+	if (class == ZC_SPITTER)
 		return;
-	}
 
 	// 踢出死亡特感, 非 Spitter
-	if (FloatCompare(g_hDeadKickTime.FloatValue, 0.0) > 0) {
+	if (FloatCompare(g_hDeadKickTime.FloatValue, 0.0) > 0)
 		CreateTimer(g_hDeadKickTime.FloatValue, timerKickDeadInfectedHandler, client, _);
-    }
 }

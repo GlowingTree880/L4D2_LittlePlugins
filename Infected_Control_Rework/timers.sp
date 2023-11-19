@@ -68,7 +68,7 @@ public Action timerRegularInfectedSpawnHandler(Handle timer) {
 		regularInfectedSpawnTimer.timer = null;
 		return Plugin_Stop;
 	}
-	log.debugAndInfo("\n%s: 固定时钟时钟周期, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s, 距离上次创建固定时钟经过 %.3f s\n", PLUGIN_PREFIX, regularInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval, GetEngineTime() - regularTimerCreatedTime);
+	log.debugAndInfo("\n%s: 固定时钟触发, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s, 距离上次创建固定时钟经过 %.3f s\n", PLUGIN_PREFIX, regularInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval, GetEngineTime() - regularTimerCreatedTime);
 
 	if (isInFindPosFailedDelay || canSpawnNewInfected) {
 		log.debugAndInfo("%s: 当前正在一次找位失败后延迟时间或正在刷新特感, 不处理固定时钟逻辑", PLUGIN_PREFIX);
@@ -110,7 +110,7 @@ public Action timerAutoInfectedSpawnHandler(Handle timer) {
 		autoInfectedSpawnTimer.timer = null;
 		return Plugin_Stop;
 	}
-	log.debugAndInfo("\n%s: 动态时钟时钟周期, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s, 距离上次创建动态时钟经过 %.3f s\n", PLUGIN_PREFIX, autoInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval, GetEngineTime() - autoTimerCreatedTime);
+	log.debugAndInfo("\n%s: 动态时钟触发, 当前记录波次 %d, 距离上一波刷特完成经过 %.3f s, 距离上次创建动态时钟经过 %.3f s\n", PLUGIN_PREFIX, autoInfectedSpawnTimer.recordSpawnWaveCount, GetEngineTime() - spawnInterval, GetEngineTime() - autoTimerCreatedTime);
 
 	if (isInFindPosFailedDelay || canSpawnNewInfected) {
 		log.debugAndInfo("%s: 当前正在一次找位失败后延迟时间或正在刷新特感, 不处理动态时钟逻辑", PLUGIN_PREFIX);
@@ -230,7 +230,7 @@ public Action timerRespawnFinishHandler(Handle timer, int client) {
 	static int infectedType;
 	infectedType = state.infectedType;
 	if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
-		infectedStates[client].init();
+		infectedStates[client].timer = null;
 		return Plugin_Stop;
 	}
 
@@ -262,52 +262,6 @@ public Action timerRespawnFinishHandler(Handle timer, int client) {
 	return Plugin_Stop;
 }
 
-public Action timerChangeSpawnMethodStrategyHandler(Handle timer, bool hook) {
-	static int i;
-	for (i = 1; i <= MaxClients; i++) {
-		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR) {
-			continue;
-		}
-		if (hook) {
-			SDKHook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-		} else {
-			SDKUnhook(i, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-		}
-	}
-	return Plugin_Stop;
-}
-
-/**
-* 找位策略为针对某个生还者找位时随机选择一个生还者
-* @param void
-* @return 
-**/
-stock void doSDKHookOnRandomClient(int target = INVALID_CLIENT_INDEX) {
-	if (target != INVALID_CLIENT_INDEX) {
-		log.debugAndInfo("%s: 当前找位模式为选定单个生还者找位, 找到了跑男 %N", PLUGIN_PREFIX, target);
-		SDKUnhook(target, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-		SDKHook(target, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-		return;
-	}
-
-	static int i, client;
-	client = getRandomSurvivor();
-	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR) {
-		return;
-	}
-	// UnHook 不是目标生还者的生还者
-	for (i = 1; i <= MaxClients; i++) {
-		if (i == client || !IsValidClient(client) || GetClientTeam(client) != TEAM_SURVIVOR) {
-			continue;
-		}
-		SDKUnhook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-	}
-	// Hook 目标生还者
-	SDKHook(client, SDK_HOOK_TYPE, sdkHookFindPosHandler);
-
-	log.debugAndInfo("%s: 当前找位模式为选定单个生还者找位, 目标 %N", PLUGIN_PREFIX, client);
-}
-
 /**
 * 跑男检测
 * @param void
@@ -335,16 +289,19 @@ stock int doCheckRunnerExist() {
 
 void checkRunnerExistAndStartHook() {
 	static int runner;
-	if ((runner = doCheckRunnerExist()) != INVALID_CLIENT_INDEX) {
-		// 找到了跑男, 如果是针对某个玩家找位则针对跑男找位, 否则在 SdkHook 中 UnHook 非跑男的玩家
+	runner = doCheckRunnerExist();
+	if (IsValidSurvivor(runner) && IsPlayerAlive(runner)) {
+		// 找到了跑男玩家, 设置跑男玩家索引
 		runnerIndex = runner;
-		if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR) {
-			doSDKHookOnRandomClient(runner);
-		}
+		log.debugAndInfo("%s: 找到了跑男玩家 %N 即将针对其进行特感找位刷新", PLUGIN_PREFIX, runner);
 		return;
 	}
+	// 如果没有跑男, 且是针对某个生还者找位, 则随机选择一个生还者
 	if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR) {
-		// 如果没有跑男, 且是针对某个生还者找位, 则选择一个生还者
-		doSDKHookOnRandomClient();
+		targetIndex = getRandomSurvivor();
+		if (IsValidSurvivor(targetIndex) && IsPlayerAlive(targetIndex))
+			log.debugAndInfo("%s: 当前找位策略为针对某个生还者找位, 没有找到跑男玩家, 随机选择一个生还者 %N 进行特感找位刷新", PLUGIN_PREFIX, targetIndex);
+		else
+			log.debugAndInfo("%s: 当前找位策略为针对某个生还者找位, 没有找到跑男玩家, 随机选择一个生还者 %d 无效, 将针对所有人找位", PLUGIN_PREFIX, targetIndex);
 	}
 }
