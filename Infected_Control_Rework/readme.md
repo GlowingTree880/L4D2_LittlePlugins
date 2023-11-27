@@ -171,10 +171,11 @@ sm_infqueue (!infqueue <num [10]>)
 </details>
 
 <details>
-<summary>2023-11-19</summary>
+<summary>2023-11-27</summary>
 1. 增加分散刷新模式对固定时间间隔与动态时间间隔刷新的支持<br>
 2. 修复分散刷新模式 round_start 初始化时并未重置特感状态数组的问题<br>
-3. inf_pos_find 增加判断条件，随机选择一个射线起始位置后先检查到目标生还者的直线距离，若小于 inf_pos_min_distance 则立即开始随机下一个位置，减少判断过近的位置
+3. inf_pos_find 增加判断条件，随机选择一个射线起始位置后先检查到目标生还者的直线距离，若小于 inf_pos_min_distance 则立即开始随机下一个位置，减少判断过近的位置<br>
+4. 优化 6 特以下特感轮换算法, 解决死循环从而导致服务器无响应的问题
 </details>
 
 ---

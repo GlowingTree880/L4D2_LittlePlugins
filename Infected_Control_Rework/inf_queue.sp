@@ -823,62 +823,61 @@ static void postProcessAlternate(ArrayList queue, int spawnCount[INFECTED_ARRAY_
 	printInfectedQueue(queue);
 }
 
+/**
+* 进行特感轮换后处理
+* @param queue 特感刷新队列
+* @param spawnCount 每种特感的可刷数量
+* @param targetClasses 需要替换的特感队列
+* @return void
+**/
 static void doInfectedAlternate(ArrayList queue, int spawnCount[INFECTED_ARRAY_SIZE], ArrayList targetClasses) {
 	if (queue == null || queue.Length < 1 || targetClasses == null || targetClasses.Length < 1)
 		return;
 	
-	static int i, j, targetClass, class;
 	bool exist[INFECTED_ARRAY_SIZE];
-	for (i = 0; i < targetClasses.Length; i++) {
-		targetClass = targetClasses.Get(i);
-		if (targetClass < ZC_SMOKER || targetClass > ZC_CHARGER)
-			return;
+	static int i, j, index, targetClass, replaceClass;
 
-		// 将传入的目标队列中的特感类型设置为已存在, 遍历刷新队列, 例如 上一波最后死亡 boomer, smoker, 则将 boomer, smoker 的存在设置为 true
-		exist[targetClass] = true;
-	}
-	for (i = 0; i < queue.Length; i++) {
-		class = queue.Get(i);
-		if (class < ZC_SMOKER || class > ZC_CHARGER)
-			continue;
+	// 将在刷新队列中的特感类型设置为 true
+	for (i = 0; i < queue.Length; i++)
+		exist[queue.Get(i)] = true;
+	for (i = 0; i < targetClasses.Length; i++)
+		exist[targetClasses.Get(i)] = true;
+
+	// 开始进行特感替换, 假设有 2 个特感需要被替换, 那么循环 2 次
+	for (i = 0; i < targetClasses.Length; i++) {
+		targetClass = INVALID_CLIENT_INDEX;
+
+		// 获取一个需要被替换的特感类型
+		replaceClass = targetClasses.Get(i);
 		
-		exist[class] = true;
-	}
-
-	for (i = 0; i < targetClasses.Length; i++) {
-		targetClass = targetClasses.Get(i);
-
-		for (;;) {
-			class = CLIENT_INVALID;
-			// 找到未出现的特感种类, 将目标特感种类换为未出现的特感种类
-			for (j = 1; j < INFECTED_ARRAY_SIZE; j++) {
-				// 发现了未出现的特感种类, 且仍有可刷新数量
-				if (!exist[j] && spawnCount[j] > 0) {
-					class = j;
-					log.debugAndInfo("%s: 找到一个未在刷新队列中出现的特感类型 %s", PLUGIN_PREFIX, INFECTED_NAME[class]);
-					break;
-				}
-			}
-			if (class == CLIENT_INVALID) {
-				log.debugAndInfo("%s: 未找到未出现的特感类型, 将不会进行任何替换", PLUGIN_PREFIX);
-				return;
-			}
-			
-			while ((j = queue.FindValue(targetClass)) > -1) {
-				log.debugAndInfo("%s: 将刷新队列中的目标特感类型 %s(索引 %d), 替换为未出现的特感类型 %s", PLUGIN_PREFIX, INFECTED_NAME[targetClass], j, INFECTED_NAME[class]);
-
-				if (spawnCount[class] > 0) {
-					queue.Set(j, class);
-					spawnCount[class]--;
-					// 替换完成, 将原来特感类型的可刷新数量增加
-					spawnCount[targetClass]++;
-				} else {
-					// 这个特感没有余量, 跳出, 继续寻找下一个
-					break;
-				}
+		// 如果这个需要被替换的特感类型不在刷新队列中, 无需替换, 跳过
+		if ((index = queue.FindValue(replaceClass)) < 0) {
+			log.debugAndInfo("%s: 特感类型 %s 在刷新队列中未找到, 不进行替换", PLUGIN_PREFIX, INFECTED_NAME[replaceClass]);
+			continue;
+		}
+		
+		// 需要被替换的特感类型在刷新队列中, 寻找一个未出现的特感类型
+		for (j = 0; j < INFECTED_ARRAY_SIZE; j++) {
+			if (!exist[j] && spawnCount[j] > 0) {
+				targetClass = j;
+				log.debugAndInfo("%s: 找到了一个未出现且有剩余可刷新数量的特感 %s, 即将进行替换", PLUGIN_PREFIX, INFECTED_NAME[targetClass]);
+				break;
 			}
 		}
-
+		if (targetClass == INVALID_CLIENT_INDEX) {
+			log.debugAndInfo("%s: 未找到任何未出现且有升序可刷新数量的特感, 不会进行任何替换", PLUGIN_PREFIX);
+			return;
+		}
+		
+		// 允许替换特感, index = queue.FindValue(replaceClass)
+		log.debugAndInfo("%s: 即将将刷新队列索引 %d 位置特感 %s 替换为 %s", PLUGIN_PREFIX, index, INFECTED_NAME[queue.Get(index)], INFECTED_NAME[targetClass]);
+		// 进行替换
+		queue.Set(index, targetClass);
+		// 将待替换的特感可刷新数量 +1, 替换的特感可刷新数量 -1
+		spawnCount[targetClass] -= 1;
+		spawnCount[replaceClass] += 1;
+		// 替换的特感设置为已存在
+		exist[targetClass] = true;
 	}
 }
 
