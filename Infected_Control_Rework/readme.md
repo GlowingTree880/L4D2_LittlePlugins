@@ -16,8 +16,8 @@ inf_spawn_strategy 2
 inf_spawn_method_strategy 1
 // 采用分散刷新方式时, 先死亡的特感需要等待至少 [g_hDisperseSpawnPercent * g_hInfectedLimit] 取下整 个特感复活时间完成或在场才允许复活, [如配置 5 特感, 本值为 0.5, 则先死亡的特感需要等待至少 3 只特感复活完成或在场至少 3 只特感才可复活]
 inf_disperse_spawn_per 0.5
-// 特感找位策略 (1: 轮询所有生还者位置找位, 2: 以随机一个生还者为目标找位)
-inf_find_pos_strategy 1
+// 特感找位策略 (1: 每刷新一只特感时随机一个生还者找位, 2: 在一个刷新队列刷新完毕前都以一个生还者找位, 3: 总是以路程最大的生还者找位, 4: 总是以路程最小的生还者找位)
+inf_centeralize_spawn_strategy 1
 // 每个刷新位置允许刷新多少只特感
 inf_each_pos_count 1
 // 每局第一波特感刷新在首个生还者离开安全区域后延迟多少秒 (0: 不延迟)
@@ -42,6 +42,8 @@ inf_ban_spawn_tank_strategy 2
 // 超过 6 特以上是否更改刷新队列使得每种类型特感产生一只
 inf_over_six_every_class_one 1
 
+// 特感找位方式 (1: 使用 L4D_GetRandomPZSpawnPosition API, 2: 使用增强 L4D_GetRandomPZSpawnPosition API, 3: 使用射线找位)
+inf_pos_find_method 3
 // 特感刷新位置距离目标的最小直线距离
 inf_pos_min_distance 150
 // 特感刷新位置距离目标的最小 Nav 距离
@@ -84,8 +86,12 @@ sm_duration (!duration <sec>) [仅管理可用]
 // 启用或禁用单一特感模式
 sm_type (!type <num>) [仅管理可用]
 // 使用分散刷新模式时, 在控制台输出特感状态数组情况, 调试时使用, 且需要 inf_log_level 等级包含 2 (DEBUG) 时可将结果展示到控制台上
-sm_statelist (!statelist)
+sm_statelist (!statelist) [仅管理可用]
 // 连续测试多次获取特感刷新队列, 如无参数则默认获取 10 次特感刷新队列, 调试时使用, 且需要 inf_log_level 等级包含 2 (DEBUG) 时可将结果展示到控制台上
+sm_state (!state) [仅管理可用]
+// 展示插件特感刷新状态 (是否允许刷新、是否已经刷新完成一波、是否在找位失败延迟中等)
+sm_entmap (!entmap) [仅管理可用]
+// 展示插件特感实体引用 Map 集合内容, 该集合用于在需要进行特感轮换时或分散刷新时判断死亡的特感是否是插件刷出的, 防止非法特感干扰插件刷新导致刷特数量不准确的情况
 sm_infqueue (!infqueue <num [10]>)
 ``````
 
@@ -94,7 +100,12 @@ sm_infqueue (!infqueue <num [10]>)
 
 ## 注意事项
 1. 当前暂不支持在一局游戏内更改特感刷新方式 Cvar，即 `inf_spawn_method_strategy`，若需要更改请重启当前地图，否则会出现更改完毕后无法刷新特感的情况
-2. 插件第一次运行时会在 Cvar: `inf_queue_kvfile_path` 值，默认为 `sourcemod/data/` 目录下生成 `infected_queue.cfg` 特感刷新队列配置文件，若当前特感数量未在特感刷新队列中配置特感等待队列信息，则获取特感队列时，插件将会进入错误状态无法运行，如插件因无法获取操作权限等原因导致无法自动创建配置文件，请手动在 `inf_queue_kvfile_path` 值路径中创建 infected_queue.cfg 文件，详细信息见其他图示中特感刷新队列配置文字
+2. 当前暂不支持在一局游戏内更改特感刷新策略 Cvar, 即 `inf_spawn_strategy`, 若需要更改请重启一次地图
+3. 插件采用三阶增时设计, 小于一阶增时阈值 `SPAWN_TIME_INCREASE_FIRST_THRESHOLD` (默认 5.0) 时使用一阶增时 `SPAWN_TIME_INCREASE_FIRST_ORDER` (默认 0.5s), 超过一阶增时阈值使用二阶增时 `SPAWN_TIME_INCREASE_SECOND_ORDER` (默认 2.0s), 超过二阶增时阈值 `SPAWN_TIME_INCREASE_SECOND_THRESHOLD` (默认 10.0s) 使用三阶增时 `SPAWN_TIME_INCREASE_THIRD_ORDER` (默认 4.0s)。在 6 特时有以下示例: `inf_spawn_duration` 设置为 1s 时使用一阶增时 (默认 0.5s), 则基准时钟 2.5s, 固定时钟周期 1.5s, 动态时钟 2s; 设置为 6s 时使用二阶增时 (默认 2s), 则基准时钟 12s, 固定时钟 8s, 动态时钟 10s; 设置为 16s 时使用三阶增时 (默认 4s), 则基准时钟 28s, 固定时钟 20s, 动态时钟 24s
+4. 基准时钟周期计算方式为: `inf_spawn_duration` + (`inf_limit` / 2 > 0 ? `inf_limit` / 2 : 1) * 增时; 固定时钟计算方式为 `inf_spawn_duration` + 增时; 动态时钟计算方式为 `inf_spawn_duration` + (`inf_limit` / 2 - 1 > 0 ? `inf_limit` / 2 - 1 : 1) * 增时
+5. 分散刷新时实际复活时间为: 时钟周期 + 1.0s (timers L269 `CreateTimer(1.0, timerSetAllowSpawnFlagHandler, entRef, TIMER_REPEAT);`, 此时钟循环设置允许特感复活)
+6. 2024-02-07 版本新增两种找位方式, 可以通过 Cvar `inf_pos_find_method` 设置, 设置为 1 单独使用 `L4D_GetRandomPZSpawnPosition` 函数进行找位; 设置为 2 使用射线找位, 射线仅判断位置可见性及有效性, 位置有效则将射线撞击处 Nav Area 增加 `OBSCURED` 属性 (即使该 Nav Area 可以被看见也允许刷新特感), 接着使用 `L4D_GetRandomPZSpawnPosition` 进行找位; 设置为 3 使用单独射线找位, 可以根据服务器性能自行选择
+7. 插件第一次运行时会在 Cvar: `inf_queue_kvfile_path` 值，默认为 `sourcemod/data/` 目录下生成 `infected_queue.cfg` 特感刷新队列配置文件，若当前特感数量未在特感刷新队列中配置特感等待队列信息，则获取特感队列时，插件将会进入错误状态无法运行，如插件因无法获取操作权限等原因导致无法自动创建配置文件，请手动在 `inf_queue_kvfile_path` 值路径中创建 infected_queue.cfg 文件，详细信息见其他图示中特感刷新队列配置文字
    
    infected_queue.cfg 的一个配置示例如下：
    ```java
@@ -131,9 +142,9 @@ sm_infqueue (!infqueue <num [10]>)
         ... 此处省略 7 - 31 的配置, 插件默认生成的 infected_queue.cfg 默认生成到 31, 相当于 31 特的配置, 实际使用时请按实际游玩需要特感数量配置
     }
    ``````
-3. 更改 Cvar `inf_spawn_method_strategy` 后请重启当前地图，否则可能会出现更改完成后无法刷新下一波特感的情况
-4. 如特感刷新不完全情况, 请检查所有特感的 `z_xxx_limit` 值相加是否大于或等于 `inf_limit` 值, 插件刷新的最大特感数量为所有特感 `z_xxx_limit` 之和
-5. 生还者数量与 `inf_limit` 特感刷新数量之和大于 `MaxClients (31)` 则超过 `MaxClients` 的特感将会无法刷新并在服务器控制台显示 `CreateFakeClient() returned Null`
+8. 更改 Cvar `inf_spawn_method_strategy` 后请重启当前地图，否则可能会出现更改完成后无法刷新下一波特感的情况
+9. 如特感刷新不完全情况, 请检查所有特感的 `z_xxx_limit` 值相加是否大于或等于 `inf_limit` 值, 插件刷新的最大特感数量为所有特感 `z_xxx_limit` 之和
+10. 生还者数量与 `inf_limit` 特感刷新数量之和大于 `MaxClients (31)` 则超过 `MaxClients` 的特感将会无法刷新并在服务器控制台显示 `CreateFakeClient() returned Null`
 
 ## 更新日志
 - 2023-08-09: 上传插件与 readme 文件
@@ -176,6 +187,15 @@ sm_infqueue (!infqueue <num [10]>)
 2. 修复分散刷新模式 round_start 初始化时并未重置特感状态数组的问题<br>
 3. inf_pos_find 增加判断条件，随机选择一个射线起始位置后先检查到目标生还者的直线距离，若小于 inf_pos_min_distance 则立即开始随机下一个位置，减少判断过近的位置<br>
 4. 优化 6 特以下特感轮换算法, 解决死循环从而导致服务器无响应的问题
+</details>
+
+<details>
+<summary>2024-02-07</summary>
+1. 改进特感轮换机制, 使得集中或分散刷新都支持特感轮换<br>
+2. 改进特感找位与刷新机制, 使其资源占用更少<br>
+3. 改进目标获取方法, 使其支持获取最高与最低路程目标<br>
+4. 增加两种找位方式<br>
+5. 优化分散刷新模式代码, 增加健壮性<br>
 </details>
 
 ---

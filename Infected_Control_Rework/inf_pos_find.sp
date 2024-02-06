@@ -14,7 +14,10 @@
 #define PLAYER_HEIGHT 72.0
 #define TRACE_RAY_ANGLE view_as<float>({90.0, 0.0, 0.0})
 #define TRACE_RAY_TYPE RayType_Infinite
-#define NEAREST_NAV_SEARCH_RANGE 150.0
+// 使用 L4D_GetNearestNavArea() 时 Nav 搜索范围
+#define NEAREST_NAV_SEARCH_RANGE 120.0
+// 最大找位次数
+#define POS_FIND_MAX_ATTEMP 10
 
 // NOTE: MASK SHOT + MASK NPCSOLID BRUSHONLY 多出来的两个 MASK (MASK_SHOT | CONTENTS_MONSTERCLIP | CONTENTS_GRATE)
 #define TRACE_RAY_FLAG 					MASK_SHOT | CONTENTS_MONSTERCLIP | CONTENTS_GRATE
@@ -29,7 +32,8 @@ ConVar
 	g_hMaxNavDistance,
 	g_hAllowSpawnInSafeArea,
 	g_hPosShouldAheadSurvivor,
-	g_hRunnerCheckDistance;
+	g_hRunnerCheckDistance,
+	g_hFindPosMethod;
 
 ConVar
 	g_hStartExpandTime,
@@ -49,6 +53,15 @@ enum {
 	BLOCK_TYPE_ALL_PLAYERS_AND_PHYSICS_OBJECTS
 };
 
+// 找位方式 FindPosMethod
+enum {
+	FPM_NONE,
+	FPM_USING_API,
+	FPM_USING_ENHANCED_API,
+	FPM_USING_RAY,
+	FPM_SIZE
+};
+
 stock const char validEntityName[][] = {
 	"prop_dynamic",
 	"prop_physics",
@@ -60,6 +73,7 @@ stock const char validEntityName[][] = {
 };
 
 void infectedPosFindOnModuleStart() {
+	g_hFindPosMethod = CreateConVar("inf_pos_find_method", "3", "特感找位方式 [1: 使用 L4D_GetRandomPZSpawnPosition API, 2: 使用增强 L4D_GetRandomPZSpawnPosition API, 3: 使用射线找位]", CVAR_FLAG, true, float(FPM_NONE + 1), true, float(FPM_SIZE - 1));
 	g_hMinDistance = CreateConVar("inf_pos_min_distance", "150", "特感刷新位置距离目标的最小直线距离", CVAR_FLAG, true, 0.0);
 	g_hMinNavDistance = CreateConVar("inf_pos_min_nav_distance", "100", "特感刷新位置距离目标的最小 Nav 距离", CVAR_FLAG, true, 0.0);
 	g_hMaxDistance = CreateConVar("inf_pos_max_distance", "1000", "特感刷新位置距离目标的最大直线距离", CVAR_FLAG, true, 0.0);
@@ -78,6 +92,13 @@ void infectedPosFindOnModuleStart() {
 	g_hNaxExpandUnit = CreateConVar("inf_pos_nav_expand_unit", "3", "逐帧进行 Nav 距离拓展时每帧拓展多少单位", CVAR_FLAG, true, 0.0);
 	// 跑男检测
 	g_hRunnerCheckDistance = CreateConVar("inf_pos_runner_check_distance", "1500.0", "跑男检测距离 (0: 不检测跑男, 否则某个生还者在这个范围内的生还者密度小于 [2 个生还者的生还者密度] 则视为跑男, 特感优先以其进行找位)", CVAR_FLAG, true, 0.0);
+
+	g_hMinDistance.AddChangeHook(changeHookSpawnDistance);
+	g_hMinNavDistance.AddChangeHook(changeHookSpawnDistance);
+}
+
+void changeHookSpawnDistance(ConVar convar, const char[] oldValue, const char[] newValue) {
+	CreateTimer(ROUND_START_DELAY, timerSetSpawnDistanceHandler, _, _);
 }
 
 // NOTE: 射线找位相关函数
@@ -88,9 +109,151 @@ void infectedPosFindOnModuleStart() {
 #define Y 1
 #define Z 2
 
-// 高位补偿, From: https://github.com/fantasylidong/CompetitiveWithAnne/blob/master/addons/sourcemod/scripting/AnneHappy/infected_control.sp
+// 高位补偿, 来自东哥, From: https://github.com/fantasylidong/CompetitiveWithAnne/blob/master/addons/sourcemod/scripting/AnneHappy/infected_control.sp
 #define HIGH_POS_HEIGHT 300.0
 #define HIGH_POS_COMP_DISTANCE 400.0
+
+/**
+* 根据传入的特感类型使用 L4D_GetRandomPZSpawnPosition 进行找位
+* @param client 针对某个客户端为中心进行找位
+* @param class 特感类型
+* @param spawnPos 刷新位置
+* @return void
+**/
+void getSpawnPosByAPI(const int client, const int class, float spawnPos[3]) {
+	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
+		return;
+	
+	if (!L4D_GetRandomPZSpawnPosition(client, class, POS_FIND_MAX_ATTEMP, spawnPos))
+		log.error("%s: 无法在 %d 次内找到一个适合的 %s 生成位置", PLUGIN_PREFIX, POS_FIND_MAX_ATTEMP, INFECTED_NAME[class]);
+	
+	static float pos[3];
+	static int nearestSurvivor;
+	if (!IsValidClient(nearestSurvivor))
+		return;
+	// 获取最近生还者的位置
+	GetClientAbsOrigin(nearestSurvivor, pos);
+	
+	static Address nav, targetNav;
+	nav = isOnValidNavArea(spawnPos);
+	if (nav == Address_Null)
+		return;
+	targetNav = L4D_GetNearestNavArea(pos, NEAREST_NAV_SEARCH_RANGE, false, false, false, TEAM_INFECTED);
+	
+	// 检查是否启用位置必须在目标前方
+	if (g_hPosShouldAheadSurvivor.BoolValue && !navIsAheadAnotherNav(nav, targetNav))
+		return;
+}
+
+/**
+* 使用射线并配合 L4D_GetRandomPZSpawnPosition 进行找位, 思路来自鹅国人 (鹅佬)
+* @param client 以这个客户端为中心进行找位
+* @param class 需要刷新的特感类型
+* @param gridIncrement 网格增量
+* @param spawnPos 刷新位置
+* @return void
+**/
+void getSpanPosByAPIEnhance(const int client, const int class,
+							const float gridIncrement = 0.0, float spawnPos[3]) {
+	// 首先使用射线检测, 看不到的位置增加 OBSCURED Nav 属性, 最后使用 L4D_GetRandomPZSpawnPosition 决定是否允许在这种地块上刷新
+	spawnPos = NULL_VECTOR;
+	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
+		return;
+
+	static int i;
+	// 客户端位置, 找位网格左边界, 找位网格右边界, 射线坐标, 射线撞击位置坐标, 射线撞击位置与最近生还者位置的 Nav 距离
+	static float pos[3], expandLeftPos[2][3], expandRightPos[2][3], rayPos[3], rayEndPos[3], visiblePos[3];
+	static float tempPos[3];
+
+	GetClientAbsOrigin(client, pos);
+	CopyVectors(pos, expandLeftPos[POS_UP]);	CopyVectors(pos, expandLeftPos[POS_DOWN]);
+	CopyVectors(pos, expandRightPos[POS_UP]);	CopyVectors(pos, expandRightPos[POS_DOWN]);
+	// 缩放网格
+	// 左上角
+	expandLeftPos[POS_UP][X] -= g_hDefaultGridMinDistance.FloatValue;
+	expandLeftPos[POS_UP][Y] += g_hDefaultGridMinDistance.FloatValue;
+	// 左下角
+	expandLeftPos[POS_DOWN][X] -= g_hDefaultGridMinDistance.FloatValue;
+	expandLeftPos[POS_DOWN][Y] -= g_hDefaultGridMinDistance.FloatValue;
+	// 右上角
+	expandRightPos[POS_UP][X] += g_hDefaultGridMinDistance.FloatValue;
+	expandRightPos[POS_UP][Y] += g_hDefaultGridMinDistance.FloatValue;
+	// 右下角
+	expandRightPos[POS_DOWN][X] += g_hDefaultGridMinDistance.FloatValue;
+	expandRightPos[POS_DOWN][Y] -= g_hDefaultGridMinDistance.FloatValue;
+	
+	// 是否需要拓展网格, 且 expandCount 拓展次数 * gridIncrement 每次拓展的距离在网格最大范围与初始范围内
+	static float offset;
+	if (FloatCompare(gridIncrement, 0.0) > 0 &&
+		(expandCount * gridIncrement <= g_hDefaultGridMaxDistance.FloatValue - g_hDefaultGridMinDistance.FloatValue)) {
+
+		offset = expandCount * gridIncrement;
+		
+		// 左上角
+		expandLeftPos[POS_UP][X] -= offset;
+		expandLeftPos[POS_UP][Y] += offset;
+		// 左下角
+		expandLeftPos[POS_DOWN][X] -= offset;
+		expandLeftPos[POS_DOWN][Y] -= offset;
+		// 右上角
+		expandRightPos[POS_UP][X] += offset;
+		expandRightPos[POS_UP][Y] += offset;
+		// 右下角
+		expandRightPos[POS_DOWN][X] += offset;
+		expandRightPos[POS_DOWN][Y] -= offset;
+		
+		expandCount++;
+	}
+
+	static Handle traceRay;
+	for (i = 0; i < posFindAttemp; i++) {
+		// 确定射线初始位置
+		rayPos[X] = GetRandomFloatInRange(expandLeftPos[POS_UP][X], expandRightPos[POS_UP][X]);
+		rayPos[Y] = GetRandomFloatInRange(expandLeftPos[POS_UP][Y], expandRightPos[POS_DOWN][Y]);
+		rayPos[Z] = GetRandomFloatInRange(pos[Z], pos[Z] + RAY_Z_HEIGHT);
+
+		// 进行射线初始位置到目标生还者的直线距离的判断, 不符合直接跳过
+		CopyVectors(rayPos, tempPos);
+		tempPos[Z] = pos[Z];
+		if (GetVectorDistance(pos, tempPos) < g_hMinDistance.FloatValue)
+			continue;
+
+		traceRay = TR_TraceRayFilterEx(rayPos, TRACE_RAY_ANGLE, TRACE_RAY_FLAG, TRACE_RAY_TYPE, traceRayFilter, client);
+		if (traceRay == null)
+			continue;
+		
+		TR_GetEndPosition(rayEndPos, traceRay);
+		CopyVectors(rayEndPos, visiblePos);
+		delete traceRay;
+
+		rayEndPos[2] += RAY_Z_OFFSET;
+		visiblePos[2] += PLAYER_HEIGHT;
+
+		static Address rayEndPosNav, nearestSurvivorNav;
+		rayEndPosNav = isOnValidNavArea(rayEndPos);
+
+		// 检测射线撞击位置是否在无效 Nav 上
+		if (rayEndPosNav == Address_Null || posWillStuckClient(rayEndPos))
+			continue;
+		// 位置是否可以被任何生还者看见, 无需检测直线距离, 由 z_spawn_safety_range 决定
+		if (isVisibleToSurvivor(visiblePos, rayEndPosNav))
+			continue;
+
+		// 是否启用位置必须在目标前方
+		if (g_hPosShouldAheadSurvivor.BoolValue && !navIsAheadAnotherNav(rayEndPosNav, nearestSurvivorNav))
+			continue;
+
+		// 为位置添加 OBSCURED 属性
+		static int flag;
+		flag = L4D_GetNavArea_AttributeFlags(rayEndPosNav);
+		flag |= NAV_SPAWN_OBSCURED;
+		L4D_SetNavArea_AttributeFlags(rayEndPosNav, flag);
+	}
+
+	// 选择一个刷新位置
+	if (!L4D_GetRandomPZSpawnPosition(client, class, POS_FIND_MAX_ATTEMP, spawnPos))
+		log.error("%s: 无法在 %d 次内找到一个适合的 %s 生成位置", PLUGIN_PREFIX, POS_FIND_MAX_ATTEMP, INFECTED_NAME[class]);
+}
 
 /**
 * 根据客户端位置使用射线找位并返回找到的一个有效位置
@@ -100,7 +263,7 @@ void infectedPosFindOnModuleStart() {
 * @param spawnPos 刷新位置
 * @return void
 **/
-void getSpawnPos(int client, const float gridIncrement = 0.0, const float navIncrement = 0.0, float spawnPos[3]) {
+void getSpawnPos(const int client, const float gridIncrement = 0.0, const float navIncrement = 0.0, float spawnPos[3]) {
 	spawnPos = NULL_VECTOR;
 	if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
 		return;
@@ -172,7 +335,7 @@ void getSpawnPos(int client, const float gridIncrement = 0.0, const float navInc
 	}
 
 	static Handle traceRay;
-	for (i = 0; i < GetServerTickRate(); i++) {
+	for (i = 0; i < posFindAttemp; i++) {
 		// 确定射线初始位置
 		rayPos[X] = GetRandomFloatInRange(expandLeftPos[POS_UP][X], expandRightPos[POS_UP][X]);
 		rayPos[Y] = GetRandomFloatInRange(expandLeftPos[POS_UP][Y], expandRightPos[POS_DOWN][Y]);
@@ -222,7 +385,7 @@ void getSpawnPos(int client, const float gridIncrement = 0.0, const float navInc
 			maxNavDistance += HIGH_POS_COMP_DISTANCE;
 
 		// 从射线撞击位置到最近生还者 Nav 处无路可走, 跳过
-		nearestSurvivorNav = L4D_GetNearestNavArea(targetPos, 120.0, false, false, false, TEAM_INFECTED);
+		nearestSurvivorNav = L4D_GetNearestNavArea(targetPos, NEAREST_NAV_SEARCH_RANGE, false, false, false, TEAM_INFECTED);
 		if (!L4D2_NavAreaBuildPath(rayEndPosNav, nearestSurvivorNav, maxNavDistance, TEAM_INFECTED, false))
 			continue;
 

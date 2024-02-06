@@ -49,8 +49,6 @@ public Action timerStandardInfectedSpawnHandler(Handle timer) {
 	// 可以使用基准时钟刷新新一波特感
 	canSpawnNewInfected = true;
 	isInSpawnFinishedTime = false;
-	// 如果有跑男则以跑男找位
-	checkRunnerExistAndStartHook();
 
 	log.debugAndInfo("%s: 基准时钟允许刷新新一波特感, 当前基准时钟记录波次 %d", PLUGIN_PREFIX, standardInfectedSpawnTimer.recordSpawnWaveCount);
 	// 基准时钟本次触发结束, 置 null 返回
@@ -92,8 +90,6 @@ public Action timerRegularInfectedSpawnHandler(Handle timer) {
 	canSpawnNewInfected = true;
 	isInSpawnFinishedTime = false;
 
-	checkRunnerExistAndStartHook();
-
 	log.debugAndInfo("%s: 固定时钟允许刷新新一波特感, 当前固定时钟记录波次 %d", PLUGIN_PREFIX, regularInfectedSpawnTimer.recordSpawnWaveCount);
 
 	regularInfectedSpawnTimer.timer = null;
@@ -133,8 +129,6 @@ public Action timerAutoInfectedSpawnHandler(Handle timer) {
 
 	canSpawnNewInfected = true;
 	isInSpawnFinishedTime = false;
-
-	checkRunnerExistAndStartHook();
 
 	log.debugAndInfo("%s: 动态时钟允许刷新新一波特感, 当前动态时钟记录波次 %d", PLUGIN_PREFIX, autoInfectedSpawnTimer.recordSpawnWaveCount);
 	
@@ -176,6 +170,31 @@ public Action timerSetMaxSpecialHandler(Handle timer) {
 		
 		log.debugAndInfo("%s: 将 z_max_player_zombie 数量设置为 %d", PLUGIN_PREFIX, g_hInfectedLimit.IntValue);
 	}
+
+	return Plugin_Continue;
+}
+
+/**
+* 设置 z_spawn_safety_range 时钟回调
+* @param timer 当前时钟句柄
+* @return Action
+**/
+public Action timerSetSpawnDistanceHandler(Handle timer) {
+	// 设置 z_spawn_safety_range
+	if (game_zSpawnSafetyRange) {
+		SetConVarBounds(game_zSpawnSafetyRange, ConVarBound_Upper, false);
+		SetConVarFlags(game_zSpawnSafetyRange, game_zSpawnSafetyRange.Flags & ~FCVAR_NOTIFY);
+		SetConVarInt(game_zSpawnSafetyRange, g_hMinDistance.IntValue > g_hMinNavDistance.IntValue ? g_hMinNavDistance.IntValue : g_hMinDistance.IntValue);
+	}
+	// 设置 z_safe_spawn_range
+	if (game_zSafeSpawnRange) {
+		SetConVarBounds(game_zSafeSpawnRange, ConVarBound_Upper, false);
+		SetConVarFlags(game_zSafeSpawnRange, game_zSafeSpawnRange.Flags & ~FCVAR_NOTIFY);
+		SetConVarInt(game_zSafeSpawnRange, g_hMinDistance.IntValue > g_hMinNavDistance.IntValue ? g_hMinNavDistance.IntValue : g_hMinDistance.IntValue);
+	}
+	log.debugAndInfo("%s: 将 z_spawn_safety_range 与 z_safe_spawn_range 值设置为 %d",
+		PLUGIN_PREFIX, game_zSpawnSafetyRange.IntValue);
+
 	return Plugin_Continue;
 }
 
@@ -199,6 +218,7 @@ public Action timerFindPosFailedHandler(Handle timer) {
 **/
 public Action timerFirstWaveDelaySpawnHandler(Handle timer) {
 	canSpawnNewInfected = true;
+	isInFindPosFailedDelay = false;
 	return Plugin_Continue;
 }
 
@@ -213,95 +233,90 @@ public Action timerKickDeadInfectedHandler(Handle timer, int client) {
 /**
 * 分散刷新模式下某特感重生完成时钟回调
 * @param timer 当前时钟句柄
-* @param infectedType 当前重生完成的特感类型
+* @param entRef 当前重生完成的特感的实体索引
 * @return Action
 **/
-public Action timerRespawnFinishHandler(Handle timer, int client) {
-	if (!isLeftSafeArea || !infectedStates[client].valid) {
-		infectedStates[client].timer = null;
+public Action timerRespawnFinishHandler(Handle timer, int entRef) {
+	if (entRef == INVALID_ENT_REFERENCE) {
+		return Plugin_Stop;
+	}
+	if (!isLeftSafeArea) {
+		infStateList.Clear();
 		return Plugin_Stop;
 	}
 
+	static int index;
+	index = infStateList.FindValue(entRef, 0);
+	if (index < 0)
+		return Plugin_Stop;
+
+	// 复活完成的特感准备刷新前, 删除原有特感队列, 防止一个复活完成的特感占用原有特感队列刷新, 导致第一波少特感情况
+	delete infectedQueue;
+
+	// 获取特感状态类
 	InfectedState state;
-	state = infectedStates[client];
+	infStateList.GetArray(index, state, sizeof(state));
 
-	log.debugAndInfo("\n%s: 索引 %d, %s [类型 %s] 重生完毕, 上次死亡时间为 %.2f, 距离上次死亡经过 %.3f s, 当前是否可以刷新特感 %b\n", PLUGIN_PREFIX, client, state.name, INFECTED_NAME[state.infectedType], state.deathTime, GetGameTime() - state.deathTime, canSpawnNewInfected);
+	// 设置复活已完成
+	state.isRespawnFinished = true;
+	infStateList.SetArray(index, state, sizeof(state));
+	// 增加复活完成特感数量	
+	respawnFinishedCount += 1;
 
-	static int infectedType;
-	infectedType = state.infectedType;
-	if (infectedType < ZC_SMOKER || infectedType > ZC_CHARGER) {
-		infectedStates[client].timer = null;
-		return Plugin_Stop;
-	}
+	log.debugAndInfo("\n%s: 索引 %d, 名称 %s, 类型 %s, 重生完毕 %b, 死亡时间 %.2f, 距离上次死亡经过 %.3f s, 当前是否允许刷新特感 %b\n", PLUGIN_PREFIX, index, state.name, INFECTED_NAME[state.class], state.isRespawnFinished, state.deathTime, GetGameTime() - state.deathTime, canSpawnNewInfected);
 
-	infectedStates[client].isRespawnFinished = true;
-	respawnFinishedCount++;
+	// 循环将 canSpawnNewInfected 设置为 true, 以免刷完一只即将设置为 false 前刚好复活, 无视时钟设置为 true, 最坏等待时间 1.0s
+	CreateTimer(1.0, timerSetAllowSpawnFlagHandler, entRef, TIMER_REPEAT);
 
-	if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE && currentSpawnWaveCount > 1) {
-		int infectedCount = getTeamClientCount(TEAM_INFECTED, true, false);
-		log.debugAndInfo("%s: 当前在场特感 %d 只, 复活完成 %d 只, 目标数量 %d 只", PLUGIN_PREFIX, infectedCount, respawnFinishedCount, targetCount);
-		if (infectedCount + respawnFinishedCount < targetCount) {
-			log.debugAndInfo("%s: 当前在场特感与重生完成特感数量相加为 %d 只, 少于目标数量 %d 只, 不允许复活", PLUGIN_PREFIX, infectedCount + respawnFinishedCount, targetCount);
-			infectedStates[client].timer = null;
-			return Plugin_Stop;
-		}
-	}
+	state.timer = null;
+	infStateList.SetArray(index, state, sizeof(state));
 
-	// 跑男检测
-	checkRunnerExistAndStartHook();
+	// 对状态集合进行排序, 将已经复活完成的特感排在队首
+	infStateList.SortCustom(sortInfStateList);
 
-	if (!canSpawnNewInfected) {
-		log.debugAndInfo("%s: 开始重生完成特感的刷新, 置 canSpawnNewInfected 为 true, isInSpawFinishedTime 为 false", PLUGIN_PREFIX);
-		canSpawnNewInfected = true;
-		isInSpawnFinishedTime = false;
-		// 开始刷新前, 重置找位消耗时间
-		findPosSpawnTimeCost = 0.0;
-	}
-
-	infectedStates[client].timer = null;
 	return Plugin_Stop;
 }
 
-/**
-* 跑男检测
-* @param void
-* @return int
-**/
-stock int doCheckRunnerExist() {
-	static int targetClient, survivorCount;
-	survivorCount = getTeamClientCount(TEAM_SURVIVOR, true, false);
-	static float targetDensity, limitDensity;
-	if (g_hRunnerCheckDistance.BoolValue && survivorCount > 1) {
-		targetClient = L4D_GetHighestFlowSurvivor();
- 		if (!IsValidClient(targetClient) || !IsPlayerAlive(targetClient)) {
-			return INVALID_CLIENT_INDEX;
-		}
-		targetDensity = getSurvivorDensity(targetClient);
-		limitDensity = 1.0 / float(survivorCount);
-		if (FloatCompare(targetDensity, limitDensity) < 0) {
-			log.debugAndInfo("%s: 找到跑男玩家: %N, 该玩家的生还者密度为 %.2f, 小于限制密度 %.2f", PLUGIN_PREFIX, targetClient, targetDensity, limitDensity);
+int sortInfStateList(int x, int y, Handle array, Handle hndl) {
+	static ArrayList list;
+	list = view_as<ArrayList>(array);
+	InfectedState x1, y1;
+	list.GetArray(x, x1, sizeof(x1));
+	list.GetArray(y, y1, sizeof(y1));
 
-			return targetClient;
-		}
-	}
-	return INVALID_CLIENT_INDEX;
+	// 按照是否复活完成与死亡时间排序
+	return x1.isRespawnFinished > y1.isRespawnFinished ? -1 : x1.isRespawnFinished == y1.isRespawnFinished ? FloatCompare(x1.deathTime, y1.deathTime) > 0 ? -1 : 1 : 1;
 }
 
-void checkRunnerExistAndStartHook() {
-	static int runner;
-	runner = doCheckRunnerExist();
-	if (IsValidSurvivor(runner) && IsPlayerAlive(runner)) {
-		// 找到了跑男玩家, 设置跑男玩家索引
-		runnerIndex = runner;
-		log.debugAndInfo("%s: 找到了跑男玩家 %N 即将针对其进行特感找位刷新", PLUGIN_PREFIX, runner);
-		return;
+Action timerSetAllowSpawnFlagHandler(Handle timer, int entRef) {
+	// 未离开安全屋 或 允许正常刷新特感情况下, 返回
+	if (!isLeftSafeArea || (canSpawnNewInfected && !isInFindPosFailedDelay && !isInSpawnFinishedTime))
+		return Plugin_Continue;
+	if (isInFindPosFailedDelay)
+		return Plugin_Continue;
+
+	// 无效的实体索引, 时钟停止
+	if (entRef == INVALID_ENT_REFERENCE)
+		return Plugin_Stop;
+	// 在特感状态集合中找不到, 说明已经被刷新, 停止
+	static int index;
+	index = infStateList.FindValue(entRef, 0);
+	if (index < 0)
+		return Plugin_Stop;
+	// 如果当前在场特感与状态集合中待刷新特感数量超过限制, 则自身销毁
+	if (infectedCount + infStateList.Length > g_hInfectedLimit.IntValue) {
+		static InfectedState state;
+		if (infStateList.Length > 1) {
+			infStateList.GetArray(0, state, sizeof(state));
+			state.init();
+		}
+		return Plugin_Stop;
 	}
-	// 如果没有跑男, 且是针对某个生还者找位, 则随机选择一个生还者
-	if (g_hFindPosStrategy.IntValue == FPS_RANDOM_SURVIVOR) {
-		targetIndex = getRandomSurvivor();
-		if (IsValidSurvivor(targetIndex) && IsPlayerAlive(targetIndex))
-			log.debugAndInfo("%s: 当前找位策略为针对某个生还者找位, 没有找到跑男玩家, 随机选择一个生还者 %N 进行特感找位刷新", PLUGIN_PREFIX, targetIndex);
-		else
-			log.debugAndInfo("%s: 当前找位策略为针对某个生还者找位, 没有找到跑男玩家, 随机选择一个生还者 %d 无效, 将针对所有人找位", PLUGIN_PREFIX, targetIndex);
-	}
+
+	canSpawnNewInfected = true;
+	isInSpawnFinishedTime = false;
+	// 开始刷新前, 重置找位消耗时间
+	findPosSpawnTimeCost = 0.0;
+	
+	return Plugin_Continue;
 }

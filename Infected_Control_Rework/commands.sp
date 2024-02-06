@@ -115,19 +115,53 @@ public Action cmdSingleInfectedMode(int client, int args) {
 **/
 public Action cmdStateList(int client, int args) {
 	static int i;
+	InfectedState state;
 	if (client == 0) {
-		PrintToServer("\n========== 特感状态数组 ==========\n");
-		for (i = 0; i <= MaxClients; i++) {
-			PrintToServer("\t索引 %d, 类型 %s, 有效 %b, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f", i, INFECTED_NAME[infectedStates[i].infectedType], infectedStates[i].valid, infectedStates[i].isRespawnFinished, infectedStates[i].deathTime, GetGameTime() - infectedStates[i].deathTime);
+		PrintToServer("\n========== 特感状态集合 ==========\n");
+		for (i = 0; i < infStateList.Length; i++) {
+			infStateList.GetArray(i, state, sizeof(state));
+			PrintToServer("\t索引 %d, 实体索引 %d, 类型 %s, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f, 时钟 0x%x",
+				i, state.entRef, INFECTED_NAME[state.class], state.isRespawnFinished,
+				state.deathTime, GetGameTime() - state.deathTime, state.timer);
 		}
 		PrintToServer("\n================================\n");
 	} else {
-		PrintToConsoleAll("\n========== 特感状态数组 ==========\n");
-		for (i = 0; i <= MaxClients; i++) {
-			PrintToConsoleAll("\t索引 %d, 类型 %s, 有效 %b, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f", i, INFECTED_NAME[infectedStates[i].infectedType], infectedStates[i].valid, infectedStates[i].isRespawnFinished, infectedStates[i].deathTime, GetGameTime() - infectedStates[i].deathTime);
+		PrintToConsoleAll("\n========== 特感状态集合 ==========\n");
+		for (i = 0; i < infStateList.Length; i++) {
+			infStateList.GetArray(i, state, sizeof(state));
+			PrintToConsoleAll("\t索引 %d, 实体索引 %d, 类型 %s, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f, 时钟 0x%x",
+				i, state.entRef, INFECTED_NAME[state.class], state.isRespawnFinished,
+				state.deathTime, GetGameTime() - state.deathTime, state.timer);
 		}
 		PrintToConsoleAll("\n================================\n");
 	}
+	return Plugin_Handled;
+}
+
+public Action cmdState(int client, int args) {
+	static int i;
+	if (client == 0) {
+		PrintToServer("\n========== 特感刷新状态 ===========\n");
+		PrintToServer("canSpawn: %b, isLeftSafeArea: %b, isInFindPosFailedDelay: %b, isInSpawnFinishTime: %b, respawnFinishedCount: %d, target: %d", canSpawnNewInfected, isLeftSafeArea, isInFindPosFailedDelay, isInSpawnFinishedTime, respawnFinishedCount, targetIndex);
+
+		PrintToServer("====== Target List =====");
+		for (i = 0; i < targetList.Length; i++) {
+			PrintToServer("index: %d, target: %N", i, targetList.Get(i, 1));
+		}
+
+		PrintToServer("\n================================\n");
+	} else {
+		PrintToConsoleAll("\n========== 特感刷新状态 ===========\n");
+		PrintToConsoleAll("canSpawn: %b, isLeftSafeArea: %b, isInFindPosFailedDelay: %b, isInSpawnFinishTime: %b, respawnFinishedCount: %d, target: %d", canSpawnNewInfected, isLeftSafeArea, isInFindPosFailedDelay, isInSpawnFinishedTime, respawnFinishedCount, targetIndex);
+
+		PrintToConsoleAll("====== Target List =====");
+		for (i = 0; i < targetList.Length; i++) {
+			PrintToServer("index: %d, target: %N", i, targetList.Get(i, 1));
+		}
+
+		PrintToConsoleAll("\n================================\n");
+	}
+
 	return Plugin_Handled;
 }
 

@@ -49,13 +49,10 @@ public void eventPlayerDisconnectHandler(Event event, const char[] name, bool do
 	char reason[64];
 	event.GetString("reason", reason, sizeof(reason));
 
-	// 特感玩家离开游戏, 检查是否已经存在于 Map 中, 存在则替换为击杀顺序
+	// 特感玩家离开游戏, 检查是否已经存在于 Map 中, 存在则移除
 	int ref = EntIndexToEntRef(client);
-	if (infEntRefMapOperation.containsKey(client)) {
-		waveKillIndex++;
-		infEntRefMapOperation.replaceByIndex(ref, waveKillIndex, class);
-		log.debugAndInfo("%s: 特感 %N(类型 %s/ 实体索引 %d) 断开连接, 原因 %s, 已在实体 Map 中找到, 更改为击杀顺序 %d", PLUGIN_PREFIX, client, INFECTED_NAME[class], ref, reason, waveKillIndex);
-	}
+	if (infEntRefMapOperation.containsKey(ref))
+		infEntRefMapOperation.remove(ref);
 }
 
 /**
@@ -66,6 +63,9 @@ public void eventPlayerDisconnectHandler(Event event, const char[] name, bool do
 public void eventPlayerIncapStartHandler(Event event, const char[] name, bool dontBroadcast) {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	int attacker = GetClientOfUserId(event.GetInt("attacker"));
+	// 生还者没有离开安全屋, 不增时
+	if (!isLeftSafeArea)
+		return;
 	// 正在刷新一波特感, 或 分散刷新时 不增时
 	if (canSpawnNewInfected || g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE)
 		return;
@@ -140,113 +140,128 @@ static void doDelayInfectedSpawnTimerNextTriggerTime() {
 * @return void
 **/
 public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBroadcast) {
-	static int i, client, class;
+	static int client, class;
 	client = GetClientOfUserId(event.GetInt("userid"));
 	if (!IsValidClient(client) || GetClientTeam(client) != TEAM_INFECTED || !IsFakeClient(client)) {
 		return;
 	}
 	class = GetEntProp(client, Prop_Send, "m_zombieClass");
-	if (class == ZC_TANK) {
+	if (class < ZC_SMOKER || class > ZC_CHARGER)
 		return;
-	}
 
-	// 需要进行特感轮换, 将记录的特感实体索引更改为击杀顺序
-	if (g_hInfectedLimit.IntValue < 6 && g_hUnreachSixAlternate.BoolValue && !g_hSingleInfectedMode.BoolValue) {
-		static int ref;
-		ref = EntIndexToEntRef(client);
-		// 击杀顺序自增
-		waveKillIndex++;
+	// 获取特感实体引用
+	static int ref, classListIndex;
+	ref = EntIndexToEntRef(client);
 
-		log.debugAndInfo("%s: 特感 %s(%d/ EntRef: %d) 死亡, 当前开启特感轮换, 在实体 Map 中是否存在 %b, 击杀顺序 %d", PLUGIN_PREFIX, INFECTED_NAME[class], client, ref, infEntRefMapOperation.containsKey(ref), waveKillIndex);
-		// 存在则更改为击杀顺序与特感类型
-		if (infEntRefMapOperation.containsKey(ref))
-			infEntRefMapOperation.replaceByIndex(ref, waveKillIndex, class);
-	}
-
-	// 分散刷新方式
-	if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
-		// 重生完成特感数量减少 1
-		respawnFinishedCount = respawnFinishedCount > 0 ? respawnFinishedCount - 1 : 0;
-
-		static int count;
-		count = getTeamClientCount(TEAM_INFECTED, true, false);
-		for (i = 1; i <= MaxClients; i++) {
-			if (!infectedStates[i].valid) {
-				continue;
-			}
-			count++;
-		}
-		if (count >= g_hInfectedLimit.IntValue) {
-			log.debugAndInfo("%s: 当前在场特感与重生中特感数量 %d, 大于等于设置数量 %d 只, 特感 %N 死亡, 不加入状态数组中", PLUGIN_PREFIX, count, g_hInfectedLimit.IntValue, client);
+	// 6 特以下, 且需要进行特感轮换 或 分散刷新模式下需要检查死亡特感是否合法, 不合法 (非插件刷的特感) 则不处理
+	if (isNeedToAlternate() || g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE) {
+		
+		// 存在则更改为击杀顺序与特感类型, 否则抛出异常
+		if (infEntRefMapOperation.containsKey(ref)) {
+			// 在实体 Map 中存在, 删除
+			log.debugAndInfo("%s: 当前特感数量 %d, 是否为分散刷新 %b, 特感 %N 死亡, 实体索引 %d, 合法特感, 从实体引用 Map 中移除",
+				PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client, ref);
+			
+			infEntRefMapOperation.remove(ref);
+		} else {
+			log.error("%s: 当前特感数量 %d, 是否为分散刷新 %b, 特感 %N 死亡, 于特感实体引用 Map 中不存在, 非法特感",
+				PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client);
 			return;
 		}
 
-		// 记录死亡特感状态
-		InfectedState state;
-		state.infectedType = class;
-		// 复制名称
-		char clientName[64];
-		GetClientName(client, clientName, sizeof(clientName));
-		strcopy(state.name, sizeof(state.name), clientName);
-		
-		// 下次重生时间
-		switch (g_hSpawnStrategy.IntValue) {
-			case SPS_REGULAR:
-				state.nextRespawnTime = GetGameTime() + regularTimerInterval;
-			case SPS_AUTO:
-				state.nextRespawnTime = GetGameTime() + autoTimerInterval;
-		}
-
-		state.valid = true;
-		state.deathTime = GetGameTime();
-		state.isRespawnFinished = false;
-
-		if (infectedStates[client].valid) {
-			// 如果该特感索引的位置已经被其他特感占用了, 则寻找一个新的位置
-			static int index;
-			for (i = 1; i <= MaxClients; i++) {
-				if (infectedStates[i].valid)
-					continue;
-				index = i;
-				break;
-			}
-			if (index < 1) {
-				log.debugAndInfo("%s: 当前特感 %N, 索引 %d, 在状态数组中的位置已被占用, 未找到新的空闲位置, 将不会进入复活倒计时", PLUGIN_PREFIX, client, client);
-			} else {
-				log.debugAndInfo("%s: 当前特感 %N, 索引 %d, 在状态数组中的位置已被占用, 找到新的空闲位置, 索引 %d", PLUGIN_PREFIX, client, client, index);
-
-				switch (g_hSpawnStrategy.IntValue) {
-					case SPS_REGULAR:
-						state.timer = CreateTimer(regularTimerInterval, timerRespawnFinishHandler, index, _);
-					case SPS_AUTO:
-						state.timer = CreateTimer(autoTimerInterval, timerRespawnFinishHandler, index, _);
-				}
-				infectedStates[index] = state;
-			}
-		} else {
-			switch (g_hSpawnStrategy.IntValue) {
-				case SPS_REGULAR:
-					state.timer = CreateTimer(regularTimerInterval, timerRespawnFinishHandler, client, _);
-				case SPS_AUTO:
-					state.timer = CreateTimer(autoTimerInterval, timerRespawnFinishHandler, client, _);
-			}
-			infectedStates[client] = state;
-			log.debugAndInfo("%s: 当前特感 %N 死亡, 索引 %d 加入状态数组对应位置", PLUGIN_PREFIX, client, client);
-		}
-		
-		// 打印特感状态数组
-		log.debugAndInfo("%s: 当前状态数组", PLUGIN_PREFIX);
-		for (i = 1; i <= MaxClients; i++) {
-			if (!infectedStates[i].valid)
-				continue;
-			log.debugAndInfo("\t\t%索引 %d, %s 类型 %s, 有效 %b, 重生完成 %b", i, infectedStates[i].name, INFECTED_NAME[infectedStates[i].infectedType], infectedStates[i].valid, infectedStates[i].isRespawnFinished);
-		}
 	}
 
+	// 开启特感轮换, 且死亡的特感合法
+	if (isNeedToAlternate()) {
+		// 在轮换类型集合中找到一个对应的特感类型, 放到队尾
+		classListIndex = infClassList.FindValue(class);
+		if (classListIndex >= 0) {
+			infClassList.Erase(classListIndex);
+			infClassList.Push(class);
+			log.debugAndInfo("%s: 已开启特感轮换, 将特感 %N 放置到轮换类型集合队尾", PLUGIN_PREFIX, client);
+		}
+
+		// 打印特感状态与特感轮换类型集合
+		printInfectedStateList();
+		printInfectedClassList();
+	}
+
+	if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE && infStateList.Length < g_hInfectedLimit.IntValue) {
+		// 重生完成特感数量减少 1
+		respawnFinishedCount = respawnFinishedCount > 0 ? respawnFinishedCount - 1 : 0;
+
+		// 分散刷新方式下, 记录特感死亡状态
+		InfectedState state;
+		getInfectedState(client, state);
+
+		// 设置重生时钟, 传递在状态集合中的索引
+		switch (g_hSpawnStrategy.IntValue) {
+			case SPS_REGULAR:
+				state.timer = CreateTimer(regularTimerInterval, timerRespawnFinishHandler, ref, _);
+			case SPS_AUTO:
+				state.timer = CreateTimer(autoTimerInterval, timerRespawnFinishHandler, ref, _);
+		}
+
+		infStateList.PushArray(state);
+		log.debugAndInfo("%s: 当前为分散刷新模式, 特感 %N 死亡, 状态类获取成功, 加入到状态集合中", PLUGIN_PREFIX, client);
+	}
+
+	// 不踢出 Spitter
 	if (class == ZC_SPITTER)
 		return;
 
 	// 踢出死亡特感, 非 Spitter
 	if (FloatCompare(g_hDeadKickTime.FloatValue, 0.0) > 0)
 		CreateTimer(g_hDeadKickTime.FloatValue, timerKickDeadInfectedHandler, client, _);
+}
+
+void printInfectedStateList() {
+	int i;
+	InfectedState state;
+	log.debugAndInfo("\n ===== %s: 当前特感状态集合 ====\n", PLUGIN_PREFIX);
+	for (i = 0; i < infStateList.Length; i++) {
+		infStateList.GetArray(i, state);
+		log.debugAndInfo("\t\t索引 %d, 实体索引 %d, 名称 %s, 类型 %s, 死亡时间 %.2f, 是否重生完成 %b, 时钟 0x%x",
+			i,
+			state.entRef,
+			state.name,
+			INFECTED_NAME[state.class],
+			state.deathTime,
+			state.isRespawnFinished,
+			state.timer);
+	}
+}
+
+void printInfectedClassList() {
+	int i;
+	log.debugAndInfo("\n ===== %s: 当前特感轮换集合 =====\n", PLUGIN_PREFIX);
+	for (i = 0; i < infClassList.Length; i++) {
+		log.debugAndInfo("\t\t索引 %d, 类型 %s",
+			i,
+			INFECTED_NAME[infClassList.Get(i)]);
+	}
+}
+
+/**
+* 获取特感状态类
+* @param client 需要获取特感状态类的客户端索引
+* @param state 状态类
+* @return void
+**/
+void getInfectedState(int client, InfectedState state) {
+	if (!IsValidInfected(client))
+		return;
+
+	state.init();
+	// 设置特感类型, 设置时钟在加入到状态集合之后
+	state.class = GetEntProp(client, Prop_Send, "m_zombieClass");
+	state.entRef = EntIndexToEntRef(client);
+	// 设置名称
+	static char name[64];
+	GetClientName(client, name, sizeof(name));
+	strcopy(state.name, 64, name);
+	// 设置死亡时间
+	state.deathTime = GetGameTime();
+	// 设置是否重生完毕
+	state.isRespawnFinished = false;
 }
