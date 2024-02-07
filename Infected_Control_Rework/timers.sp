@@ -266,7 +266,8 @@ public Action timerRespawnFinishHandler(Handle timer, int entRef) {
 	log.debugAndInfo("\n%s: 索引 %d, 名称 %s, 类型 %s, 重生完毕 %b, 死亡时间 %.2f, 距离上次死亡经过 %.3f s, 当前是否允许刷新特感 %b\n", PLUGIN_PREFIX, index, state.name, INFECTED_NAME[state.class], state.isRespawnFinished, state.deathTime, GetGameTime() - state.deathTime, canSpawnNewInfected);
 
 	// 循环将 canSpawnNewInfected 设置为 true, 以免刷完一只即将设置为 false 前刚好复活, 无视时钟设置为 true, 最坏等待时间 1.0s
-	CreateTimer(1.0, timerSetAllowSpawnFlagHandler, entRef, TIMER_REPEAT);
+	delete disperseStartSpawnTimer;
+	disperseStartSpawnTimer = CreateTimer(DISPERSE_START_SPAWN_INTERVAL, timerSetAllowSpawnFlagHandler, _, TIMER_REPEAT);
 
 	state.timer = null;
 	infStateList.SetArray(index, state, sizeof(state));
@@ -288,29 +289,24 @@ int sortInfStateList(int x, int y, Handle array, Handle hndl) {
 	return x1.isRespawnFinished > y1.isRespawnFinished ? -1 : x1.isRespawnFinished == y1.isRespawnFinished ? FloatCompare(x1.deathTime, y1.deathTime) > 0 ? -1 : 1 : 1;
 }
 
-Action timerSetAllowSpawnFlagHandler(Handle timer, int entRef) {
-	// 未离开安全屋 或 允许正常刷新特感情况下, 返回
-	if (!isLeftSafeArea || (canSpawnNewInfected && !isInFindPosFailedDelay && !isInSpawnFinishedTime))
-		return Plugin_Continue;
+Action timerSetAllowSpawnFlagHandler(Handle timer) {
+	// 未离开安全屋 或 特感状态集合中没有待刷新的特感, 返回
+	if (!isLeftSafeArea || infStateList.Length < 1) {
+		disperseStartSpawnTimer = null;
+		return Plugin_Stop;
+	}
+	// 在一波找位刷新延迟内, 跳过本次时钟周期
 	if (isInFindPosFailedDelay)
 		return Plugin_Continue;
 
-	// 无效的实体索引, 时钟停止
-	if (entRef == INVALID_ENT_REFERENCE)
-		return Plugin_Stop;
-	// 在特感状态集合中找不到, 说明已经被刷新, 停止
-	static int index;
-	index = infStateList.FindValue(entRef, 0);
-	if (index < 0)
-		return Plugin_Stop;
-	// 如果当前在场特感与状态集合中待刷新特感数量超过限制, 则自身销毁
-	if (infectedCount + infStateList.Length > g_hInfectedLimit.IntValue) {
-		static InfectedState state;
-		if (infStateList.Length > 1) {
-			infStateList.GetArray(0, state, sizeof(state));
-			state.init();
-		}
-		return Plugin_Stop;
+	static int aliveCount;
+	aliveCount = getTeamClientCount(TEAM_INFECTED, true, false);
+
+	// 如果当前在场特感与状态集合中待刷新特感数量超过限制, 则清除多余的状态类
+	if (aliveCount + infStateList.Length > g_hInfectedLimit.IntValue) {
+		if (infStateList.Length > 1)
+			infStateList.Erase(infStateList.Length - 1);
+		return Plugin_Continue;
 	}
 
 	canSpawnNewInfected = true;

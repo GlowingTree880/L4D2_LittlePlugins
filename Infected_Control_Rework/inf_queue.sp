@@ -557,18 +557,19 @@ void getInfectedQueuePositionList() {
 		}
 		if (infectedQueueKv != null) {
 			int infectedType, count = 0, pos;
-			char value[64];
+			// value 长度增加, 否则高特无法全部读取完毕
+			char value[128];
 			// 获取每种特感在刷新队列中的位置
 			for (i = ZC_SMOKER; i <= ZC_CHARGER; i++) {
 				infectedType = i;
-				char temp[31][8];
+				char temp[64][8];
 
 				// 根据特感名称获取特感在刷新队列中允许刷新的位置，如 smoker: 1,3,4,6
 				FormatEx(buffer, sizeof(buffer), "%s", INFECTED_NAME[i]);
 				infectedQueueKv.GetString(buffer, value, sizeof(value));
 
 				if (strlen(value) > 0) {
-					count = ExplodeString(value, ",", temp, 31, 8);
+					count = ExplodeString(value, ",", temp, 64, 8);
 				}
 
 				// 位置字符串：1,3,4,6

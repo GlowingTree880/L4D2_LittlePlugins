@@ -160,12 +160,12 @@ public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBro
 		if (infEntRefMapOperation.containsKey(ref)) {
 			// 在实体 Map 中存在, 删除
 			log.debugAndInfo("%s: 当前特感数量 %d, 是否为分散刷新 %b, 特感 %N 死亡, 实体索引 %d, 合法特感, 从实体引用 Map 中移除",
-				PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client, ref);
+				PLUGIN_PREFIX, infectedCount, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client, ref);
 			
 			infEntRefMapOperation.remove(ref);
 		} else {
 			log.error("%s: 当前特感数量 %d, 是否为分散刷新 %b, 特感 %N 死亡, 于特感实体引用 Map 中不存在, 非法特感",
-				PLUGIN_PREFIX, g_hInfectedLimit.IntValue, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client);
+				PLUGIN_PREFIX, infectedCount, g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE, client);
 			return;
 		}
 

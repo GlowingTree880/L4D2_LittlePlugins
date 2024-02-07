@@ -116,52 +116,35 @@ public Action cmdSingleInfectedMode(int client, int args) {
 public Action cmdStateList(int client, int args) {
 	static int i;
 	InfectedState state;
-	if (client == 0) {
-		PrintToServer("\n========== 特感状态集合 ==========\n");
-		for (i = 0; i < infStateList.Length; i++) {
-			infStateList.GetArray(i, state, sizeof(state));
-			PrintToServer("\t索引 %d, 实体索引 %d, 类型 %s, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f, 时钟 0x%x",
-				i, state.entRef, INFECTED_NAME[state.class], state.isRespawnFinished,
-				state.deathTime, GetGameTime() - state.deathTime, state.timer);
-		}
-		PrintToServer("\n================================\n");
-	} else {
-		PrintToConsoleAll("\n========== 特感状态集合 ==========\n");
-		for (i = 0; i < infStateList.Length; i++) {
-			infStateList.GetArray(i, state, sizeof(state));
-			PrintToConsoleAll("\t索引 %d, 实体索引 %d, 类型 %s, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f, 时钟 0x%x",
-				i, state.entRef, INFECTED_NAME[state.class], state.isRespawnFinished,
-				state.deathTime, GetGameTime() - state.deathTime, state.timer);
-		}
-		PrintToConsoleAll("\n================================\n");
+	ReplyToCommand(client, "\n========== 特感状态集合 ==========\n");
+	for (i = 0; i < infStateList.Length; i++) {
+		infStateList.GetArray(i, state, sizeof(state));
+		ReplyToCommand(client, "\t索引 %d, 实体索引 %d, 类型 %s, 重生完成 %b, 上次死亡时间 %.2f, 距离当前 %.2f, 时钟 0x%x",
+			i, state.entRef, INFECTED_NAME[state.class], state.isRespawnFinished,
+			state.deathTime, GetGameTime() - state.deathTime, state.timer);
 	}
+	ReplyToCommand(client, "\n================================\n");
 	return Plugin_Handled;
 }
 
 public Action cmdState(int client, int args) {
-	static int i;
-	if (client == 0) {
-		PrintToServer("\n========== 特感刷新状态 ===========\n");
-		PrintToServer("canSpawn: %b, isLeftSafeArea: %b, isInFindPosFailedDelay: %b, isInSpawnFinishTime: %b, respawnFinishedCount: %d, target: %d", canSpawnNewInfected, isLeftSafeArea, isInFindPosFailedDelay, isInSpawnFinishedTime, respawnFinishedCount, targetIndex);
+	static int i, target;
+	static char name[64];
 
-		PrintToServer("====== Target List =====");
-		for (i = 0; i < targetList.Length; i++) {
-			PrintToServer("index: %d, target: %N", i, targetList.Get(i, 1));
-		}
+	ReplyToCommand(client, "\n========== 特感刷新状态 ===========\n");
+	ReplyToCommand(client, "canSpawn: %b, isLeftSafeArea: %b, isInFindPosFailedDelay: %b, isInSpawnFinishTime: %b, respawnFinishedCount: %d, infectedCount: %d, target: %d", canSpawnNewInfected, isLeftSafeArea, isInFindPosFailedDelay, isInSpawnFinishedTime, respawnFinishedCount, infectedCount, targetIndex);
 
-		PrintToServer("\n================================\n");
-	} else {
-		PrintToConsoleAll("\n========== 特感刷新状态 ===========\n");
-		PrintToConsoleAll("canSpawn: %b, isLeftSafeArea: %b, isInFindPosFailedDelay: %b, isInSpawnFinishTime: %b, respawnFinishedCount: %d, target: %d", canSpawnNewInfected, isLeftSafeArea, isInFindPosFailedDelay, isInSpawnFinishedTime, respawnFinishedCount, targetIndex);
-
-		PrintToConsoleAll("====== Target List =====");
-		for (i = 0; i < targetList.Length; i++) {
-			PrintToServer("index: %d, target: %N", i, targetList.Get(i, 1));
-		}
-
-		PrintToConsoleAll("\n================================\n");
+	ReplyToCommand(client, "====== Target List =====");
+	for (i = 0; i < targetList.Length; i++) {
+		target = targetList.Get(i, 1);
+		if (IsValidSurvivor(target))
+			GetClientName(target, name, sizeof(name));
+		else
+			strcopy(name, sizeof(name), "Invalid");
+		ReplyToCommand(client, "index: %d, target: %d (%s)", i, target, name);
 	}
 
+	ReplyToCommand(client, "\n================================\n");
 	return Plugin_Handled;
 }
 
@@ -179,26 +162,15 @@ public Action cmdEntMap(int client, int args) {
 
 	static int i, value;
 	static char key[64];
-	if (client == 0) {
-		PrintToServer("\n========== 特感实体 Map ==========\n");
-		StringMapSnapshot snapShot = infEntRefMap.Snapshot();
-		for (i = 0; i < snapShot.Length; i++) {
-			snapShot.GetKey(i, key, sizeof(key));
-			if (!infEntRefMap.GetValue(key, value))
-				value = -1;
-			PrintToServer("\t索引 %d, key %s, value %d", i, key, value);
-		}
-		PrintToServer("\n================================\n");
-	} else {
-		PrintToConsoleAll("\n========== 特感实体 Map ==========\n");
-		StringMapSnapshot snapShot = infEntRefMap.Snapshot();
-		for (i = 0; i < snapShot.Length; i++) {
-			snapShot.GetKey(i, key, sizeof(key));
-			if (!infEntRefMap.GetValue(key, value))
-				value = -1;
-			PrintToConsoleAll("\t索引 %d, key %s, value %d", i, key, value);
-		}
-		PrintToConsoleAll("\n================================\n");
+	ReplyToCommand(client, "\n========== 特感实体 Map ==========\n");
+	StringMapSnapshot snapShot = infEntRefMap.Snapshot();
+	for (i = 0; i < snapShot.Length; i++) {
+		snapShot.GetKey(i, key, sizeof(key));
+		if (!infEntRefMap.GetValue(key, value))
+			value = -1;
+		ReplyToCommand(client, "\t索引 %d, key %s, value %d", i, key, value);
 	}
+	
+	ReplyToCommand(client, "\n================================\n");
 	return Plugin_Handled;
 }

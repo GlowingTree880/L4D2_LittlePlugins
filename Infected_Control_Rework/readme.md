@@ -198,5 +198,11 @@ sm_infqueue (!infqueue <num [10]>)
 5. 优化分散刷新模式代码, 增加健壮性<br>
 </details>
 
+<details>
+<summary>2024-02-08</summary>
+1. 修复无法读取 24 特以上的问题<br>
+2. 修复 2024-02-07 版本中特感刷新时钟周期获取错误的问题<br>
+</details>
+
 ---
 - 如在使用过程中发现任何 Bug，请提出 issue 说明 Bug 类型及发生时情况，如有报错请附上 log 文件信息 (｡･ω･｡)

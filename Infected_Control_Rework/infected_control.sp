@@ -35,6 +35,8 @@
 #define SURVIVOR_COUNT_CHECK_INTERVAL 1.0
 // 复活完成特感数量检测时钟周期
 #define RESPAWN_FINISHED_CHECK_INTERVAL 1.0
+// 分散刷新特感复活完毕请求刷新时钟周期
+#define DISPERSE_START_SPAWN_INTERVAL 0.1
 // 特感实体引用 Map 集合清脏时钟周期
 #define ENT_REF_MAP_CLEAN_INTERVAL 5.0
 // round_start 事件触发多少秒后获取第一波刷特队列
@@ -98,7 +100,8 @@ Logger
 Handle
 	infectedCountCheckTimer,
 	survivorCountCheckTimer,
-	respawnFinishedCheckTimer;
+	respawnFinishedCheckTimer,
+	disperseStartSpawnTimer;
 
 float
 	// 基准时钟时钟周期
@@ -735,7 +738,6 @@ public void OnGameFrame() {
 
 		// 第一波刷特, 需要进行特感轮换时, 记录特感类型, 补齐缺失的特感类型
 		if (isNeedToAlternate() && currentSpawnWaveCount <= 1) {
-			
 			infClassList = infectedQueue.Clone();
 			bool existClass[INFECTED_ARRAY_SIZE];
 			for (i = 0; i < infectedQueue.Length; i++) {
@@ -853,21 +855,9 @@ public void OnGameFrame() {
 					return;
 				}
 
-				// 检查是否有复活完成的特感
+				// 检查是否有复活完成的特感 或 分散刷新下设置了特感复活阈值, 检查复活完成的特感数量是否达到这个阈值 不允许继续刷新
 				infStateList.GetArray(0, state, sizeof(state));
-				if (!state.isRespawnFinished) {
-					log.debugAndInfo("\n%s: 当前为分散刷新模式, 特感状态集合长度 %d, 没有复活完成的特感, 不允许刷新\n",
-						PLUGIN_PREFIX, infStateList.Length);
-
-					canSpawnNewInfected = false;
-					isInSpawnFinishedTime = true;
-					return;
-				}
-				// 分散刷新下设置了特感复活阈值, 检查复活完成的特感数量是否达到这个阈值
-				if (infectedCount + respawnFinishedCount < targetCount) {
-					// log.debugAndInfo("\n%s: 当前为分散刷新模式, 在场特感与复活完成特感和为 %d, 少于阈值 %d, 不允许特感复活\n",
-					// 	PLUGIN_PREFIX, infectedCount + respawnFinishedCount, targetCount);
-					
+				if (!state.isRespawnFinished || (infectedCount + respawnFinishedCount < targetCount)) {
 					canSpawnNewInfected = false;
 					isInSpawnFinishedTime = true;
 					return;
@@ -888,8 +878,7 @@ public void OnGameFrame() {
 				infStateList.GetArray(0, state, sizeof(state));
 
 				log.debugAndInfo("%s: 分散刷新模式刷新一只特感, 删除状态集合头部元素, 名称 %s, 类型 %s, 是否复活完毕 %b, 死亡时间 %.2f, 时钟 0x%x", PLUGIN_PREFIX, state.name, INFECTED_NAME[state.class], state.isRespawnFinished, state.deathTime, state.timer);
-
-				state.init();
+				
 				infStateList.Erase(0);
 			}
 		}
@@ -1073,6 +1062,7 @@ void resetTimersAndStates() {
 	delete infectedCountCheckTimer;
 	delete survivorCountCheckTimer;
 	delete respawnFinishedCheckTimer;
+	delete disperseStartSpawnTimer;
 	delete infectedQueue;
 
 	standardInfectedSpawnTimer.init();
@@ -1183,11 +1173,11 @@ void getInfectedSpawnTimerInterval() {
 
 float getTimeIncreaseByOrder(const float time) {
 	if (time <= SPAWN_TIME_INCREASE_FIRST_THRESHOLD)
-		return time + SPAWN_TIME_INCREASE_FIRST_ORDER;
+		return SPAWN_TIME_INCREASE_FIRST_ORDER;
 	else if (time > SPAWN_TIME_INCREASE_FIRST_THRESHOLD && time <= SPAWN_TIME_INCREASE_SECOND_THRESHOLD)
-		return time + SPAWN_TIME_INCREASE_SECOND_ORDER;
+		return SPAWN_TIME_INCREASE_SECOND_ORDER;
 	else
-		return time + SPAWN_TIME_INCREASE_THIRD_ORDER;
+		return SPAWN_TIME_INCREASE_THIRD_ORDER;
 }
 
 void getDisperseTargetInfectedCount() {
