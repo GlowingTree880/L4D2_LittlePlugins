@@ -37,6 +37,8 @@
 #define RESPAWN_FINISHED_CHECK_INTERVAL 1.0
 // 分散刷新特感复活完毕请求刷新时钟周期
 #define DISPERSE_START_SPAWN_INTERVAL 0.1
+// 特感自动处死检测时钟周期
+#define INFECTED_FORCE_SUICIDE_CHECK_INTERVAL 2.5
 // 特感实体引用 Map 集合清脏时钟周期
 #define ENT_REF_MAP_CLEAN_INTERVAL 5.0
 // round_start 事件触发多少秒后获取第一波刷特队列
@@ -73,7 +75,8 @@ ConVar
 	g_hFirstWaveDelay,
 	g_hDeadKickTime,
 	g_hIncapExtraTime,
-	g_hStartSpawnControl;
+	g_hStartSpawnControl,
+	g_hForceSuicideTime;
 
 ConVar
 	g_hLoggingLevel;
@@ -101,7 +104,8 @@ Handle
 	infectedCountCheckTimer,
 	survivorCountCheckTimer,
 	respawnFinishedCheckTimer,
-	disperseStartSpawnTimer;
+	disperseStartSpawnTimer,
+	forceSuicideCheckTimer;
 
 float
 	// 基准时钟时钟周期
@@ -117,7 +121,9 @@ float
 	// 固定刷特时钟创建时间, For Debug
 	regularTimerCreatedTime,
 	// 动态刷特时钟创建时间, For Debug
-	autoTimerCreatedTime;
+	autoTimerCreatedTime,
+	// 特感自动处死检测记录时间
+	infForceSuicideCheckTime[MAXPLAYERS + 1];
 
 bool
 	isLeftSafeArea,
@@ -344,6 +350,7 @@ public void OnPluginStart() {
 	g_hIncapExtraTime = CreateConVar("inf_incap_extra_time", "5.0", "有一个生还者倒地则下一波刷特向后延迟多少秒 (0: 不延迟) [仅集中刷新模式可用]", CVAR_FLAG, true, 0.0);
 	g_hDeadKickTime = CreateConVar("inf_dead_kick_time", "0.5", "多少秒后踢出死亡的特感 [除 Spitter]", CVAR_FLAG, true, 0.1);
 	g_hStartSpawnControl = CreateConVar("inf_start_spawn_control", "1", "以何种方式开启特感刷新 (1: 自动控制 [首个生还者离开安全区域自动刷新], 2: 手动控制 [需要输入 !startspawn 指令])", CVAR_FLAG, true, float(SSC_NONE + 1), true, float(SSC_SIZE - 1));
+	g_hForceSuicideTime = CreateConVar("inf_force_suicide_time", "20.0", "未攻击生还者同时未在生还者视野范围内的特感超过这个时间自动处死", CVAR_FLAG, true, 0.0);
 	// 日志记录
 	g_hLoggingLevel = CreateConVar("inf_log_level", "38", "插件日志级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加", CVAR_FLAG, true, 0.0, true, 64.0);
 
@@ -379,7 +386,8 @@ public void OnPluginStart() {
 	HookEvent("round_end", eventRoundEndHandler);
 	HookEvent("player_death", eventPlayerDeathHandler);
 	HookEvent("player_incapacitated", eventPlayerIncapStartHandler);
-	HookEvent("player_disconnect", eventPlayerDisconnectHandler, EventHookMode_Pre);
+	HookEvent("player_spawn", eventPlayerSpawnHandler);
+	HookEvent("player_hurt", eventPlayerHurtHandler);
 
 	infStateList = new ArrayList(sizeof(InfectedState));
 	infClassList = new ArrayList();
@@ -464,6 +472,9 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client) {
 	// 创建复活完成特感数量检测时钟
 	delete respawnFinishedCheckTimer;
 	respawnFinishedCheckTimer = CreateTimer(RESPAWN_FINISHED_CHECK_INTERVAL, timerRespawnFinishedCheckHandler, _, TIMER_REPEAT);
+	// 创建特感自动处死检测时钟
+	delete forceSuicideCheckTimer;
+	forceSuicideCheckTimer = CreateTimer(INFECTED_FORCE_SUICIDE_CHECK_INTERVAL, timerForceSuicideHandler, _, TIMER_REPEAT);
 
 	// 唤起一次生还者数量检测时钟, 保证出门能刷新特感
 	TriggerTimer(survivorCountCheckTimer);
@@ -627,6 +638,28 @@ public Action timerEntRefMapCleanHandler(Handle timer) {
 	return Plugin_Continue;
 }
 
+public Action timerForceSuicideHandler(Handle timer) {
+	static int i, class;
+	static float pos[3];
+	for (i = 1; i <= MaxClients; i++) {
+		if (!IsValidInfected(i) || !IsPlayerAlive(i) || !IsFakeClient(i))
+			continue;
+		class = GetEntProp(i, Prop_Send, "m_zombieClass");
+		if (class < ZC_SMOKER || class > ZC_CHARGER)
+			continue;
+		GetClientAbsOrigin(i, pos);
+		pos[2] += PLAYER_HEIGHT;
+		if (isVisibleToSurvivor(pos) || isTooCloseToSurvivor(i, g_hMinDistance.FloatValue) || L4D2_GetSurvivorVictim(i) > 0) {
+			infForceSuicideCheckTime[i] = GetEngineTime();
+			continue;
+		}
+		// 检查是否需要被处死
+		if (GetEngineTime() - infForceSuicideCheckTime[i] > g_hForceSuicideTime.FloatValue)
+			ForcePlayerSuicide(i);
+	}
+	return Plugin_Continue;
+}
+
 // ********** Timer Handles End **********
 
 /**
@@ -738,11 +771,13 @@ public void OnGameFrame() {
 
 		// 第一波刷特, 需要进行特感轮换时, 记录特感类型, 补齐缺失的特感类型
 		if (isNeedToAlternate() && currentSpawnWaveCount <= 1) {
-			infClassList = infectedQueue.Clone();
 			bool existClass[INFECTED_ARRAY_SIZE];
 			for (i = 0; i < infectedQueue.Length; i++) {
-				if (!existClass[infectedQueue.Get(i)])
-					existClass[infectedQueue.Get(i)] = true;
+				class = infectedQueue.Get(i);
+				if (!existClass[class])
+					existClass[class] = true;
+				if (infClassList.FindValue(class) < 0)
+					infClassList.Push(class);
 			}
 			for (i = 1; i < INFECTED_ARRAY_SIZE; i++) {
 				if (!existClass[i]) {
@@ -792,16 +827,15 @@ public void OnGameFrame() {
 	}
 
 	// 找位刷新逻辑
-	if (!IsValidSurvivor(targetIndex) || !IsPlayerAlive(targetIndex))
+	if (!IsValidSurvivor(targetIndex) || !IsPlayerAlive(targetIndex) || infectedQueue.Length < 1)
 		return;
 
 	findPosTime = GetEngineTime() - findPosSpawnTimeCost;
 	// 检查是否有跑男, 如果有跑男则优先以跑男为中心找位, 否则选择目标生还者
 	targetIndex = runnerIndex > 0 ? runnerIndex : targetIndex;
 
-	// 从刷新队列头部获取一个特感类型
+	// 从刷新队列头部获取一个特感类型用于找位
 	class = infectedQueue.Get(0);
-
 	if (findPosTime <= g_hStartExpandTime.FloatValue) {
 		// 不需要进行网格拓展
 		switch (g_hFindPosMethod.IntValue) {
@@ -837,6 +871,11 @@ public void OnGameFrame() {
 
 	// 刷新特感
 	for (i = 0; i < g_hEachPosInfectedCount.IntValue; i++) {
+		if (infectedQueue.Length < 1)
+			break;
+
+		// 从刷新队列头部获取一个特感类型用于刷新
+		class = infectedQueue.Get(0);
 		// 集中刷新方式
 		if (g_hSpawnMethodStrategy.IntValue == SMS_CENTERALIZE) {
 			// 允许刷新, 从刷新队列头部去除这个特感类型
@@ -876,10 +915,9 @@ public void OnGameFrame() {
 			// 非第一波刷新, 从状态集合中删除一个元素, 表示一只特感已经复活完成并刷新, 不判断是否第一波刷新会导致第一波刷新时特感死亡, 另外刷新的特感将死亡的特感状态类删除, 导致特感数量错误
 			if (currentSpawnWaveCount > 1 && infStateList.Length >= 1) {
 				infStateList.GetArray(0, state, sizeof(state));
+				infStateList.Erase(0);
 
 				log.debugAndInfo("%s: 分散刷新模式刷新一只特感, 删除状态集合头部元素, 名称 %s, 类型 %s, 是否复活完毕 %b, 死亡时间 %.2f, 时钟 0x%x", PLUGIN_PREFIX, state.name, INFECTED_NAME[state.class], state.isRespawnFinished, state.deathTime, state.timer);
-				
-				infStateList.Erase(0);
 			}
 		}
 
@@ -1063,6 +1101,7 @@ void resetTimersAndStates() {
 	delete survivorCountCheckTimer;
 	delete respawnFinishedCheckTimer;
 	delete disperseStartSpawnTimer;
+	delete forceSuicideCheckTimer;
 	delete infectedQueue;
 
 	standardInfectedSpawnTimer.init();
@@ -1162,7 +1201,7 @@ void getInfectedSpawnTimerInterval() {
 	// 基准时钟间隔: SpawnDuration + (Limit / 2 == 0 ? 1 : Limit / 2) * 增时 (保底 0.5 s)
 	standardTimerInterval = g_hSpawnDuration.FloatValue + (half > 0 ? half : 1) * getTimeIncreaseByOrder(g_hSpawnDuration.FloatValue);
 	// 固定时钟间隔: SpawnDuration + 增时 (保底 0.5 s)
-	regularTimerInterval = getTimeIncreaseByOrder(g_hSpawnDuration.FloatValue);
+	regularTimerInterval = g_hSpawnDuration.FloatValue + getTimeIncreaseByOrder(g_hSpawnDuration.FloatValue);
 	// 动态时钟间隔: SpawnDuration + (Limit / 2 - 1 == 0 ? 1 : Limit / 2 - 1) * 增时 (保底 0.5 s)
 	autoTimerInterval = g_hSpawnDuration.FloatValue + (half - 1 > 0 ? half - 1 : 1) * getTimeIncreaseByOrder(g_hSpawnDuration.FloatValue);
 
@@ -1306,13 +1345,7 @@ void changeHookSpawnDuration(ConVar convar, const char[] oldValue, const char[] 
 }
 
 void changeHookSpawnStrategy(ConVar convar, const char[] oldValue, const char[] newValue) {
-	int newV = StringToInt(newValue);
-	switch (newV) {
-		case SPS_REGULAR:
-			log.debugAndInfo("%s: 当前特感刷新策略更改为固定时间间隔刷新", PLUGIN_PREFIX);
-		case SPS_AUTO:
-			log.debugAndInfo("%s: 当前特感刷新策略跟改为动态时间间隔刷新", PLUGIN_PREFIX);
-	}
+	CreateTimer(ROUND_START_DELAY, timerChangeSpawnStrategyHandler, _, TIMER_REPEAT);
 }
 
 void changeHookSpawnMethodStrategy(ConVar convar, const char[] oldValue, const char[] newValue) {
@@ -1323,6 +1356,22 @@ void changeHookSpawnMethodStrategy(ConVar convar, const char[] oldValue, const c
 		case SMS_DISPERSE:
 			log.debugAndInfo("%s: 当前特感刷新方式更改为分散刷新方式", PLUGIN_PREFIX);
 	}
+}
+
+Action timerChangeSpawnStrategyHandler(Handle timer) {
+	if (canSpawnNewInfected)
+		return Plugin_Continue;
+	switch (g_hSpawnStrategy.IntValue) {
+		case SPS_AUTO: {
+			log.debugAndInfo("%s: 更改为自动刷新方式", PLUGIN_PREFIX);
+			regularInfectedSpawnTimer.init();
+		} case SPS_REGULAR: {
+			log.debugAndInfo("%s: 更改为固定刷新方式", PLUGIN_PREFIX);
+			autoInfectedSpawnTimer.init();
+		}
+	}
+	TriggerTimer(infectedCountCheckTimer);
+	return Plugin_Stop;
 }
 
 /**
@@ -1414,4 +1463,10 @@ void getInfectedClassList() {
 		if (!existClass[i])
 			infClassList.Push(i);
 	}
+}
+
+bool isTooCloseToSurvivor(const int client, const float distance) {
+	if (!IsValidClient(client))
+		return false;
+	return GetClosetSurvivorDistance(client) < distance;
 }

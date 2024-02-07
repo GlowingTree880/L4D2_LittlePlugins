@@ -28,6 +28,8 @@ inf_incap_extra_time 5.0
 inf_dead_kick_time 0.5
 // 以何种方式开启特感刷新 (1: 自动控制 [首个生还者离开安全区域自动刷新], 2: 手动控制 [需要输入 !startspawn 指令, 适配 Anne text.smx 插件])
 inf_start_spawn_control 1
+// 未攻击生还者同时未在生还者视野范围内的 Bot 特感超过这个时间自动处死
+inf_force_suicide_time 20.0
 // 插件日志级别 (1: 禁用, 2: DEBUG, 4: INFO, 8: MESSAGE, 16: SERVER, 32: ERROR) 数字相加, 6 = 2 + 4 表示同时启用 DEBUG 与 INFO 功能
 inf_log_level 6
 
@@ -201,7 +203,11 @@ sm_infqueue (!infqueue <num [10]>)
 <details>
 <summary>2024-02-08</summary>
 1. 修复无法读取 24 特以上的问题<br>
-2. 修复 2024-02-07 版本中特感刷新时钟周期获取错误的问题<br>
+2. 修复 2024-02-07 版本中特感刷新时钟周期获取错误的问题，造成固定时钟周期获取错误<br>
+3. 修复 2024-02-08 版本中固定时钟周期获取错误的问题<br>
+4. 修复每个位置刷新多只特感情况下特感队列已空但仍然允许刷新导致无法获取特感类型的错误<br>
+5. 修复第一波进行特感轮换时轮换类型集合中特感类型重复问题<br>
+6. 增加未控人且不在生还者视线范围内的特感超时处死功能<br>
 </details>
 
 ---

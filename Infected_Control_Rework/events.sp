@@ -33,29 +33,6 @@ public void eventRoundEndHandler(Event event, const char[] name, bool dontBroadc
 }
 
 /**
-* 玩家断开连接事件, 仅检测特感 (由插件踢出或管理员踢出)
-* @param 
-* @return void
-**/
-public void eventPlayerDisconnectHandler(Event event, const char[] name, bool dontBroadcast) {
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (client < 1 || client > MaxClients || !IsClientInGame(client) || GetClientTeam(client) != TEAM_INFECTED)
-		return;
-	
-	int class = GetInfectedClass(client);
-	if (class < ZC_SMOKER || class > ZC_CHARGER)
-		return;
-	
-	char reason[64];
-	event.GetString("reason", reason, sizeof(reason));
-
-	// 特感玩家离开游戏, 检查是否已经存在于 Map 中, 存在则移除
-	int ref = EntIndexToEntRef(client);
-	if (infEntRefMapOperation.containsKey(ref))
-		infEntRefMapOperation.remove(ref);
-}
-
-/**
 * 玩家倒地开始事件
 * @param 
 * @return void
@@ -80,6 +57,25 @@ public void eventPlayerIncapStartHandler(Event event, const char[] name, bool do
 
 	// 开始增时
 	doDelayInfectedSpawnTimerNextTriggerTime();
+}
+
+public void eventPlayerSpawnHandler(Event event, const char[] name, bool dontBroadcast) {
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (!IsValidInfected(client))
+		return;
+	int class = GetEntProp(client, Prop_Send, "m_zombieClass");
+	if (class < ZC_SMOKER || class > ZC_CHARGER)
+		return;
+	infForceSuicideCheckTime[client] = GetEngineTime();
+}
+
+public void eventPlayerHurtHandler(Event event, const char[] name, bool dontBroadcast) {
+	if (!isLeftSafeArea)
+		return;
+	int victim = GetClientOfUserId(event.GetInt("userid")),
+		attacker = GetClientOfUserId(event.GetInt("attacker"));
+	infForceSuicideCheckTime[victim] = GetEngineTime();
+	infForceSuicideCheckTime[attacker] = GetEngineTime();
 }
 
 /**
@@ -182,7 +178,8 @@ public void eventPlayerDeathHandler(Event event, const char[] name, bool dontBro
 		}
 
 		// 打印特感状态与特感轮换类型集合
-		printInfectedStateList();
+		if (g_hSpawnMethodStrategy.IntValue == SMS_DISPERSE)
+			printInfectedStateList();
 		printInfectedClassList();
 	}
 

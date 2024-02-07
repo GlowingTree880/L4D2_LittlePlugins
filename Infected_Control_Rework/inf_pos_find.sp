@@ -491,7 +491,7 @@ static bool checkRayImpactEntityValid(const char[] className)
 * @param navArea 这个位置所在的 navArea, 默认 Address_Null
 * @return bool
 **/
-static bool isVisibleToSurvivor(float pos[3], Address navArea = Address_Null) {
+bool isVisibleToSurvivor(float pos[3], Address navArea = Address_Null) {
 	static int i;
 	for (i = 1; i <= MaxClients; i++) {
 		if (!IsValidClient(i) || GetClientTeam(i) != TEAM_SURVIVOR || !IsPlayerAlive(i)) {
