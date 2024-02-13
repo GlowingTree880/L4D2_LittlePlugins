@@ -1370,7 +1370,9 @@ Action timerChangeSpawnStrategyHandler(Handle timer) {
 			autoInfectedSpawnTimer.init();
 		}
 	}
-	TriggerTimer(infectedCountCheckTimer);
+	// 出门后且特感数量检测时钟不为 null, 则立即触发一次
+	if (isLeftSafeArea && infectedCountCheckTimer != null)
+		TriggerTimer(infectedCountCheckTimer);
 	return Plugin_Stop;
 }
 

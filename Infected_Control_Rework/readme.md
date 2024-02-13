@@ -102,7 +102,7 @@ sm_infqueue (!infqueue <num [10]>)
 
 ## 注意事项
 1. 当前暂不支持在一局游戏内更改特感刷新方式 Cvar，即 `inf_spawn_method_strategy`，若需要更改请重启当前地图，否则会出现更改完毕后无法刷新特感的情况
-2. 当前暂不支持在一局游戏内更改特感刷新策略 Cvar, 即 `inf_spawn_strategy`, 若需要更改请重启一次地图
+2. 2023-02-08 版本后支持在一局游戏内更改特感刷新策略 Cvar, 即 `inf_spawn_strategy`, 但仍然建议更改完成后重启当前地图, 以防不明 bug
 3. 插件采用三阶增时设计, 小于一阶增时阈值 `SPAWN_TIME_INCREASE_FIRST_THRESHOLD` (默认 5.0) 时使用一阶增时 `SPAWN_TIME_INCREASE_FIRST_ORDER` (默认 0.5s), 超过一阶增时阈值使用二阶增时 `SPAWN_TIME_INCREASE_SECOND_ORDER` (默认 2.0s), 超过二阶增时阈值 `SPAWN_TIME_INCREASE_SECOND_THRESHOLD` (默认 10.0s) 使用三阶增时 `SPAWN_TIME_INCREASE_THIRD_ORDER` (默认 4.0s)。在 6 特时有以下示例: `inf_spawn_duration` 设置为 1s 时使用一阶增时 (默认 0.5s), 则基准时钟 2.5s, 固定时钟周期 1.5s, 动态时钟 2s; 设置为 6s 时使用二阶增时 (默认 2s), 则基准时钟 12s, 固定时钟 8s, 动态时钟 10s; 设置为 16s 时使用三阶增时 (默认 4s), 则基准时钟 28s, 固定时钟 20s, 动态时钟 24s
 4. 基准时钟周期计算方式为: `inf_spawn_duration` + (`inf_limit` / 2 > 0 ? `inf_limit` / 2 : 1) * 增时; 固定时钟计算方式为 `inf_spawn_duration` + 增时; 动态时钟计算方式为 `inf_spawn_duration` + (`inf_limit` / 2 - 1 > 0 ? `inf_limit` / 2 - 1 : 1) * 增时
 5. 分散刷新时实际复活时间为: 时钟周期 + 1.0s (timers L269 `CreateTimer(1.0, timerSetAllowSpawnFlagHandler, entRef, TIMER_REPEAT);`, 此时钟循环设置允许特感复活)
@@ -208,6 +208,11 @@ sm_infqueue (!infqueue <num [10]>)
 4. 修复每个位置刷新多只特感情况下特感队列已空但仍然允许刷新导致无法获取特感类型的错误<br>
 5. 修复第一波进行特感轮换时轮换类型集合中特感类型重复问题<br>
 6. 增加未控人且不在生还者视线范围内的特感超时处死功能<br>
+</details>
+
+<details>
+<summary>2024-02-13</summary>
+1. 修复未离开安全区域更改特感刷新方式时由于未创建特感数量统计时钟而导致 TriggerTimer 报错的问题<br>
 </details>
 
 ---
