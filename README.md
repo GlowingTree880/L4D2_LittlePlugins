@@ -1,7 +1,7 @@
 # GlowingTree's Server Little Plugins [dev branch]
 
 这里是 dev 开发分支, 最新的插件都会先上传到这个分支进行测试, 这个分支的插件并不能保证稳定性, 待测试没问题后合并到 main 主分支, 欢迎对插件提出修改意见及 issue
-> This branch is development branch, and my latest plugins will be uploaded to this branch first for test first. The plugins in this branch cannot guarantee stability. After full testing, they will be merged into the main branch. Any plugin modification suggestions and plugin issue is welcomed to provide.
+> This branch is development branch, and my latest plugins will be uploaded to this branch first for test first. The plugins in this branch cannot guarantee stability. After full testing, they will be merged into the main branch. Any plugin modification suggestions and plugin issues is welcomed to provide.
 
 - 这里是一个存放着一些自用，因为个人突发奇想或好友建议而制作的 L4D2 插件的小仓库，将会不间断上传包含服务器功能，游戏玩法等多种类型的插件
 - 刚刚开始学着写 L4D2 的插件，可能只注重实现了功能而忽略了架构和其他的一些方面，还可能会有非常非常多的 Bug，目前还在向大佬学习中，如果发现了 Bug 欢迎向我提出哦( ･ω< )
@@ -23,6 +23,7 @@
 | [vector_show.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/vector_show.inc)     |        -         | VectorShow 坐标，角度显示 .inc 版本																																					|
 |  [colors.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/colors.inc)              |        1.2.3     | 聊天框字体颜色支持， 增加 {W}、{O}、{LG} 等颜色 Tag 支持，来源：ZoneMod 插件包 																										|
 | [logger.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/main/lib/logger.inc)               |        -         | 一种面向对象的插件日志记录头文件，可以使用 log.xxx("信息") 的方式来记录日志，对比 PlayerTeleport 中的 logger.inc 文件，将 `是否开启日志` 更改为 `日志级别控制`                                                                                                            |
+| [logger2.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/dev/lib/logger2.inc)               |        -         | 一种面向对象的插件日志记录头文件，可以使用 log.xxx("信息") 的方式来记录日志，对比旧版 `logger` 更改了构造时传入插件名与日志级别, 日志输出时将会自动输出插件名前缀`                                                                                                            |
 
 
 # Plugins
