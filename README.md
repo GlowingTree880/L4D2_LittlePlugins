@@ -1,4 +1,7 @@
-# GlowingTree's Server Little Plugins
+# GlowingTree's Server Little Plugins [dev branch]
+
+这里是 dev 开发分支, 最新的插件都会先上传到这个分支进行测试, 这个分支的插件并不能保证稳定性, 待测试没问题后合并到 main 主分支, 欢迎对插件提出修改意见及 issue
+> This branch is development branch, and my latest plugins will be uploaded to this branch first for test first. The plugins in this branch cannot guarantee stability. After full testing, they will be merged into the main branch. Any plugin modification suggestions and plugin issue is welcomed to provide.
 
 - 这里是一个存放着一些自用，因为个人突发奇想或好友建议而制作的 L4D2 插件的小仓库，将会不间断上传包含服务器功能，游戏玩法等多种类型的插件
 - 刚刚开始学着写 L4D2 的插件，可能只注重实现了功能而忽略了架构和其他的一些方面，还可能会有非常非常多的 Bug，目前还在向大佬学习中，如果发现了 Bug 欢迎向我提出哦( ･ω< )
@@ -42,6 +45,8 @@
   <br>（生还者（未死亡/未倒地）状态下，允许按住蹲下键一定时长配合空格键或方向键获得更远距离的向上跳跃或向对应方向冲刺的效果（中国轻功））
 - **Ai_HardSi：** Improves the AI behaviour of special infected
   <br>（通过改进 Ai 特感的行为来增强游戏性，整合了其他大佬的一些功能，同时添加了一些自己想到的功能）
+- **AI_HardSi 3.0:** Version 3.0 of AI_HardSi
+  <br>（3.0 特感, man!）
 - **Infected_Control：** A simple infected spawner
   <br>（参考国内主流药役插件 AnneServer （7-7 与 2 月 15 日版本）中核心插件 infected_control.smx 反编译修复编写，添加了一些其他功能的射线找位刷特，传送特感的插件，注：请修改游戏模式为 versus，否则只能刷 3 特，具体原因目前还在研究中）
 - **Infected_Control_Rework：** A rework version of Infected Control
