@@ -93,8 +93,10 @@ stock int getClosestSurvivor(int client, bool excludeIncap = false) {
     }
 
     SortADTArray(targets, Sort_Ascending, Sort_Float);
-    if (targets.Length < 1)
+    if (targets.Length < 1) {
+        delete targets;
         return -1;
+    }
     static int target;
     target = targets.Get(0, 1);
     delete targets;
@@ -119,8 +121,11 @@ stock bool clientIsVisibleToClient(int client, int target) {
 }
 
 stock bool _CIsVisible2C_traceRayFilter(int entity, int contentsMask, any data) {
-    // 忽略自身
+    // 忽略自身与无效实体
     if (entity == data || !IsValidEntity(entity))
+        return false;
+    // 忽略客户端
+    if (entity > 0 && entity <= MaxClients)
         return false;
 
     static char className[64];
@@ -149,4 +154,8 @@ stock bool _TraceWallFilter(int entity, int contentsMask, any data) {
     }
 
     return false;
+}
+
+stock bool floatIsNan(float val) {
+    return (view_as<int>(val) & 0x7FFFFFFF) > 0x7F800000;
 }

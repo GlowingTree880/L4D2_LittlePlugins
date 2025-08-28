@@ -93,3 +93,14 @@ tan\theta = \frac{v_0^2 - \sqrt{v_0^4 - g^2*d^2 + 2*g*h*v_0^2}}{g*d}
 1. [l4d_sweep_fist_path. Tank 一拍多](https://github.com/Target5150/MoYu_Server_Stupid_Plugins/tree/master/The%20Last%20Stand/l4d_sweep_fist_patch)
 2. [smart_ai_rock. 禁用低抛 E 砖并去除 Tank 扔石头后视角锁定石头出手位置 5 秒](https://github.com/Target5150/MoYu_Server_Stupid_Plugins/tree/master/The%20Last%20Stand/smart_ai_rock)
 3. [skip_tank_taunt. 跳过 Tank 石头击中后的捶胸嘲讽动作与锤人的怒吼动作并加速 Tank 攀爬障碍物动作](https://forums.alliedmods.net/showthread.php?t=336707&highlight=tank+taunt)
+
+## 现存待修复的 Bug
+1. 背后拳目前只能在支持玩家特感的模式下使用 (如对抗, 清道夫模式), 不支持玩家特感的模式 (如战役模式无法使用)
+
+## 更新日志
+<details>
+<summary>2025-08-28</summary>
+1. 修复背后拳 Linux 签名错误导致的报错<br>
+2. 将石头出手时的目标选择从 <strong>先使用 Tank 默认目标, 若默认目标不可视再选择最近可视目标</strong>, 更改为 <strong>直接选择最近可视目标</strong><br>
+3. 修复一些低级错误
+</detail>

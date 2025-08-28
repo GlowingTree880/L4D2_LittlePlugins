@@ -44,6 +44,7 @@ ConVar
 	g_cvBhopMinSpeed,
 	g_cvBhopMaxSpeed,
 	g_cvBhopImpulse,
+	g_cvBhopNoVision,
 	g_cvThrowMinDist,
 	g_cvThrowMaxDist,
 	g_cvAirVecModifyDegree,
@@ -52,7 +53,11 @@ ConVar
 	g_cvClimbAnimRate,
 	g_cvRockTargetAdjust,
 	g_cvBackFist,
+	g_cvBackFistRange,
 	g_cvPunchLockVision;
+
+ConVar
+	g_cvBhopNoVisionMaxAng;
 
 Handle
 	g_hSdkTankClawSweepFist;
@@ -126,11 +131,15 @@ public void OnPluginStart() {
 	// tank can bhop when he and his target are within the distance (ai_tank3_bhop_min_dist, ai_tank3_bhop_max_dist) 
 	g_cvBhopMinDist = CreateConVar("ai_tank3_bhop_min_dist", "75", "停止连跳的最小距离", CVAR_FLAGS, true, 0.0);
 	g_cvBhopMaxDist = CreateConVar("ai_tank3_bhop_max_dist", "9999", "开始连跳的最大距离", CVAR_FLAGS, true, 0.0);
-	// tank can bhop when his speed within this range (ai_tank3_bhop_min_speed, ai_tank3_bhop_max_speed)
+	// when tank's speed is higher than 'ai_tank3_bhop_min_speed', he is allowed to bhop, and his max bhop speed will not above 'ai_tank3_bhop_max_speed'
 	g_cvBhopMinSpeed = CreateConVar("ai_tank3_bhop_min_speed", "200", "连跳的最小速度", CVAR_FLAGS, true, 0.0);
 	g_cvBhopMaxSpeed = CreateConVar("ai_tank3_bhop_max_speed", "1000", "连跳的最大速度", CVAR_FLAGS, true, 0.0);
 	// used to control the speed acceleration during tank each jump from the ground
 	g_cvBhopImpulse = CreateConVar("ai_tank3_bhop_impulse", "120", "连跳的加速度", CVAR_FLAGS, true, 0.0);
+	// allow tank to bhop when he has no sight to any survivor
+	g_cvBhopNoVision = CreateConVar("ai_tank3_bhop_no_vision", "1", "是否允许坦克在无生还者视野时连跳", CVAR_FLAGS, true, 0.0, true, 1.0);
+	// when tank has no sight of any survivors, he is allowed to bhop when his speed vector and eye angle forward vector within this degree
+	g_cvBhopNoVisionMaxAng = CreateConVar("_ai_tank3_bhop_nvis_maxang", "75.0", "无生还者视野时速度向量与视角前向向量在这个角度范围内, 允许连跳", CVAR_FLAGS, true, 0.0);
 	// when the angle that tank's speed vector and his direction vector towards the target is within (ai_tank3_airvec_modify_degree, ai_tank3_airvec_modify_degree_max), when tank is in air, tank will modify the speed vector at interval: ai_tank3_airvec_modify_interval (this will push tank to his target direction)
 	g_cvAirVecModifyDegree = CreateConVar("ai_tank3_airvec_modify_degree", "60.0", "在空中速度方向与自身到目标方向角度超过这个值进行速度修正", CVAR_FLAGS, true, 0.0);
 	g_cvAirVecModifyMaxDegree = CreateConVar("ai_tank3_airvec_modify_degree_max", "135.0", "在空中速度方向与自身到目标方向角度超过这个值不进行速度修正", CVAR_FLAGS, true, 0.0);
@@ -144,6 +153,8 @@ public void OnPluginStart() {
 	g_cvRockTargetAdjust = CreateConVar("ai_tank3_rock_target_adjust", "1", "扔石头时目标不可见是否允许切换目标", CVAR_FLAGS, true, 0.0, true, 1.0);
 	// allow tank to punch survivor who is behind him?
 	g_cvBackFist = CreateConVar("ai_tank3_back_fist", "1", "是否允许Tank使用通背拳(在背后的人也会被拍)", CVAR_FLAGS, true, 0.0, true, 1.0);
+	// allow tank to punch survivor who is behind him and within this range (set to -1 to use default: tank_swing_range)
+	g_cvBackFistRange = CreateConVar("ai_tank3_back_fist_range", "56.0", "允许使用通背拳时背后的打击检测距离, -1 使用默认(tank_swing_range)", CVAR_FLAGS, true, -1.0);
 	// allow tank to lock his vision to his target when punching?
 	g_cvPunchLockVision = CreateConVar("ai_tank3_punch_lock_vision", "1", "是否允许Tank打拳时锁定视角到目标", CVAR_FLAGS, true, 0.0, true, 1.0);
 
@@ -178,7 +189,7 @@ public void OnAllPluginsLoaded() {
 		SetFailState("Mising required gamedata file: %s.", path);
 
 	Handle hGamedata = LoadGameConfigFile("l4d2_ai_tank3");
-	if (hGamedata == null)
+	if (!hGamedata)
 		SetFailState("Failed to load %s gamedata.", GAMEDATA);
 
 	StartPrepSDKCall(SDKCall_Entity);
@@ -187,6 +198,9 @@ public void OnAllPluginsLoaded() {
 	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);
 	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
 	g_hSdkTankClawSweepFist = EndPrepSDKCall();
+	if (!g_hSdkTankClawSweepFist)
+		SetFailState("Failed to find signature for CTankClaw::SweepFist.");
+
 	delete hGamedata;
 }
 
@@ -271,9 +285,7 @@ public void L4D_TankClaw_DoSwing_Post(int tank, int claw) {
 	static float tankPos[3], tankEyeAng[3], dir[3];
 	GetClientAbsOrigin(tank, tankPos);
 	GetEntPropVector(tank, Prop_Data, "m_angAbsRotation", tankEyeAng);
-	tankEyeAng[1] += 180.0;
-	if (tankEyeAng[1] > 180.0)
-		tankEyeAng[1] -= 360.0;
+	tankEyeAng[1] = (tankEyeAng[1] + 180.0 > 180.0) ? tankEyeAng[1] - 180.0 : tankEyeAng[1] + 180.0;
 	tankEyeAng[0] = tankEyeAng[2] = 0.0;
 	GetAngleVectors(tankEyeAng, dir, NULL_VECTOR, NULL_VECTOR);
 	NormalizeVector(dir, dir);
@@ -286,12 +298,13 @@ public void L4D_TankClaw_DoSwing_Post(int tank, int claw) {
 
 	// 坦克攻击判定大概在右手挥动到身体中间时触发, 发射 TraceHull 大概 {-36.0, -36.0, -36.0} {36.0, 36.0, 36.0+tank_swing_range} 这么大
 	// 坦克坐标中心到右手挂载点的距离 attachmentPointDist
-	static float apDist, end[3];
+	static float apDist, end[3], fistDist;
 	apDist = SquareRoot(Pow(rHandPos[0] - tankPos[0], 2.0) + Pow(rHandPos[1] - tankPos[1], 2.0));
-	// 缩放为背后 + swingRange 距离
-	ScaleVector(dir, apDist + swingRange);
+	// 设置碰撞盒结束向量
+	fistDist = g_cvBackFistRange.IntValue >= 0 ? (apDist + g_cvBackFistRange.FloatValue) : (apDist + swingRange);
+	ScaleVector(dir, fistDist);
 	AddVectors(rHandPos, dir, end);
-
+	
 	// Use SdkCall to call the function CTankClaw::SeepFist to make another back fist hit, CTankClaw::SeepFist(CTankClaw* this, Vector* start, Vector* end), the start direction is his rhand attachment point, and the end direction is his rhand attachment point position + swingRange
 	SDKCall(g_hSdkTankClawSweepFist, claw, rHandPos, end);
 }
@@ -303,6 +316,9 @@ Action punchLockVision(int client, int target, const float pos[3], const float t
 	static int claw;
 	claw = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 	if (!claw || !IsValidEdict(claw))
+		return Plugin_Continue;
+
+	if (!HasEntProp(claw, Prop_Send, "m_flNextPrimaryAttack"))
 		return Plugin_Continue;
 
 	static float nextAtk;
@@ -352,7 +368,7 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 	static float l_targetPos[3];
 	l_targetPos = targetPos;
 	visible = L4D2_IsVisibleToPlayer(client, TEAM_INFECTED, 0, 0, l_targetPos);
-	if (IsClientOnGround(client) && nextTickPosCheck(client)) {
+	if (IsClientOnGround(client) && nextTickPosCheck(client, visible)) {
 		static float vPredict[3], vDir[3], vFwd[3], vRight[3];
 		// 不可见目标的情况下, 使用当前速度向量角度进行连跳加速
 		if (!visible) {
@@ -369,6 +385,10 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 			GetVectorCrossProduct({0.0, 0.0, 1.0}, vFwd, vRight);
 			NormalizeVector(vRight, vRight);
 		}
+
+		// 无生还视野不允许连跳
+		if (!g_cvBhopNoVision.BoolValue && !visible)
+			return Plugin_Changed;
 
 		buttons |= IN_DUCK;
 		buttons |= IN_JUMP;
@@ -429,7 +449,7 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 	return Plugin_Changed;
 }
 
-stock bool nextTickPosCheck(int client) {
+stock bool nextTickPosCheck(int client, bool visible) {
 	if (!isAiTank(client))
 		return false;
 
@@ -462,6 +482,19 @@ stock bool nextTickPosCheck(int client) {
 			delete hTrace;
 			return false;
 		}
+	}
+
+	if (!visible) {
+		// 无视野情况, 计算视角与速度向量夹角, 若太大则禁止连跳
+		static float eyeAng[3], dir[3], angle;
+		GetClientEyeAngles(client, eyeAng);
+		GetAngleVectors(eyeAng, dir, NULL_VECTOR, NULL_VECTOR);
+		NormalizeVector(dir, dir);
+		NormalizeVector(velVec, velVec);
+		dir[2] = velVec[2] = 0.0;
+		angle = RadToDeg(ArcCosine(GetVectorDotProduct(dir, velVec)));
+		if (floatIsNan(angle) || angle > g_cvBhopNoVisionMaxAng.FloatValue)
+			return false;
 	}
 
 	delete hTrace;
@@ -596,40 +629,41 @@ public Action L4D_TankRock_OnRelease(int tank, int rock, float vecPos[3], float 
 	svGravity = !cv_Gravity ? DEFAULT_SV_GRAVITY : cv_Gravity.FloatValue;
 
 	static int target, newRockTarget;
-	static float eyeAng[3];
 	newRockTarget = -1;
 	target = GetClientOfUserId(g_AiTanks[tank].target);
 	if (!IsValidSurvivor(target))
 		return Plugin_Continue;
 
-	// 查看是否可以看到目标 (坦克与目标直线距离中间没有障碍物挡住)
-	GetClientEyeAngles(tank, eyeAng);
-	if (g_cvRockTargetAdjust.BoolValue && !clientIsVisibleToClient(tank, target)) {
+	// 石头出手时, 选择最近的可视目标 (坦克与目标坐标连线间没有障碍挡住)
+	if (g_cvRockTargetAdjust.BoolValue) {
 		static ArrayList targets;
 		if (!targets)
 			targets = new ArrayList(2);
 		
 		static float pos[3], targetPos[3];
-		GetClientAbsOrigin(tank, pos);
-		GetClientAbsOrigin(target, targetPos);
-
-		// 寻找一个新的目标
+		GetClientEyePosition(tank, pos);
 		for (int i = 1; i <= MaxClients; i++) {
 			if (tank == i || !IsValidSurvivor(i) || !IsPlayerAlive(i))
 				continue;
 			if (!clientIsVisibleToClient(tank, i))
 				continue;
 
+			GetClientEyePosition(i, targetPos);
 			targets.Set(targets.Push(GetVectorDistance(pos, targetPos)), i, 1);
 		}
 
 		// 选择距离最近的新目标
 		if (targets.Length > 0) {
-			SortADTArray(targets, Sort_Descending, Sort_Float);
+			SortADTArray(targets, Sort_Ascending, Sort_Float);
 			newRockTarget = targets.Get(0, 1);
 		}
 		delete targets;
 	}
+
+	if (IsValidSurvivor(newRockTarget))
+		log.debugAll("%N throw rock, current rock target: %N", tank, newRockTarget);
+	else
+		log.debugAll("%N throw rock, no any visible target, use default target: %N", tank, target);
 
 	// 计算扔石头的时候视角调整角度
 	static float pitch, rockGravityScale;
