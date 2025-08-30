@@ -10,8 +10,9 @@
 
 ## 使用方式
 1. 将 `l4d2_ai_tank3.txt` 放入 `sourcemod/gamedata` 下
-2. 将 `ai_tank3.sp` 和 `stocks.sp` 放入 `sourcemod/scripting` 下并编译, 将编译过后的 `.smx` 文件放入 `sourcemod/plugins` 下
-3. enjoy
+2. 将 [logger2.inc](https://github.com/GlowingTree880/L4D2_LittlePlugins/blob/dev/lib/logger2.inc) 放入 `sourcemod/scripting/include` 下
+3. 将 `ai_tank3.sp` 和 `stocks.sp` 放入 `sourcemod/scripting` 下并编译, 将编译过后的 `.smx` 文件放入 `sourcemod/plugins` 下
+4. enjoy
 
 ## 实现细节
 
@@ -111,6 +112,6 @@ tan\theta = \frac{v_0^2 - \sqrt{v_0^4 - g^2*d^2 + 2*g*h*v_0^2}}{g*d}
 <details>
 <summary>2025-08-30</summary>
 1. 修改背后拳碰撞检测逻辑, 感谢 Forgetest<br>
-2. 为石头出手添加目标移动预测逻辑, 类似于原版克的提前量预测, 适用于目标单向移动的情况, 同时修正了目标站立不动时低抛 E 落点偏移问题, 建议将 Cvar: <strong>z_tank_throw_force</strong> 更改为 1000 (默认 800) 以获得更好的效果<br>
+2. 为石头出手添加目标移动预测逻辑, 类似于原版克的提前量预测, 适用于目标单向移动的情况, 同时修正了目标站立不动时低抛 E 砖落点偏移导致无法砸中生还者的问题, 建议将 Cvar: <strong>z_tank_throw_force</strong> 更改为 1000 (默认 800) 以获得更好的效果<br>
 3. 修复一些低级错误
 </details>
