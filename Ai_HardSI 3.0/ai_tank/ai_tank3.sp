@@ -15,22 +15,20 @@
 
 #define GAMEDATA "l4d2_ai_tank3"
 
-#define DEFAULT_THROW_FORCE 800.0
-#define DEFAULT_SV_GRAVITY 800.0
-#define DEFAULT_SWING_RANGE 56.0
-#define ROCK_FL_GRAVITY 0.4				// 石头重力因子
+#define DEFAULT_THROW_FORCE 		800.0
+#define DEFAULT_SV_GRAVITY 			800.0
+#define DEFAULT_SWING_RANGE 		56.0
+#define ROCK_FL_GRAVITY 			0.4				// 石头重力因子
 
-#define PLAYER_HEIGHT 72.0
-#define PLAYER_EYE_HEIGHT 62.0
-#define PLAYER_CHEST 52.0
-#define TANK_HEIGHT 84.0
-#define JUMP_HEIGHT 56.0
+#define PLAYER_HEIGHT 				72.0
+#define PLAYER_EYE_HEIGHT 			62.0
+#define PLAYER_CHEST 				52.0
+#define TANK_HEIGHT 				84.0
+#define JUMP_HEIGHT 				56.0
 
-#define THROW_UNDERHEAD_POS_Z 33.38		// e 砖出手坐标
-#define THROW_OVERSHOULDER_POS_Z 93.58 	// 单手过头出手坐标
-#define THROW_OVERHEAD_POS_Z 104.01		// 双手过头出手坐标
-
-#define ATTACHMENT_NAME_RHAND "rhand"	// 右手骨骼挂载点名称
+#define THROW_UNDERHEAD_POS_Z 		33.38		// e 砖出手坐标
+#define THROW_OVERSHOULDER_POS_Z 	93.58 	// 单手过头出手坐标
+#define THROW_OVERHEAD_POS_Z 		104.01		// 双手过头出手坐标
 
 ConVar
 	g_cvPluginName,
@@ -81,7 +79,9 @@ AiTank g_AiTanks[MAXPLAYERS + 1];
 Logger log;
 
 static char g_ThrowSequence[][] = {
-	"ACT_TANK_OVERHEAD_THROW"			// 49,50,51 扔石头动画的 activityName
+	"ACT_SIGNAL2",						// 49 单手过头
+	"ACT_SIGNAL3",						// 50 低抛
+	"ACT_SIGNAL_ADVANCE"				// 51 双手过头
 };
 
 static char g_ClimbSequence[][] = {
@@ -154,7 +154,7 @@ public void OnPluginStart() {
 	// allow tank to punch survivor who is behind him?
 	g_cvBackFist = CreateConVar("ai_tank3_back_fist", "1", "是否允许Tank使用通背拳(在背后的人也会被拍)", CVAR_FLAGS, true, 0.0, true, 1.0);
 	// allow tank to punch survivor who is behind him and within this range (set to -1 to use default: tank_swing_range)
-	g_cvBackFistRange = CreateConVar("ai_tank3_back_fist_range", "56.0", "允许使用通背拳时背后的打击检测距离, -1 使用默认(tank_swing_range)", CVAR_FLAGS, true, -1.0);
+	g_cvBackFistRange = CreateConVar("ai_tank3_back_fist_range", "128.0", "允许使用通背拳时背后的打击检测距离, -1 使用默认(tank_swing_range)", CVAR_FLAGS, true, -1.0);
 	// allow tank to lock his vision to his target when punching?
 	g_cvPunchLockVision = CreateConVar("ai_tank3_punch_lock_vision", "1", "是否允许Tank打拳时锁定视角到目标", CVAR_FLAGS, true, 0.0, true, 1.0);
 
@@ -192,6 +192,7 @@ public void OnAllPluginsLoaded() {
 	if (!hGamedata)
 		SetFailState("Failed to load %s gamedata.", GAMEDATA);
 
+	// CTankClaw::SweepFist
 	StartPrepSDKCall(SDKCall_Entity);
 	PrepSDKCall_SetFromConf(hGamedata, SDKConf_Signature, "CTankClaw::SweepFist");
 	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);
@@ -272,41 +273,28 @@ public void L4D_TankClaw_DoSwing_Post(int tank, int claw) {
 		return;
 	if (!isAiTank(tank))
 		return;
-	
-	static int attachmentRHand;
-	static float rHandPos[3], rHandAng[3];
-	attachmentRHand = LookupAttachment(tank, ATTACHMENT_NAME_RHAND);
-	if (!GetAttachment(tank, attachmentRHand, rHandPos, rHandAng)) {
-		// failed to get tank's right hand attachment point 'rhand'
-		log.error("Failed to get %N 's rhand attachment point: %s 's position and angle", tank, ATTACHMENT_NAME_RHAND);
-		return;
-	}
-
-	static float tankPos[3], tankEyeAng[3], dir[3];
-	GetClientAbsOrigin(tank, tankPos);
-	GetEntPropVector(tank, Prop_Data, "m_angAbsRotation", tankEyeAng);
-	tankEyeAng[1] = (tankEyeAng[1] + 180.0 > 180.0) ? tankEyeAng[1] - 180.0 : tankEyeAng[1] + 180.0;
-	tankEyeAng[0] = tankEyeAng[2] = 0.0;
-	GetAngleVectors(tankEyeAng, dir, NULL_VECTOR, NULL_VECTOR);
-	NormalizeVector(dir, dir);
 
 	static ConVar cv_SwingRange;
 	if (!cv_SwingRange)
 		cv_SwingRange = FindConVar("tank_swing_range");
-	static float swingRange;
-	swingRange = !cv_SwingRange ? DEFAULT_SWING_RANGE : cv_SwingRange.FloatValue;
 
-	// 坦克攻击判定大概在右手挥动到身体中间时触发, 发射 TraceHull 大概 {-36.0, -36.0, -36.0} {36.0, 36.0, 36.0+tank_swing_range} 这么大
-	// 坦克坐标中心到右手挂载点的距离 attachmentPointDist
-	static float apDist, end[3], fistDist;
-	apDist = SquareRoot(Pow(rHandPos[0] - tankPos[0], 2.0) + Pow(rHandPos[1] - tankPos[1], 2.0));
-	// 设置碰撞盒结束向量
-	fistDist = g_cvBackFistRange.IntValue >= 0 ? (apDist + g_cvBackFistRange.FloatValue) : (apDist + swingRange);
-	ScaleVector(dir, fistDist);
-	AddVectors(rHandPos, dir, end);
-	
-	// Use SdkCall to call the function CTankClaw::SeepFist to make another back fist hit, CTankClaw::SeepFist(CTankClaw* this, Vector* start, Vector* end), the start direction is his rhand attachment point, and the end direction is his rhand attachment point position + swingRange
-	SDKCall(g_hSdkTankClawSweepFist, claw, rHandPos, end);
+	static float pos[3], targetPos[3], swingRange, fistRange;
+	swingRange = !cv_SwingRange ? DEFAULT_SWING_RANGE : cv_SwingRange.FloatValue;
+	fistRange = g_cvBackFistRange.IntValue >= 0 ? g_cvBackFistRange.FloatValue : swingRange;
+
+	GetClientEyePosition(tank, pos);
+	for (int i = 1; i <= MaxClients; i++) {
+		if (!IsValidSurvivor(i) || !IsPlayerAlive(i))
+			continue;
+		GetClientEyePosition(i, targetPos);
+		if (GetVectorDistance(pos, targetPos) > fistRange)
+			continue;
+		if (!clientIsVisibleToClient(tank, i))
+			continue;
+
+		// SweepFist 从 start 到 end 扫描, 检测碰撞
+		SDKCall(g_hSdkTankClawSweepFist, claw, targetPos, targetPos);
+	}
 }
 
 Action punchLockVision(int client, int target, const float pos[3], const float targetPos[3]) {
@@ -388,7 +376,7 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 
 		// 无生还视野不允许连跳
 		if (!g_cvBhopNoVision.BoolValue && !visible)
-			return Plugin_Changed;
+			return Plugin_Continue;
 
 		buttons |= IN_DUCK;
 		buttons |= IN_JUMP;
@@ -674,19 +662,42 @@ public Action L4D_TankRock_OnRelease(int tank, int rock, float vecPos[3], float 
 	if (pitch > 90.0 || pitch < -90.0)
 		return Plugin_Continue;
 
-	static float pos[3], targetPos[3], vTargetAbsVelVec[3], aimAng[3];
+	static float pos[3], targetPos[3], predPos[3], vTargetAbsVelVec[3], aimAng[3];
 	GetClientAbsOrigin(tank, pos);
 	// 获取目标下一帧位置
 	GetClientAbsOrigin(aimTarget, targetPos);
-	GetEntPropVector(target, Prop_Data, "m_vecAbsVelocity", vTargetAbsVelVec);
-	AddVectors(targetPos, vTargetAbsVelVec, targetPos);
+	GetEntPropVector(aimTarget, Prop_Data, "m_vecAbsVelocity", vTargetAbsVelVec);
+
+	// 石头偏航角度修正
+	static float dx, vx, t, yawCenter, yawThrow;
+	dx = SquareRoot(Pow(vecPos[0] - targetPos[0], 2.0) + Pow(vecPos[1] - targetPos[1], 2.0));
+	// 石头水平飞行速度
+	vx = throwSpeed * Cosine(DegToRad(pitch));
+	// 计算目标不动的情况下石头飞行时间 t, 用作预测
+	t = dx / vx;
+	// 预测位置
+	predPos[0] = targetPos[0] + vTargetAbsVelVec[0] * t;
+	predPos[1] = targetPos[1] + vTargetAbsVelVec[1] * t;
+	predPos[2] = targetPos[2] + vTargetAbsVelVec[2] * t;
+	yawCenter = ArcTangent2(predPos[1] - pos[1], predPos[0] - pos[0]);
+	yawThrow = ArcTangent2(predPos[1] - vecPos[1], predPos[0] - vecPos[0]);
+	yawThrow = RadToDeg(yawThrow - yawCenter);
+
 	// 计算方向
-	MakeVectorFromPoints(pos, targetPos, aimAng);
+	MakeVectorFromPoints(pos, predPos, aimAng);
 	GetVectorAngles(aimAng, aimAng);
+	// pitch 上抬角度
 	aimAng[0] = -pitch;
+	// yaw 水平偏航
+	aimAng[1] += yawThrow;
+	if (aimAng[1] > 180.0)
+		aimAng[1] -= 360.0;
+	if (aimAng[1] < -180.0)
+		aimAng[1] += 360.0;
+	// roll = 0
 	aimAng[2] = 0.0;
 	GetAngleVectors(aimAng, aimAng, NULL_VECTOR, NULL_VECTOR);
-	NormalizeVector(aimAng, aimAng);
+	NormalizeVector(aimAng, aimAng);	
 	ScaleVector(aimAng, throwSpeed);
 
 	vecVel = aimAng;
@@ -712,7 +723,7 @@ float calculateThrowAngle(int tank, int target, float vSpeed = 800.0, float g = 
 	animSeq = GetEntProp(tank, Prop_Data, "m_nSequence");
 	switch (animSeq) {
 		// 49, 单手过头, 50, 低抛, 51, 双手过头
-		case L4D1_ACT_SIGNAL3: {
+		case L4D2_ACT_SIGNAL3: {
 			pos[2] += THROW_UNDERHEAD_POS_Z;
 		} case L4D2_ACT_SIGNAL2: {
 			pos[2] += THROW_OVERSHOULDER_POS_Z;
