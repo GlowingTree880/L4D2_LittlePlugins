@@ -26,6 +26,28 @@ stock int getPinnedSurvivorCount() {
 }
 
 /**
+* 检查客户端是否正在被 Hunter 或者 Charger 控制
+* @param client 客户端索引
+* @return bool 是否被控制
+**/
+stock bool isPinnedByHunterOrCharger(int client) {
+    if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
+        return false;
+    
+    static int infected;
+    infected = GetEntPropEnt(client, Prop_Send, "m_pounceAttacker");
+    if (IsValidInfected(infected))
+        return true;
+    infected = GetEntPropEnt(client, Prop_Send, "m_carryAttacker");
+    if (IsValidInfected(infected))
+        return true;
+    infected = GetEntPropEnt(client, Prop_Send, "m_pummelAttacker");
+    if (IsValidInfected(infected))
+        return true;
+    return false;
+}
+
+/**
 * 生还者是否处于胆汁状态
 * @param client 客户端索引
 * @return bool

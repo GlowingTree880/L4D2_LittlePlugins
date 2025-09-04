@@ -30,6 +30,8 @@
 #define THROW_OVERSHOULDER_POS_Z 	93.58 	// 单手过头出手坐标
 #define THROW_OVERHEAD_POS_Z 		104.01		// 双手过头出手坐标
 
+#define JUMP_SPEED_Z 				300.0
+
 ConVar
 	g_cvPluginName,
 	g_cvLogLevel;
@@ -52,13 +54,20 @@ ConVar
 	g_cvRockTargetAdjust,
 	g_cvBackFist,
 	g_cvBackFistRange,
-	g_cvPunchLockVision;
+	g_cvBackFistAllowMaxSpd,
+	g_cvPunchLockVision,
+	g_cvJumpRock;
 
 ConVar
 	g_cvBhopNoVisionMaxAng;
 
+StringMap
+	g_hThrowAnimMap,
+	g_hClimbAnimMap;
+
 Handle
-	g_hSdkTankClawSweepFist;
+	g_hSdkTankClawSweepFist,
+	g_hSdkGetRunTopSpeed;
 
 bool
 	g_bLateLoad;
@@ -67,34 +76,18 @@ enum struct AiTank {
 	int target;					// 攻击目标 (userId)
 	float lastAirVecModifyTime; // 上次空中速度修正时间 (EngineTime)
 	float nextAttackTime;		// 下次挥拳时间 (EngineTime)
+	bool wasThrowing;			// 是否正在扔石头
 
 	void initData() {
 		this.target = -1;
 		this.lastAirVecModifyTime = 0.0;
 		this.nextAttackTime = 0.0;
+		this.wasThrowing = false;
 	}
 }
 AiTank g_AiTanks[MAXPLAYERS + 1];
 
 Logger log;
-
-static char g_ThrowSequence[][] = {
-	"ACT_SIGNAL2",						// 49 单手过头
-	"ACT_SIGNAL3",						// 50 低抛
-	"ACT_SIGNAL_ADVANCE"				// 51 双手过头
-};
-
-static char g_ClimbSequence[][] = {
-	// 15, ACT_JUMP
-	"ACT_RANGE_ATTACK1",				// 爬过低矮栏杆 c2m2 亭子, seq: 16
-	"ACT_RANGE_ATTACK2",				// 引体向上, seq: 17
-	"ACT_RANGE_ATTACK1_LOW",			// 双手撑起爬过低矮栏杆, seq: 18
-	"ACT_RANGE_ATTACK2_LOW",			// 爬过低矮石头, seq: 19
-	"ACT_DIESIMPLE",					// 爬上帐篷 c2m2 小帐篷, seq: 20
-	"ACT_DIEBACKWARD",					// 引体向上, seq: 21
-	"ACT_DIEFORWARD",					// 爬上 c2m2 餐车, seq: 22
-	"ACT_DIEVIOLENT"
-};
 
 enum TankSequenceType {
 	tankSequence_Throw,
@@ -155,8 +148,12 @@ public void OnPluginStart() {
 	g_cvBackFist = CreateConVar("ai_tank3_back_fist", "1", "是否允许Tank使用通背拳(在背后的人也会被拍)", CVAR_FLAGS, true, 0.0, true, 1.0);
 	// allow tank to punch survivor who is behind him and within this range (set to -1 to use default: tank_swing_range)
 	g_cvBackFistRange = CreateConVar("ai_tank3_back_fist_range", "128.0", "允许使用通背拳时背后的打击检测距离, -1 使用默认(tank_swing_range)", CVAR_FLAGS, true, -1.0);
+	// allow tank to punch survivor who is behind him when his speed is lower than this value
+	g_cvBackFistAllowMaxSpd = CreateConVar("ai_tank3_back_fist_max_spd", "50.0", "允许使用通背拳时Tank的最小速度", CVAR_FLAGS, true, -1.0);
 	// allow tank to lock his vision to his target when punching?
 	g_cvPunchLockVision = CreateConVar("ai_tank3_punch_lock_vision", "1", "是否允许Tank打拳时锁定视角到目标", CVAR_FLAGS, true, 0.0, true, 1.0);
+	// allow tank to jump when he starts to grab a rock
+	g_cvJumpRock = CreateConVar("ai_tank3_jump_rock", "1", "是否允许Tank使用跳砖", CVAR_FLAGS, true, 0.0, true, 1.0);
 
 	// 日志记录 logging
 	g_cvPluginName = CreateConVar("ai_tank3_plugin_name", "ai_tank3");
@@ -171,6 +168,8 @@ public void OnPluginStart() {
 	HookEvent("round_end", evtRoundEnd);
 
 	log = new Logger(PLUGIN_PREFIX, g_cvLogLevel.IntValue);
+	// 初始化动画序列 HashMap
+	initAnimMap();
 
 	if (g_bLateLoad) {
 		for (int i = 1; i <= MaxClients; i++) {
@@ -188,7 +187,7 @@ public void OnAllPluginsLoaded() {
 	if (!FileExists(path))
 		SetFailState("Mising required gamedata file: %s.", path);
 
-	Handle hGamedata = LoadGameConfigFile("l4d2_ai_tank3");
+	Handle hGamedata = LoadGameConfigFile(GAMEDATA);
 	if (!hGamedata)
 		SetFailState("Failed to load %s gamedata.", GAMEDATA);
 
@@ -202,11 +201,20 @@ public void OnAllPluginsLoaded() {
 	if (!g_hSdkTankClawSweepFist)
 		SetFailState("Failed to find signature for CTankClaw::SweepFist.");
 
+	StartPrepSDKCall(SDKCall_Entity);
+	PrepSDKCall_SetFromConf(hGamedata, SDKConf_Signature, "CTerrorPlayer::GetRunTopSpeed");
+	PrepSDKCall_SetReturnInfo(SDKType_Float, SDKPass_Plain);
+	g_hSdkGetRunTopSpeed = EndPrepSDKCall();
+	if (!g_hSdkGetRunTopSpeed)
+		SetFailState("Failed to find signature for CTerrorPlayer::GetRunTopSpeed.");
+
 	delete hGamedata;
 }
 
 public void OnPluginEnd() {
 	delete log;
+	delete g_hThrowAnimMap;
+	delete g_hClimbAnimMap;
 }
 
 void evtRoundStart(Event event, const char[] name, bool dontBroadcast) {
@@ -223,6 +231,27 @@ public void OnMapStart() {
 
 public void OnMapEnd() {
 
+}
+
+stock void initAnimMap() {
+	if (!g_hThrowAnimMap)
+		g_hThrowAnimMap = new StringMap();
+	if (!g_hClimbAnimMap)
+		g_hClimbAnimMap = new StringMap();
+	
+	// 扔石头动画 ActivityName
+	g_hThrowAnimMap.SetValue("ACT_SIGNAL2", true);
+    g_hThrowAnimMap.SetValue("ACT_SIGNAL3", true);
+    g_hThrowAnimMap.SetValue("ACT_SIGNAL_ADVANCE", true);
+	// 攀爬动画 ActivityName
+	g_hClimbAnimMap.SetValue("ACT_RANGE_ATTACK1", true);
+	g_hClimbAnimMap.SetValue("ACT_RANGE_ATTACK2", true);
+	g_hClimbAnimMap.SetValue("ACT_RANGE_ATTACK1_LOW", true);
+	g_hClimbAnimMap.SetValue("ACT_RANGE_ATTACK2_LOW", true);
+	g_hClimbAnimMap.SetValue("ACT_DIESIMPLE", true);
+	g_hClimbAnimMap.SetValue("ACT_DIEBACKWARD", true);
+	g_hClimbAnimMap.SetValue("ACT_DIEFORWARD", true);
+	g_hClimbAnimMap.SetValue("ACT_DIEVIOLENT", true);
 }
 
 // ============================================================
@@ -272,6 +301,12 @@ public void L4D_TankClaw_DoSwing_Post(int tank, int claw) {
 	if (!g_cvBackFist.BoolValue)
 		return;
 	if (!isAiTank(tank))
+		return;
+	// 通背拳 Tank 水平速度限制
+	static float vAbsVelVec[3], speed;
+	GetEntPropVector(tank, Prop_Data, "m_vecAbsVelocity", vAbsVelVec);
+	speed = SquareRoot(Pow(vAbsVelVec[0], 2.0) + Pow(vAbsVelVec[1], 2.0));
+	if (speed > g_cvBackFistAllowMaxSpd.FloatValue)
 		return;
 
 	static ConVar cv_SwingRange;
@@ -400,7 +435,7 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 	// 在空中的时候, 检查是否连跳过头
 	static float angle, speed, vDir[3], vAbsVelVecCpy[3];
 	vAbsVelVecCpy = vAbsVelVec;
-	speed = GetVectorLength(vAbsVelVec);
+	speed = SquareRoot(Pow(vAbsVelVec[0], 2.0) + Pow(vAbsVelVec[1], 2.0));
 	NormalizeVector(vAbsVelVec, vAbsVelVec);
 	MakeVectorFromPoints(pos, targetPos, vDir);
 	NormalizeVector(vDir, vDir);
@@ -427,7 +462,10 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 		&& GetEngineTime() - g_AiTanks[client].lastAirVecModifyTime > g_cvAirVecModifyInterval.FloatValue
 		&& ((buttons & IN_FORWARD) && !(buttons & IN_BACK))) {
 			log.debugAll("%N triggered air speed modify, current vector angle: %.2f", client, angle);
-			ScaleVector(vDir, speed + g_cvBhopImpulse.FloatValue);
+			static float runTopSpeed;
+			runTopSpeed = SDKCall(g_hSdkGetRunTopSpeed, client);
+			ScaleVector(vDir, runTopSpeed + g_cvBhopImpulse.FloatValue);
+			log.debugAll("%N's run top speed: %.2f, speed vec len: %.2f, new vector length: %.2f", client, runTopSpeed, speed, GetVectorLength(vDir));
 			vDir[2] = vAbsVelVecCpy[2];
 			// 应用新的速度方向
 			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vDir);
@@ -552,6 +590,14 @@ Action tankAnimHookPostCb(int tank, int &sequence) {
 	// 如果想要扔石头的时候一直看着目标, 把 OnRockRelease 的代码放到下面即可
 	if (isMatchedSequence(sequence, view_as<TankSequenceType>(tankSequence_Throw))) {
 		// Tank 扔石头时
+		if (!g_cvJumpRock.BoolValue)
+			return Plugin_Continue;
+		if (g_AiTanks[tank].wasThrowing)
+			return Plugin_Continue;
+		
+		makeTankJumpRock(tank);
+		g_AiTanks[tank].wasThrowing = true;
+		CreateTimer(0.5, timerResetThrowingFlagHandler, GetClientUserId(tank), TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	} else if (isMatchedSequence(sequence, view_as<TankSequenceType>(tankSequence_Climb))) {
 		if (GetEntPropFloat(tank, Prop_Send, "m_flPlaybackRate") != g_cvClimbAnimRate.FloatValue)
 			SDKHook(tank, SDKHook_PostThinkPost, climbRateModifyHookHandler);
@@ -569,15 +615,9 @@ bool isMatchedSequence(int sequence, TankSequenceType seqType) {
 
 	switch (seqType) {
 		case view_as<TankSequenceType>(tankSequence_Throw): {
-			for (int i = 0; i < sizeof(g_ThrowSequence); i++) {
-				if (strcmp(seqName, g_ThrowSequence[i]) == 0)
-					return true;
-			}
+			return g_hThrowAnimMap.ContainsKey(seqName);
 		} case view_as<TankSequenceType>(tankSequence_Climb): {
-			for (int i = 0; i < sizeof(g_ClimbSequence); i++) {
-				if (strcmp(seqName, g_ClimbSequence[i]) == 0)
-					return true;
-			}
+			return g_hClimbAnimMap.ContainsKey(seqName);
 		}
 	}
 	return false;
@@ -586,6 +626,31 @@ bool isMatchedSequence(int sequence, TankSequenceType seqType) {
 // ============================================================
 // 扔石头操作 Rock Throwing
 // ============================================================
+void makeTankJumpRock(int tank) {
+	if (!isAiTank(tank))
+		return;
+	
+	static float vAbsVelVec[3];
+	GetEntPropVector(tank, Prop_Data, "m_vecAbsVelocity", vAbsVelVec);
+	vAbsVelVec[2] += JUMP_SPEED_Z;
+	TeleportEntity(tank, NULL_VECTOR, NULL_VECTOR, vAbsVelVec);
+}
+
+Action timerResetThrowingFlagHandler(Handle timer, int userId) {
+	static int tank;
+	tank = GetClientOfUserId(userId);
+	if (!isAiTank(tank))
+		return Plugin_Stop;
+	
+	static int animSeq;
+	animSeq = GetEntProp(tank, Prop_Data, "m_nSequence");
+	if (!isMatchedSequence(animSeq, view_as<TankSequenceType>(tankSequence_Throw))) {
+		g_AiTanks[tank].wasThrowing = false;
+		return Plugin_Stop;
+	}
+	return Plugin_Continue;
+}
+
 Action checkEnableThrow(int client, int& buttons, const float pos[3], const float targetPos[3], float dist) {
 	if (!isAiTank(client))
 		return Plugin_Continue;
@@ -631,7 +696,7 @@ public Action L4D_TankRock_OnRelease(int tank, int rock, float vecPos[3], float 
 		static float pos[3], targetPos[3];
 		GetClientEyePosition(tank, pos);
 		for (int i = 1; i <= MaxClients; i++) {
-			if (tank == i || !IsValidSurvivor(i) || !IsPlayerAlive(i))
+			if (tank == i || !IsValidSurvivor(i) || !IsPlayerAlive(i) || IsClientIncapped(i) || isPinnedByHunterOrCharger(i))
 				continue;
 			if (!clientIsVisibleToClient(tank, i))
 				continue;
