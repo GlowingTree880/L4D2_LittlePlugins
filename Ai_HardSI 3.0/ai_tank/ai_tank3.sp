@@ -372,14 +372,12 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 
 	static float velVec[3], vel;
 	GetEntPropVector(client, Prop_Data, "m_vecVelocity", velVec);
-	vel = SquareRoot(Pow(velVec[0], 2.0) + Pow(velVec[1], 2.0) + Pow(velVec[2], 2.0));
+	// 仅检测水平速度是否满足连跳速度要求
+	vel = SquareRoot(Pow(velVec[0], 2.0) + Pow(velVec[1], 2.0));
 	if (vel < g_cvBhopMinSpeed.FloatValue)
 		return Plugin_Continue;
 
 	if (dist < g_cvBhopMinDist.FloatValue || dist > g_cvBhopMaxDist.FloatValue)
-		return Plugin_Continue;
-	
-	if (GetEntityMoveType(client) & MOVETYPE_LADDER)
 		return Plugin_Continue;
 
 	static float vAbsVelVec[3], vTargetAbsVelVec[3];
@@ -433,9 +431,8 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 		SetEntPropVector(client, Prop_Data, "m_vecVelocity", velVec);
 	}
 	// 在空中的时候, 检查是否连跳过头
-	static float angle, speed, vDir[3], vAbsVelVecCpy[3];
+	static float angle, vDir[3], vAbsVelVecCpy[3];
 	vAbsVelVecCpy = vAbsVelVec;
-	speed = SquareRoot(Pow(vAbsVelVec[0], 2.0) + Pow(vAbsVelVec[1], 2.0));
 	NormalizeVector(vAbsVelVec, vAbsVelVec);
 	MakeVectorFromPoints(pos, targetPos, vDir);
 	NormalizeVector(vDir, vDir);
@@ -465,7 +462,7 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 			static float runTopSpeed;
 			runTopSpeed = SDKCall(g_hSdkGetRunTopSpeed, client);
 			ScaleVector(vDir, runTopSpeed + g_cvBhopImpulse.FloatValue);
-			log.debugAll("%N's run top speed: %.2f, speed vec len: %.2f, new vector length: %.2f", client, runTopSpeed, speed, GetVectorLength(vDir));
+			log.debugAll("%N's run top speed: %.2f, speed vec len: %.2f, new vector length: %.2f", client, runTopSpeed, vel, GetVectorLength(vDir));
 			vDir[2] = vAbsVelVecCpy[2];
 			// 应用新的速度方向
 			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vDir);
@@ -519,8 +516,10 @@ stock bool nextTickPosCheck(int client, bool visible) {
 		NormalizeVector(velVec, velVec);
 		dir[2] = velVec[2] = 0.0;
 		angle = RadToDeg(ArcCosine(GetVectorDotProduct(dir, velVec)));
-		if (floatIsNan(angle) || angle > g_cvBhopNoVisionMaxAng.FloatValue)
+		if (floatIsNan(angle) || angle > g_cvBhopNoVisionMaxAng.FloatValue) {
+			delete hTrace;
 			return false;
+		}
 	}
 
 	delete hTrace;
@@ -545,6 +544,7 @@ stock bool nextTickPosCheck(int client, bool visible) {
 			return false;
 		}
 	}
+	delete hTrace;
 	return true;
 }
 
