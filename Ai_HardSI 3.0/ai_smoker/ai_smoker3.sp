@@ -23,7 +23,7 @@
 #define ACT_NAME_RETREAT							"SmokerRetreatToCover"
 #define ACT_NAME_MOVETO								"BehaviorMoveTo"
 
-#define DEFAULT_TONGUE_RANGE						750
+#define DEFAULT_TONGUE_RANGE						750.0
 
 ConVar
 	g_cvPluginName,
@@ -40,10 +40,21 @@ ConVar
 	g_cvBhopNoVisionMaxAng,
 	g_cvAirVecModifyMaxDegree,
 	g_cvAirVecModifyInterval,
+	g_cvImmPull,
 	g_cvPullBackVision,
 	g_cvAntiRetreat,
 	g_cvMove2NewTarInterval,
+	g_cvStopSmokerWarnSnd,
 	g_cvLogLevel;
+
+ConVar
+	cvTongueRange;
+
+float
+	g_fTongueRange;
+
+bool
+	g_bLateLoad;
 
 Logger log;
 
@@ -62,20 +73,33 @@ enum struct AiSmoker {
 	bool	m_bIsVisible2Target;		// 当前目标是否可见
 	bool 	m_bIsReady2Attack;			// 是否可以进行攻击
 	bool 	m_bToggleSide;				// 连跳时方向是否向左偏移, 若向左偏移, 则下次连跳向右偏移
+	float	m_flLastAtkBtnPressTime;	// 上次按下攻击键的时间, 用于判断是否可以进行攻击
 
 	void initData() {
 		this.m_iTarget = -1;
 		this.m_bIsMove2ChangeTar = false;
 		this.m_vecMoveToPos = NULL_VECTOR;
 		this.m_flLastMoveToTime = 0.0;
+		this.m_flLastAirModifyTime = 0.0;
 		this.m_bIsVisible2Target = false;
 		this.m_bIsReady2Attack = false;
 		this.m_bToggleSide = false;
+		this.m_flLastAtkBtnPressTime = 0.0;
 	}
 }
 AiSmoker g_AiSmokers[MAXPLAYERS + 1];
 
 #include "./stocks.sp"
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
+	EngineVersion test = GetEngineVersion();
+	if (test != Engine_Left4Dead && test != Engine_Left4Dead2) {
+		strcopy(error, err_max, "Plugin Supports L4D(2) Only!");
+		return APLRes_SilentFailure;
+	}
+	g_bLateLoad = late;
+	return APLRes_Success;
+}
 
 public Plugin myinfo = 
 {
@@ -109,6 +133,8 @@ public void OnPluginStart() {
 	g_cvAirVecModifyDegree = CreateConVar("ai_smoker3_airvec_modify_degree", "60.0", "在空中速度方向与自身到目标方向角度超过这个值进行速度修正", CVAR_FLAGS, true, 0.0);
 	g_cvAirVecModifyMaxDegree = CreateConVar("ai_smoker3_airvec_modify_degree_max", "135.0", "在空中速度方向与自身到目标方向角度超过这个值不进行速度修正", CVAR_FLAGS, true, 0.0);
 	g_cvAirVecModifyInterval = CreateConVar("ai_smoker3_airvec_modify_interval", "0.3", "空中速度修正间隔", CVAR_FLAGS, true, 0.1);
+	// allowed for Smoker to fire his tongue immediately once the target distance is less than tongue_range
+	g_cvImmPull = CreateConVar("ai_smoker3_imm_pull", "1", "是否允许Smoker与目标距离一旦满足TongueRange立刻拉人", CVAR_FLAGS, true, 0.0, true, 1.0);
 	// allow Smoker to turn it's vision to behind when he is pulling survivor
 	g_cvPullBackVision = CreateConVar("ai_smoker3_pull_back_vision", "1", "是否允许Smoker拉人时视角转向背后", CVAR_FLAGS, true, 0.0, true, 1.0);
 
@@ -116,6 +142,9 @@ public void OnPluginStart() {
 	g_cvAntiRetreat = CreateConVar("ai_smoker3_anti_retreat", "1", "是否防止Smoker无技能时逃跑 (将无技能逃跑改为追击)", CVAR_FLAGS, true, 0.0, true, 1.0);
 	// when move to target and has no ability, the time interval for detecting the nearest survivor and changing targets (it is recommended not to be less than 0.5, otherwise it will cause Smoker movement lagging)
 	g_cvMove2NewTarInterval = CreateConVar("ai_smoker3_move2_newtar_interval", "1.0", "无技能追击时, 检测距离最近的生还者并更换目标的时间间隔 (建议不要小于 0.5 否则会导致Smoker移动卡顿)", CVAR_FLAGS, true, 0.0);
+
+	// stop the warning sound effect when Smoker is about to fire his tongue?
+	g_cvStopSmokerWarnSnd = CreateConVar("ai_smoker3_stop_warn_snd", "1", "是否停止Smoker准备吐舌时发出的警告音效", CVAR_FLAGS, true, 0.0, true, 1.0);
 
 	// 将插件名称改成自己插件名称
 	g_cvPluginName = CreateConVar("ai_smoker3_plugin_name", "ai_smoker3");
@@ -128,6 +157,17 @@ public void OnPluginStart() {
 	HookEvent("player_spawn", evtPlayerSpawn);
 
 	log = new Logger(PLUGIN_PREFIX, g_cvLogLevel.IntValue);
+
+	// 添加声音 Hook
+	AddNormalSoundHook(sndHookSmokerWarn);
+
+	if (g_bLateLoad) {
+		for (int i = 1; i <= MaxClients; i++) {
+			if (!isAiSmoker(i))
+				continue;
+			g_AiSmokers[i].initData();
+		}
+	}
 
 }
 
@@ -155,6 +195,14 @@ public void OnAllPluginsLoaded() {
 	delete hGamedata;
 }
 
+public void OnConfigsExecuted() {
+	if (!cvTongueRange)
+		cvTongueRange = FindConVar("tongue_range");
+	g_fTongueRange = !cvTongueRange ? DEFAULT_TONGUE_RANGE : cvTongueRange.FloatValue;
+	if (cvTongueRange)
+		cvTongueRange.AddChangeHook(cvTongueRangeChangeHook);
+}
+
 public void OnPluginEnd() {
 	delete log;
 	delete g_hSdkGetRunTopSpeed;
@@ -167,6 +215,21 @@ void evtPlayerSpawn(Event event, const char[] name, bool dontBroadcast) {
 		return;
 	
 	g_AiSmokers[client].initData();
+}
+
+Action sndHookSmokerWarn(int clients[MAXPLAYERS], int& numClients, char sample[PLATFORM_MAX_PATH], int& entity,
+						int& channel, float& volume, int& level, int& pitch, int& flags, char soundEntry[PLATFORM_MAX_PATH], int& seed) {
+	if (entity <= 0 || entity > MaxClients || !isAiSmoker(entity))
+		return Plugin_Continue;
+	if (g_cvStopSmokerWarnSnd.BoolValue &&
+		((StrContains(sample, "Smoker_Warn", false) >= 0) || (StrContains(sample, "Smoker_LaunchTongue", false) >= 0))) {
+		return Plugin_Stop;
+	}
+	return Plugin_Continue;
+}
+
+void cvTongueRangeChangeHook(ConVar convar, const char[] oldValue, const char[] newValue) {
+	g_fTongueRange = convar.FloatValue;
 }
 
 // ============================================================
@@ -183,7 +246,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 
 	static float pos[3], targetPos[3], dist;
 	GetClientAbsOrigin(client, pos);
-	GetClientAbsOrigin(target, targetPos);
+	GetClientEyePosition(target, targetPos);
 	dist = GetVectorDistance(pos, targetPos);
 	
 	static bool visible;
@@ -200,18 +263,17 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 }
 
 Action checkShouldAttack(int client, int target, int& buttons, const float pos[3], const float targetPos[3], const float dist) {
-	if (!isAiSmoker(client) || !IsValidSurvivor(target) || !IsPlayerAlive(target))
+	if (!g_cvImmPull.BoolValue || !isAiSmoker(client) || !IsValidSurvivor(target) || !IsPlayerAlive(target))
+		return Plugin_Continue;
+	if (GetEngineTime() - g_AiSmokers[client].m_flLastAtkBtnPressTime < 0.5)
 		return Plugin_Continue;
 	if (GetEntityMoveType(client) == MOVETYPE_LADDER || L4D_IsPlayerStaggering(client))
 		return Plugin_Continue;
-	if (GetEntPropEnt(client, Prop_Send, "m_tongueVictim") != -1)
+	// Smoker 舌头技能冷却没好, 或者正在拉人状态, 不强制进行攻击
+	if (!isSmokerReadyToAttack(client) || isPullingSomeone(client))
 		return Plugin_Continue;
-
-	// 在 isTargetEnterAttackRange 中每帧设置 m_bIsReady2Attack, 因此不需要先判断是否在空中
+	// 在 isTargetEnterAttackRange 中每帧设置 m_bIsReady2Attack, 若 m_bIsReady2Attack 为 true, 则停止连跳
 	if (!isTargetEnterAttackRange(client, target, dist))
-		return Plugin_Continue;
-	// 不在地上, 不立刻按左键拉人, 如果装了 air_ability 补丁, 可以将这个去掉
-	if (!IsClientOnGround(client))
 		return Plugin_Continue;
 
 	// 将视角锁定到目标身上, 避免 smoker 吐舌时视角不在目标身上导致只有声音没有舌头实体的问题
@@ -221,7 +283,8 @@ Action checkShouldAttack(int client, int target, int& buttons, const float pos[3
 	vDir[2] = 0.0;
 	TeleportEntity(client, NULL_VECTOR, vDir, NULL_VECTOR);
 
-	buttons |= IN_ATTACK;
+	buttons |= IN_ATTACK | IN_ATTACK2;
+	g_AiSmokers[client].m_flLastAtkBtnPressTime = GetEngineTime();
 	return Plugin_Changed;
 }
 
@@ -230,27 +293,7 @@ stock bool isTargetEnterAttackRange(int client, int target, const float dist) {
 		return false;
 	if (!g_AiSmokers[client].m_bIsVisible2Target)
 		return false;
-	
-	static int ability;
-	ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
-	if (!IsValidEdict(ability))
-		return false;
-	static char clsName[32];
-	GetEntityClassname(ability, clsName, sizeof(clsName));
-	if (strcmp(clsName, "ability_tongue", false) != 0)
-		return false;
-	static float timestamp;
-	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
-	if (GetGameTime() < timestamp)
-		return false;
-
-	static ConVar cvTongueRange;
-	if (!cvTongueRange)
-		cvTongueRange = FindConVar("tongue_range");
-	static float tongueRange;
-	tongueRange = !cvTongueRange ? float(DEFAULT_TONGUE_RANGE) : cvTongueRange.FloatValue;
-
-	if (dist <= tongueRange) {
+	if (dist <= g_fTongueRange) {
 		g_AiSmokers[client].m_bIsReady2Attack = true;
 		return true;
 	}
@@ -310,11 +353,37 @@ stock bool isPullingSomeone(int client) {
 	return true;
 }
 
+/**
+* 检查 Smoker 技能是否冷却完毕
+* @param client 客户端索引
+* @return bool 是否冷却完毕
+**/
+stock bool isSmokerReadyToAttack(int client) {
+	if (!isAiSmoker(client))
+		return false;
+
+	static int ability;
+	ability = GetEntPropEnt(client, Prop_Send, "m_customAbility");
+	if (!IsValidEdict(ability))
+		return false;
+	static char clsName[32];
+	GetEntityClassname(ability, clsName, sizeof(clsName));
+	if (strcmp(clsName, "ability_tongue", false) != 0)
+		return false;
+	
+	static float timestamp;
+	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
+	return GetGameTime() >= timestamp;
+}
+
 // ============================================================
 // Bhop 连跳操作
 // ============================================================
 Action checkeEnableBhop(int client, int target, int& buttons, const float pos[3], const float targetPos[3], const float dist, const bool visible) {
 	if (!g_cvEnableBhop.BoolValue || !isAiSmoker(client) || !IsValidSurvivor(target))
+		return Plugin_Continue;
+	// 开启进入范围内秒拉, 则自身与目标范围满足 tongue_range 之后不允许连跳
+	if (g_cvImmPull.BoolValue && dist <= g_fTongueRange)
 		return Plugin_Continue;
 
 	if (L4D_IsPlayerStaggering(client) || g_AiSmokers[client].m_bIsReady2Attack)
@@ -531,26 +600,18 @@ public Action L4D2_OnChooseVictim(int smoker, int &curTarget) {
 // Actions Hook 是否启用无技能追击
 // ============================================================
 public void OnActionCreated(BehaviorAction action, int actor, const char[] name) {
+	if (!isAiSmoker(actor))
+		return;
+	// 防止 Smoker 舌头被切断后卡在 TongueVictim 行为
+	if (strcmp(name, ACT_NAME_TONGUE_VICTIM, false) == 0) {
+		action.OnUpdate = onSmokerTongueVictimOnUpdate;
+	}
+
 	if (!g_cvAntiRetreat.BoolValue)
 		return;
-	if (!isAiSmoker(actor))
-		return;	
-
-	// 检查 Smoker 技能冷却时间
-	static int ability;
-	ability = GetEntPropEnt(actor, Prop_Send, "m_customAbility");
-	if (!IsValidEdict(ability))
-		return;
-	static char clsName[32];
-	GetEntityClassname(ability, clsName, sizeof(clsName));
-	if (strcmp(clsName, "ability_tongue", false) != 0)
-		return;
-
-	static float timestamp;
-	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
 	// Smoker 正在逃跑的时候, hook OnUpdate 每帧更新函数
 	// 需要检测能力 timestamp 因为 Smoker 拉人的时候也是 RetreatToCover 状态, 去除 tongueVictim 检测, 因为 tongueVictim 不会在舌头一断立即无效
-	if (strcmp(name, ACT_NAME_RETREAT, false) == 0 && GetGameTime() < timestamp) {
+	if (strcmp(name, ACT_NAME_RETREAT, false) == 0 && !isSmokerReadyToAttack(actor)) {
 		action.OnUpdate = onSmokerRetreatOnUpdate;
 	}
 	// 移动到目标位置过程中检测每帧调用的 Update 函数
@@ -558,6 +619,28 @@ public void OnActionCreated(BehaviorAction action, int actor, const char[] name)
 	if (strcmp(name, ACT_NAME_MOVETO, false) == 0) {
 		action.OnUpdate = onMove2Change2Attack;
 	}
+}
+
+/**
+* 由于 checkShouldAttack 函数存在, Smoker 一旦生成在距离目标 tongue_range 范围内, 则会立刻攻击, 若此时舌头被砍断, 则会卡在 SmokerTongueVictim 行为中, 无法转换到逃跑行为
+* 因此 Hook 这个行为的 OnUpdate 函数, 检测若 Smoker 技能未冷却完毕且不是在拉人状态中卡在这个行为, 则将这个行为结束
+* SmokerTongueVictim 行为每帧的更新函数
+* @param action 当前动作
+* @param actor 动作父实体
+* @param interval 上一次调用到这次调用的间隔时间
+* @param result 上一次执行子行为的返回结果
+* @return Action
+**/
+Action onSmokerTongueVictimOnUpdate(BehaviorAction action, int actor, float interval, ActionResult result) {
+	if (!isAiSmoker(actor))
+		return Plugin_Continue;
+
+	// 如果舌头技能未冷却完毕, 且没有在拉人, 这时候如果处于 TongueVictim 行为则会令舌头卡住, 结束这个行为
+	if (!isSmokerReadyToAttack(actor) && !isPullingSomeone(actor)) {
+		action.Done();
+		return Plugin_Changed;
+	}
+	return Plugin_Continue;
 }
 
 /**

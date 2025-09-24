@@ -44,7 +44,8 @@ stock bool isAiBoomer(int client) {
 * @return int
 **/
 stock int getPinnedSurvivorCount() {
-    static int count = 0;
+    static int count;
+    count = 0;
     for (int i = 1; i <= MaxClients; i++) {
         if (!IsValidSurvivor(i) || !IsPlayerAlive(i) || IsClientIncapped(i) || IsClientHanging(i))
             continue;
@@ -187,7 +188,7 @@ stock bool _TraceWallFilter(int entity, int contentsMask, any data) {
         return false;
 
     if (entity != data) {
-        static char className[3];
+        static char className[32];
         GetEntityClassname(entity, className, sizeof(className));
         if (strcmp(className, "infected", false) == 0 || strcmp(className, "player", false) == 0)
             return false;

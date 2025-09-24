@@ -80,3 +80,11 @@
         return action;
     }
 ```
+
+## 更新日志
+<details>
+<summary>2025-09-24</summary>
+1. 增加 SmokerTongueVictim 行为的 OnUpdate 自定义回调函数, 避免 Smoker 生成在舌头范围内秒拉, 舌头被切断后卡在 TongueVictim 状态导致原地不动的问题<br>
+2. 增加 SoundHook 用于控制是否去除舌头拉人前警示音以及拉到人的音效<br>
+3. 修复一些小错误
+</details>
