@@ -86,5 +86,6 @@
 <summary>2025-09-24</summary>
 1. 增加 SmokerTongueVictim 行为的 OnUpdate 自定义回调函数, 避免 Smoker 生成在舌头范围内秒拉, 舌头被切断后卡在 TongueVictim 状态导致原地不动的问题<br>
 2. 增加 SoundHook 用于控制是否去除舌头拉人前警示音以及拉到人的音效<br>
-3. 修复一些小错误
+3. 修改进入范围内秒拉的逻辑, 将原先的 <b>buttons |= IN_ATTACK</b> 更改为将 SmokerMoveToAttackPosition 行为更改为 SmokerTongueVictim 行为实现, 避免原先的方法导致目标与 Smoker 距离极近 Smoker 攻击只有动作声音无舌头实体的问题<br>
+4. 修复一些小错误
 </details>
