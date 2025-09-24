@@ -65,7 +65,7 @@
 			"SmokerMoveToAttackPosition::Update"
 			{
 				"library"	"server"
-				"linux"		"_ZN26SmokerMoveToAttackPosition6UpdateEP6Smokerf"
+				"linux"		"@_ZN26SmokerMoveToAttackPosition6UpdateEP6Smokerf"
 				"windows"	"\x55\x8B\xEC\x83\xEC\x08\x53\x8B\x5D\x0C\x8B\x83\xD0\x30\x00\x00"
 			}
 			
