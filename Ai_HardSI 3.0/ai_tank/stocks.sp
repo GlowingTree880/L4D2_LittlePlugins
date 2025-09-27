@@ -1,3 +1,6 @@
+#pragma newdecls required
+#pragma semicolon 1
+
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -110,7 +113,7 @@ stock int getClosestSurvivor(int client, bool excludeIncap = false) {
         if (excludeIncap && IsClientIncapped(i))
             continue;
         
-        GetClientAbsOrigin(i, targetPos)
+        GetClientAbsOrigin(i, targetPos);
         targets.Set(targets.Push(GetVectorDistance(targetPos, pos)), i, 1);
     }
 
@@ -179,7 +182,7 @@ stock bool _TraceWallFilter(int entity, int contentsMask, any data) {
         return false;
 
     if (entity != data) {
-        static char className[3];
+        static char className[32];
         GetEntityClassname(entity, className, sizeof(className));
         if (strcmp(className, "infected", false) == 0 || strcmp(className, "player", false) == 0)
             return false;

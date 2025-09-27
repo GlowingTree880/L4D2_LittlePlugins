@@ -401,10 +401,6 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 			MakeVectorFromPoints(pos, vPredict, vDir);
 			vDir[2] = 0.0;
 			NormalizeVector(vDir, vDir);
-			// 计算右向向量, 右向向量垂直于水平与垂直方向向量
-			vFwd = vDir;
-			GetVectorCrossProduct({0.0, 0.0, 1.0}, vFwd, vRight);
-			NormalizeVector(vRight, vRight);
 		}
 
 		// 无生还视野不允许连跳
@@ -413,12 +409,50 @@ Action checkEnableBhop(int client, int target, int& buttons, const float pos[3],
 
 		buttons |= IN_DUCK;
 		buttons |= IN_JUMP;
-		if (((buttons & IN_BACK) && !(buttons & IN_FORWARD)) || ((buttons & IN_FORWARD) && !(buttons & IN_BACK))) {
+
+		static bool fwdOnly, backOnly, leftOnly, rightOnly;
+		fwdOnly = ((buttons & IN_FORWARD) && !(buttons & IN_BACK));
+		backOnly = ((buttons & IN_BACK) && !(buttons & IN_FORWARD));
+		leftOnly = ((buttons & IN_LEFT) && !(buttons & IN_RIGHT));
+		rightOnly = ((buttons & IN_RIGHT) && !(buttons & IN_LEFT));
+
+		if (fwdOnly) {
+			vFwd = vDir;
+			NormalizeVector(vFwd, vFwd);
 			ScaleVector(vFwd, g_cvBhopImpulse.FloatValue);
 			AddVectors(vAbsVelVec, vFwd, vAbsVelVec);
-		} else if (((buttons & IN_RIGHT) && !(buttons & IN_LEFT)) || ((buttons & IN_LEFT) && !(buttons & IN_RIGHT))) {
-			ScaleVector(vRight, g_cvBhopImpulse.FloatValue);
-			AddVectors(vAbsVelVec, vRight, vAbsVelVec);
+		} else if (backOnly && (velVec[0] > 0.0 || velVec[1] > 0.0)) {
+			// 仅按后退键, 向当前速度方向进行加速
+			vFwd[0] = velVec[0];
+			vFwd[1] = velVec[1];
+			vFwd[2] = 0.0;
+			NormalizeVector(vFwd, vFwd);
+			ScaleVector(vFwd, g_cvBhopImpulse.FloatValue);
+			AddVectors(vAbsVelVec, vFwd, vAbsVelVec);
+		} else {
+			// 按左右方向键的时候, 基于当前前向加速度方向计算侧向向量
+			static float baseFwd[3];
+			if (fwdOnly) {
+				baseFwd[0] = vFwd[0];
+				baseFwd[1] = vFwd[1];
+				baseFwd[2] = 0.0;
+			} else if (backOnly && (velVec[0] > 0.0 || velVec[1] > 0.0)) {
+				baseFwd[0] = velVec[0];
+				baseFwd[1] = velVec[1];
+				baseFwd[2] = 0.0;
+			} else {
+				baseFwd[0] = vDir[0];
+				baseFwd[1] = vDir[1];
+				baseFwd[2] = 0.0;
+			}
+			// 计算左向或者右向向量进行加速
+			GetVectorCrossProduct({0.0, 0.0, 1.0}, baseFwd, vRight);
+			NormalizeVector(vRight, vRight);
+			if (rightOnly ^ leftOnly) {
+				vRight[2] = 0.0;
+				ScaleVector(vRight, g_cvBhopImpulse.FloatValue * (rightOnly ? 1.0 : -1.0));
+				AddVectors(vAbsVelVec, vRight, vAbsVelVec);
+			}
 		}
 		TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vAbsVelVec);
 		return Plugin_Changed;
