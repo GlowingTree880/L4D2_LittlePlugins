@@ -400,6 +400,9 @@ stock bool isSmokerReadyToAttack(int client) {
 Action checkeEnableBhop(int client, int target, int& buttons, const float pos[3], const float targetPos[3], const float dist, const bool visible) {
 	if (!g_cvEnableBhop.BoolValue || !isAiSmoker(client) || !IsValidSurvivor(target))
 		return Plugin_Continue;
+	// 无生还视野不允许连跳
+	if (!g_cvBhopNoVision.BoolValue && !visible)
+		return Plugin_Continue;
 	// 开启进入范围内秒拉, 则技能准备就绪后自身与目标范围满足 tongue_range 之后不允许连跳
 	if (g_cvImmPull.BoolValue && isSmokerReadyToAttack(client) && isTargetEnterAttackRange(client, target, dist))
 		return Plugin_Continue;
@@ -435,7 +438,7 @@ Action checkeEnableBhop(int client, int target, int& buttons, const float pos[3]
 			MakeVectorFromPoints(pos, vPredict, vDir);
 			vDir[2] = 0.0;
 			NormalizeVector(vDir, vDir);
-			// 计算右向向量, 右向向量垂直于水平与垂直方向向量
+			// vFwd 为加速度方向向量, vDir 为到目标方向向量
 			vFwd = vDir;
 			// 增加水平偏移让跳跃轨迹稍微左右摆动
 			if (g_cvBhopSideMaxAng.FloatValue > 0.0) {
@@ -450,31 +453,64 @@ Action checkeEnableBhop(int client, int target, int& buttons, const float pos[3]
 				// 转回向量
 				GetAngleVectors(vFwdAng, vFwd, NULL_VECTOR, NULL_VECTOR);
 			}
-			// 计算右向向量
-			NormalizeVector(vFwd, vFwd);
-			GetVectorCrossProduct({0.0, 0.0, 1.0}, vFwd, vRight);
-			NormalizeVector(vRight, vRight);
 		}
-
-		// 无生还视野不允许连跳
-		if (!g_cvBhopNoVision.BoolValue && !visible)
-			return Plugin_Continue;
 
 		buttons |= IN_DUCK;
 		buttons |= IN_JUMP;
+
+		static bool fwdOnly, backOnly, leftOnly, rightOnly;
+		fwdOnly = ((buttons & IN_FORWARD) && !(buttons & IN_BACK));
+		backOnly = ((buttons & IN_BACK) && !(buttons & IN_FORWARD));
+		leftOnly = ((buttons & IN_LEFT) && !(buttons & IN_RIGHT));
+		rightOnly = ((buttons & IN_RIGHT) && !(buttons & IN_LEFT));
+
 		// Smoker 在有生还者视野时可能也会向后走, 因此要 IN_FORWARD 和 IN_BACK 要分开处理
-		if ((buttons & IN_FORWARD) && !(buttons & IN_BACK)) {
-			ScaleVector(vFwd, speed + g_cvBhopImpulse.FloatValue);
-			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vFwd);
-		} else if ((buttons & IN_BACK) && !(buttons & IN_FORWARD)) {
-			ScaleVector(vFwd, (speed + g_cvBhopImpulse.FloatValue) * -1.0);
-			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vFwd);
-		} else if ((buttons & IN_RIGHT) && !(buttons & IN_LEFT)) {
-			ScaleVector(vRight, speed + g_cvBhopImpulse.FloatValue);
-			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vRight);
-		} else if ((buttons & IN_LEFT) && !(buttons & IN_RIGHT)) {
-			ScaleVector(vRight, (speed + g_cvBhopImpulse.FloatValue) * -1.0);
-			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vRight);
+		if (fwdOnly) {
+			if (!visible) {
+				// 无生还者视野, vFwd 为当前速度方向, 使用当前速度方向作为加速度方向
+				NormalizeVector(vFwd, vFwd);
+				ScaleVector(vFwd, g_cvBhopImpulse.FloatValue);
+				AddVectors(vAbsVelVec, vFwd, vAbsVelVec);
+				TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vAbsVelVec);
+			} else {
+				// 有生还者视野, 向前时, 直接使用原来已经计算好的前向向量替换当前速度向量, 达到轨迹左右摆动效果
+				NormalizeVector(vFwd, vFwd);
+				ScaleVector(vFwd, (speed + g_cvBhopImpulse.FloatValue));
+				AddVectors(vAbsVelVec, vFwd, vAbsVelVec);
+				TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vFwd);
+			}
+		} else if (backOnly && (vecVel[0] > 0.0 && vecVel[1] > 0.0)) {
+			vFwd[0] = vecVel[0];
+			vFwd[1] = vecVel[1];
+			vFwd[2] = 0.0;
+			NormalizeVector(vFwd, vFwd);
+			ScaleVector(vFwd, g_cvBhopImpulse.FloatValue);
+			AddVectors(vAbsVelVec, vFwd, vAbsVelVec);
+			// 向后连跳, 使用当前速度方向作为加速度方向
+			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vAbsVelVec);
+		} else {
+			static float baseFwd[3];
+			if (fwdOnly) {
+				baseFwd[0] = vFwd[0];
+				baseFwd[1] = vFwd[1];
+				baseFwd[2] = 0.0;
+			} else if (backOnly && (vecVel[0] > 0.0 && vecVel[1] > 0.0)) {
+				baseFwd[0] = vecVel[0];
+				baseFwd[1] = vecVel[1];
+				baseFwd[2] = 0.0;
+			} else {
+				baseFwd[0] = vDir[0];
+				baseFwd[1] = vDir[1];
+				baseFwd[2] = 0.0;
+			}
+			GetVectorCrossProduct({0.0, 0.0, 1.0}, baseFwd, vRight);
+			NormalizeVector(vRight, vRight);
+			// 避免左右键同时按下仍触发侧向加速
+			if (rightOnly ^ leftOnly) {
+				ScaleVector(vRight, g_cvBhopImpulse.FloatValue * (rightOnly ? 1.0 : -1.0));
+				AddVectors(vAbsVelVec, vRight, vAbsVelVec);
+				TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vAbsVelVec);
+			}
 		}
 		return Plugin_Changed;
 	}
@@ -620,7 +656,7 @@ public Action L4D2_OnChooseVictim(int smoker, int &curTarget) {
 public void OnActionCreated(BehaviorAction action, int actor, const char[] name) {
 	if (!isAiSmoker(actor))
 		return;
-	
+
 	// 防止 Smoker 舌头被切断后卡在 TongueVictim 行为
 	if (strcmp(name, ACT_NAME_TONGUE_VICTIM, false) == 0) {
 		action.OnUpdate = onSmokerTongueVictimOnUpdate;
@@ -754,19 +790,6 @@ Action onMove2Change2Attack(BehaviorAction action, int actor, float interval, Ac
 	if (!isAiSmoker(actor))
 		return Plugin_Continue;
 
-	// 检查 Smoker 技能冷却时间, 如果冷却完了, 立即构造 SmokerMoveToAttackPosition 令 Smoker 攻击目标
-	static int ability;
-	ability = GetEntPropEnt(actor, Prop_Send, "m_customAbility");
-	if (!IsValidEdict(ability))
-		return Plugin_Continue;
-	static char clsName[32];
-	GetEntityClassname(ability, clsName, sizeof(clsName));
-	if (strcmp(clsName, "ability_tongue", false) != 0)
-		return Plugin_Continue;
-
-	static float timestamp;
-	timestamp = GetEntPropFloat(ability, Prop_Send, "m_timestamp");
-
 	static int target, nearestTar;
 	target = GetClientOfUserId(g_AiSmokers[actor].m_iTarget);
 	// 当前目标 (无论是缓存的原目标, 还是更换的更近的目标) 一旦无效, 立即释放 m_bIsMove2ChangeTar, 让 L4D2_OnChooseVictim 选择目标
@@ -777,7 +800,8 @@ Action onMove2Change2Attack(BehaviorAction action, int actor, float interval, Ac
 		return Plugin_Changed;
 	}
 	
-	if (GetGameTime() >= timestamp) {
+	// 检查 Smoker 技能冷却时间, 如果冷却完了, 立即构造 SmokerMoveToAttackPosition 令 Smoker 攻击目标
+	if (isSmokerReadyToAttack(actor)) {
 		log.debugAll("Smoker(%N) cooldown end, force him to attack %N", actor, target);
 		// 更改当前动作
 		static BehaviorAction newAction;

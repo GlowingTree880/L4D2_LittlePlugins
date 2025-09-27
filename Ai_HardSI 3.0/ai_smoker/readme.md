@@ -89,3 +89,8 @@
 3. 修改进入范围内秒拉的逻辑, 将原先的 <b>buttons |= IN_ATTACK</b> 更改为将 SmokerMoveToAttackPosition 行为更改为 SmokerTongueVictim 行为实现, 避免原先的方法导致目标与 Smoker 距离极近 Smoker 攻击只有动作声音无舌头实体的问题<br>
 4. 修复一些小错误
 </details>
+
+<details>
+<summary>2025-09-27</summary>
+1. 修改连跳逻辑
+</details>

@@ -1,7 +1,11 @@
+#pragma semicolon 1
+#pragma newdecls required
+
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
 #include <treeutil>
+#include <left4dhooks>
 
 stock bool isAiTank(int client) {
     return IsValidInfected(client) && GetInfectedClass(client) == ZC_TANK && IsFakeClient(client)
@@ -119,7 +123,7 @@ stock int getClosestSurvivor(int client, bool excludeIncap = false) {
         if (excludeIncap && IsClientIncapped(i))
             continue;
         
-        GetClientAbsOrigin(i, targetPos)
+        GetClientAbsOrigin(i, targetPos);
         targets.Set(targets.Push(GetVectorDistance(targetPos, pos)), i, 1);
     }
 
@@ -286,4 +290,65 @@ stock float angleNormalize(float angle) {
     else if (angle < -180)
         angle += 360;
     return angle;
+}
+
+/**
+ * 检查 target 是否位于 observer 的视锥内，并且距离不超过 maxDist
+ * @param target      被观察者客户端索引
+ * @param observer    观察者客户端索引
+ * @param fovDeg      视锥角度 (例如 60.0 表示左右各 30°)
+ * @param maxDist     最大距离 (单位：游戏单位) <=0 则不限制距离
+ * @param ignoreZ     true=只在水平面判断（推荐 FPS 用）, false=完整 3D 判断
+ * @param needLOS     true=额外做一次可见性射线 (被墙挡住则返回 false)
+ * @return            在视锥内 (且满足距离、可见性条件) 返回 true
+ */
+stock bool isClientInFOV(int target, int observer, float fovDeg, float maxDist = 9999.0, bool ignoreZ = false, bool needLos = true) {
+	if (!IsValidClient(target) || !IsValidClient(observer))
+		return false;
+
+	static float eyeObs[3], eyeTar[3];
+	GetClientEyePosition(observer, eyeObs);
+	GetClientEyePosition(target, eyeTar);
+	// 距离判断
+	static float toTar[3], dist;
+	toTar[0] = eyeTar[0] - eyeObs[0];
+	toTar[1] = eyeTar[1] - eyeObs[1];
+	toTar[2] = eyeTar[2] - eyeObs[2];
+	if (ignoreZ)
+		toTar[2] = 0.0;
+	dist = GetVectorLength(toTar);
+	// 超出指定的最大距离, 返回 false
+	if (maxDist > 0.0 && dist > maxDist)
+		return false;
+	
+	static float eyeObsAng[3], fwd[3];
+	GetClientEyeAngles(observer, eyeObsAng);
+	GetAngleVectors(eyeObsAng, fwd, NULL_VECTOR, NULL_VECTOR);
+	if (ignoreZ)
+		fwd[2] = 0.0;
+	NormalizeVector(fwd, fwd);
+	NormalizeVector(toTar, toTar);
+	// 夹角判断: dot = cos(theta), 要求 theta <= fov/2, 而在 [0, π] 范围内, cos 单调递减, 所以需要 cos(theta) >= cos(fov/2)
+	static float cosHalf, dot;
+    cosHalf = Cosine(DegToRad(fovDeg * 0.5));
+    dot = GetVectorDotProduct(fwd, toTar);
+    // Clamp float to [-1.0, 1.0]
+    if (dot > 1.0)
+        dot = 1.0;
+    else if (dot < -1.0)
+        dot = -1.0;
+    if (dot < cosHalf)
+        return false;
+
+	// 是否需要做一次射线检测
+	if (needLos) {
+		static int teamTar, teamObs;
+		teamTar = GetClientTeam(target);
+		teamObs = GetClientTeam(observer);
+		if (teamTar < TEAM_SPECTATOR || teamObs < TEAM_SPECTATOR)
+			return false;
+		if (!L4D2_IsVisibleToPlayer(observer, teamObs, 0, 0, eyeTar))
+            return false;
+	}
+	return true;
 }
